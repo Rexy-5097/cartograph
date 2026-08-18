@@ -43,7 +43,7 @@ thing in both languages.
   `.ts`/`.tsx`/`.py` trees in one pass, reporting route counts explicitly as
   observations rather than endpoints.
 - **Tests** — 47 Python integration tests over a 32-category fixture corpus;
-  129 workspace tests total, with every M00/M01 test still green.
+  132 workspace tests total, with every M00/M01 test still green.
 - **Benchmarks** — deterministic `py_extraction` criterion group.
 
 **Correction driven by evidence.** The route fact originally carried a
