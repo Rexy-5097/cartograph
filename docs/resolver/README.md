@@ -2,6 +2,9 @@
 
 > **Status: design only.** `cartograph-resolver` is an empty crate. This
 > documents the frozen design the M03–M06 implementations must satisfy.
+> Since M01 the *frontend extraction* inputs exist: `cartograph-parser`
+> produces call sites, string/template structure and HTTP observations
+> ([parser architecture](../architecture/parser.md)). Nothing is resolved yet.
 
 The single subsystem that justifies the project. Pipeline:
 

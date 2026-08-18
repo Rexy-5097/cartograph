@@ -183,9 +183,9 @@ def qg006():
 def qg007():
     problems = []
     for f, needle in [
-        ("CHANGELOG.md", "M00"),
-        ("CHECKPOINTS.md", "M00"),
-        ("agentos/context/state.md", "M00"),
+        ("CHANGELOG.md", "M01"),
+        ("CHECKPOINTS.md", "M01"),
+        ("agentos/context/state.md", "M01"),
     ]:
         path = os.path.join(ROOT, f)
         if not os.path.exists(path):
@@ -197,24 +197,50 @@ def qg007():
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M00)")
+@gate("QG-008", "Milestone acceptance (M01)")
 def qg008():
     problems = []
-    # future-milestone work must not be smuggled in: parser and resolver stay empty
-    for crate in ("cartograph-parser", "cartograph-resolver"):
-        src = os.path.join(ROOT, "crates", crate, "src")
-        rs_files = []
-        for dirpath, _, files in os.walk(src):
-            rs_files += [f for f in files if f.endswith(".rs")]
-        if rs_files != ["lib.rs"]:
-            problems.append(f"{crate} contains implementation files: {rs_files}")
-        with open(os.path.join(src, "lib.rs"), encoding="utf-8") as fh:
-            body = [line for line in fh if line.strip() and not line.strip().startswith("//")]
-        if body:
-            problems.append(f"{crate}/src/lib.rs contains non-doc code at M00")
-    # milestone definition exists
-    if not os.path.exists(os.path.join(ROOT, "agentos/milestones/M00-foundation.md")):
-        problems.append("missing milestone definition M00-foundation.md")
+    # M01 delivered the TypeScript extractor; the resolver is still a future
+    # milestone and must remain doc-only. Smuggled M02+ work fails this gate.
+    src = os.path.join(ROOT, "crates", "cartograph-resolver", "src")
+    rs_files = []
+    for dirpath, _, files in os.walk(src):
+        rs_files += [f for f in files if f.endswith(".rs")]
+    if rs_files != ["lib.rs"]:
+        problems.append(f"cartograph-resolver contains implementation files: {rs_files}")
+    with open(os.path.join(src, "lib.rs"), encoding="utf-8") as fh:
+        body = [line for line in fh if line.strip() and not line.strip().startswith("//")]
+    if body:
+        problems.append("cartograph-resolver/src/lib.rs contains non-doc code before M03")
+    # the parser must actually exist now, with its fixture corpus
+    for required in (
+        "crates/cartograph-parser/src/typescript.rs",
+        "crates/cartograph-parser/src/model.rs",
+        "crates/cartograph-parser/tests/fixtures",
+    ):
+        if not os.path.exists(os.path.join(ROOT, required)):
+            problems.append(f"M01 deliverable missing: {required}")
+    # no Python grammar (M02) and no LSP (M04) dependencies yet.
+    # Scan real dependency lines only - names in comments are not dependencies.
+    with open(os.path.join(ROOT, "Cargo.toml"), encoding="utf-8") as fh:
+        dep_names = {
+            m.group(1)
+            for line in fh
+            if not line.lstrip().startswith("#")
+            for m in [re.match(r'\s*"?([A-Za-z0-9_-]+)"?\s*=', line)]
+            if m
+        }
+    for premature in ("tree-sitter-python", "async-lsp", "lsp-types"):
+        if premature in dep_names:
+            problems.append(f"future-milestone dependency `{premature}` introduced at M01")
+    # the CLI must not pretend `analyze` exists before M09
+    with open(os.path.join(ROOT, "crates/cartograph-cli/src/main.rs"), encoding="utf-8") as fh:
+        if "Analyze" in fh.read():
+            problems.append("CLI exposes an `analyze` command before M09")
+    # milestone definitions exist
+    for m in ("M00-foundation.md", "M01-typescript-extraction.md"):
+        if not os.path.exists(os.path.join(ROOT, "agentos/milestones", m)):
+            problems.append(f"missing milestone definition {m}")
     return problems
 
 

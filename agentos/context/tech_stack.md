@@ -6,7 +6,7 @@
 
 | Concern | Choice | Introduced at |
 |---|---|---|
-| Parsing | tree-sitter | M01 |
+| Parsing | tree-sitter (+ tree-sitter-typescript) | **M01 ✓** |
 | Semantic resolution | async-lsp + lsp-types (tsserver, Pyright) | M04 |
 | Graph algorithms | petgraph `StableDiGraph` — never in public API | **M00 ✓** |
 | Storage | redb | M09/M10 |

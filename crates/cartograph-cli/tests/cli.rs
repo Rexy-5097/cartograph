@@ -24,7 +24,7 @@ fn version_prints_the_binary_and_specification_versions() {
         "missing spec line: {stdout}"
     );
     assert!(
-        stdout.contains("milestone M00"),
+        stdout.contains("milestone M01"),
         "missing milestone line: {stdout}"
     );
 }
@@ -41,7 +41,7 @@ fn version_json_is_parseable() {
         serde_json::from_slice(&output.stdout).expect("stdout is valid JSON");
 
     assert_eq!(value["spec_version"], "V3");
-    assert_eq!(value["milestone"], "M00");
+    assert_eq!(value["milestone"], "M01");
     assert!(value["version"].is_string());
 }
 
@@ -77,4 +77,78 @@ fn no_subcommand_is_an_error_with_usage() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Usage"), "no usage shown: {stderr}");
+}
+
+// ── cartograph parse (M01) ──────────────────────────────────────────
+
+use std::path::PathBuf;
+
+fn parser_fixtures() -> PathBuf {
+    // The parser crate's fixture corpus doubles as the CLI's test corpus.
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("cartograph-parser/tests/fixtures")
+}
+
+#[test]
+fn parse_walks_a_tree_and_summarises_facts() {
+    let output = cartograph()
+        .arg("parse")
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success(), "exit: {}", output.status);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Files"), "no summary: {stdout}");
+    assert!(
+        stdout.contains("component.tsx"),
+        "TSX file missed: {stdout}"
+    );
+    assert!(
+        stdout.contains("observations, not resolved edges"),
+        "the summary must label HTTP counts as observations: {stdout}"
+    );
+}
+
+#[test]
+fn parse_json_is_pure_and_carries_the_fact_model() {
+    let output = cartograph()
+        .args(["parse", "--json"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success());
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is pure JSON");
+    assert!(value["totals"]["files"].as_u64().unwrap() >= 8);
+    assert!(value["totals"]["http_observations"].as_u64().unwrap() >= 5);
+    // Failed files are included, not dropped.
+    assert!(value["totals"]["failed"].as_u64().unwrap() >= 1);
+    // Fact paths are repository-relative.
+    for file in value["files"].as_array().unwrap() {
+        let path = file["path"].as_str().unwrap();
+        assert!(!path.starts_with('/'), "absolute path leaked: {path}");
+    }
+}
+
+#[test]
+fn parse_single_file_works() {
+    let output = cartograph()
+        .arg("parse")
+        .arg(parser_fixtures().join("component.tsx"))
+        .output()
+        .expect("binary runs");
+    assert!(output.status.success());
+}
+
+#[test]
+fn parse_rejects_a_non_typescript_file() {
+    let output = cartograph()
+        .args(["parse", "Cargo.toml"])
+        .output()
+        .expect("binary runs");
+    assert!(!output.status.success());
 }

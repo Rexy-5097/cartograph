@@ -95,6 +95,55 @@ provisional state. There is no earlier checkpoint — M00 is the first.
 
 ---
 
+## M01 — TypeScript extraction
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m01-typescript-extraction` (stacked on `feature/m00-foundation`) |
+| Provisional checkpoint | `cartograph-m01-rc2` (annotated; the tag is the SHA authority; rc1 retired — its head failed CI's newer clippy) |
+| Accepted checkpoint | *none yet* — `cartograph-m01` is created at acceptance |
+
+### Scope delivered
+
+tree-sitter TypeScript/TSX extractor behind a language-neutral fact model
+(imports, symbols with enclosing/export tracking, call sites, string and
+template structure preserved for M05, HTTP observations that are explicitly
+not edges); structured error-tolerant diagnostics; `cartograph parse` CLI
+command with `--json`; 22-category fixture corpus; `ts_extraction` criterion
+group; two real-repository smoke tests. Also: checkpoint policy repair
+(ADR-0010) applied to M00.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 82 tests |
+| QG-001 … QG-008 | PASS — 8/8 (local run 2026-08-19; CI re-runs on the PR) |
+| AgentOS validator | PASS — 99/100 |
+| Smoke tests | zustand 35 files / swr 194 files, 0 failed parses, 0 false HTTP positives |
+
+### Benchmark state
+
+`ts_extraction` group runs (small fixture ~45 µs; 500-fn module ~9 ms;
+100-file synthetic project ~27 ms on the dev machine). Internal only — not
+published as performance claims.
+
+### Known limitations
+
+Arrow-function consts recorded as variables; destructuring not extracted;
+module-scope variables only; grammar gaps on advanced type-level syntax
+(diagnostics + continued extraction); sequential processing.
+
+### Rollback point
+
+`cartograph-m01-rc2`; previous state `cartograph-m00-rc1`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown
