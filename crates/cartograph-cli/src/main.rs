@@ -5,12 +5,15 @@
 //! logic of its own; when `analyze` arrives at M09 it will call into the core
 //! exactly as the other two clients do.
 //!
-//! # What exists at M00
+//! # What exists at M01
 //!
-//! `cartograph version`, and nothing else. `analyze` and `trace` are the
-//! deliverables of later milestones and are deliberately absent rather than
-//! present and stubbed: a command that exists but does not work is a
-//! documentation defect.
+//! `cartograph version`, and `cartograph parse` — the M01 extractor over a
+//! file or tree, reporting syntactic facts and diagnostics. `analyze` and
+//! `trace` are the deliverables of later milestones and are deliberately
+//! absent rather than present and stubbed: a command that exists but does not
+//! work is a documentation defect.
+
+use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -34,6 +37,18 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Extract syntactic facts from TypeScript/TSX source (M01).
+    ///
+    /// Reports what the files say - symbols, imports, call sites, string and
+    /// template structure, HTTP-looking call shapes - plus parse diagnostics.
+    /// Facts are observations; nothing here is a resolved relationship.
+    Parse {
+        /// A TypeScript/TSX file, or a directory to walk.
+        path: PathBuf,
+        /// Emit the full fact model as JSON instead of a summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print version and build information.
     Version {
         /// Emit JSON instead of text.
@@ -41,6 +56,8 @@ enum Command {
         json: bool,
     },
 }
+
+mod parse_cmd;
 
 /// Version information, in the shape the `--json` output promises.
 #[derive(Debug, Serialize)]
@@ -58,7 +75,7 @@ impl VersionInfo {
         Self {
             version: env!("CARGO_PKG_VERSION"),
             spec_version: cartograph_core::SPEC_VERSION,
-            milestone: "M00",
+            milestone: "M01",
         }
     }
 }
@@ -68,6 +85,7 @@ fn main() -> Result<()> {
     init_tracing(cli.verbose);
 
     match cli.command {
+        Command::Parse { path, json } => parse_cmd::run(&path, json)?,
         Command::Version { json } => version(json)?,
     }
 
@@ -130,17 +148,19 @@ mod tests {
         let info = VersionInfo::current();
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(info.spec_version, "V3");
+        assert_eq!(info.milestone, "M01");
     }
 
     #[test]
     fn analysis_commands_are_absent_until_the_milestone_that_implements_them() {
-        // M00 must not ship a command that looks like it works. If this test
-        // fails because `analyze` was added, the milestone scope moved.
+        // The command set is a deliberate milestone decision: `parse` landed
+        // with M01; `analyze`/`trace` are M09 deliverables and must not appear
+        // to work before they do. If this test fails, the scope moved.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
             .map(clap::Command::get_name)
             .collect();
-        assert_eq!(names, vec!["version"]);
+        assert_eq!(names, vec!["parse", "version"]);
     }
 }
