@@ -83,6 +83,13 @@ fn no_subcommand_is_an_error_with_usage() {
 
 use std::path::PathBuf;
 
+fn python_fixtures() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("cartograph-parser/tests/fixtures/python")
+}
+
 fn parser_fixtures() -> PathBuf {
     // The parser crate's fixture corpus doubles as the CLI's test corpus.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -151,4 +158,72 @@ fn parse_rejects_a_non_typescript_file() {
         .output()
         .expect("binary runs");
     assert!(!output.status.success());
+}
+
+// ── Python support (M02) ────────────────────────────────────────────
+
+#[test]
+fn parse_recognises_python_without_changing_the_invocation() {
+    let output = cartograph()
+        .arg("parse")
+        .arg(python_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success(), "exit: {}", output.status);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("fastapi_routes.py"),
+        "python file missed: {stdout}"
+    );
+    assert!(
+        stdout.contains("Routes observed"),
+        "route observations must be reported: {stdout}"
+    );
+    assert!(
+        stdout.contains("not verified endpoints"),
+        "routes must be labelled as observations, not endpoints: {stdout}"
+    );
+}
+
+#[test]
+fn parse_json_exposes_python_route_observations() {
+    let output = cartograph()
+        .args(["parse", "--json"])
+        .arg(python_fixtures())
+        .output()
+        .expect("binary runs");
+
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is pure JSON");
+    assert!(value["totals"]["route_observations"].as_u64().unwrap() >= 10);
+    assert!(value["totals"]["http_observations"].as_u64().unwrap() >= 8);
+
+    let has_route = value["files"].as_array().unwrap().iter().any(|f| {
+        f.get("routes")
+            .is_some_and(|r| !r.as_array().unwrap().is_empty())
+    });
+    assert!(has_route, "route observations absent from JSON");
+}
+
+#[test]
+fn parse_walks_a_mixed_typescript_and_python_tree_in_one_pass() {
+    // The fixtures directory holds .ts, .tsx and python/ side by side.
+    let output = cartograph()
+        .args(["parse", "--json"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let languages: std::collections::HashSet<&str> = value["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["language"].as_str())
+        .collect();
+
+    assert!(languages.contains("typescript"), "{languages:?}");
+    assert!(languages.contains("tsx"), "{languages:?}");
+    assert!(languages.contains("python"), "{languages:?}");
 }

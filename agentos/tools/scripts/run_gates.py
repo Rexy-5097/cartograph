@@ -39,6 +39,36 @@ def run(cmd, timeout=1200):
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
 
 
+def read_text(path):
+    """Reads a file as text, tolerating bytes that are not valid UTF-8.
+
+    Two hazards make strict decoding wrong here. macOS on exFAT writes binary
+    AppleDouble sidecars named `._name.rs`, which match source-file globs; and
+    the repository legitimately contains a non-UTF-8 fixture (the parser has to
+    prove it fails softly). A gate must not crash on either.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def is_sidecar(name):
+    """macOS AppleDouble sidecar, which is never project source."""
+    return os.path.basename(name).startswith("._")
+
+
+def source_files(root, suffix):
+    """Every real source file under `root`, sidecars excluded."""
+    found = []
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            if name.endswith(suffix) and not is_sidecar(name):
+                found.append(os.path.join(dirpath, name))
+    return found
+
+
 def tracked_files():
     out = run(["git", "ls-files"]).stdout
     return [line for line in out.splitlines() if line]
@@ -114,12 +144,7 @@ def qg005():
             problems.append(f"credential-shaped file tracked: {f}")
         if os.path.splitext(f)[1] not in TEXT_EXT:
             continue
-        path = os.path.join(ROOT, f)
-        try:
-            with open(path, encoding="utf-8", errors="ignore") as fh:
-                text = fh.read()
-        except OSError:
-            continue
+        text = read_text(os.path.join(ROOT, f))
         for pat, label in SECRET_PATTERNS:
             if pat.search(text):
                 problems.append(f"{label} pattern in {f}")
@@ -144,9 +169,10 @@ def qg006():
     manifests = [f for f in tracked_files() if f.endswith("Cargo.toml")]
     dep_line = re.compile(r'^\s*"?([A-Za-z0-9_-]+)"?\s*=')
     for mf in manifests:
-        with open(os.path.join(ROOT, mf), encoding="utf-8") as fh:
+        for_lines = read_text(os.path.join(ROOT, mf)).splitlines()
+        if True:
             in_deps = False
-            for line in fh:
+            for line in for_lines:
                 s = line.strip()
                 if s.startswith("["):
                     in_deps = "dependencies" in s
@@ -159,22 +185,18 @@ def qg006():
     for mf in manifests:
         if mf == "crates/cartograph-graph/Cargo.toml" or mf == "Cargo.toml":
             continue
-        with open(os.path.join(ROOT, mf), encoding="utf-8") as fh:
-            if re.search(r"^\s*petgraph", fh.read(), re.M):
+        if re.search(r"^\s*petgraph", read_text(os.path.join(ROOT, mf)), re.M):
+            if True:
                 problems.append(f"petgraph dependency outside cartograph-graph: {mf}")
     # ...and it may not leak through cartograph-graph's public API.
     graph_src = os.path.join(ROOT, "crates", "cartograph-graph", "src")
-    for dirpath, _, files in os.walk(graph_src):
-        for name in files:
-            if not name.endswith(".rs"):
-                continue
-            with open(os.path.join(dirpath, name), encoding="utf-8") as fh:
-                for i, line in enumerate(fh, 1):
-                    if re.search(r"\bpub\b.*petgraph::", line) or re.search(r"pub use .*petgraph", line):
-                        problems.append(f"petgraph in public API: {name}:{i}")
+    for path in source_files(graph_src, ".rs"):
+        for i, line in enumerate(read_text(path).splitlines(), 1):
+            if re.search(r"\bpub\b.*petgraph::", line) or re.search(r"pub use .*petgraph", line):
+                problems.append(f"petgraph in public API: {os.path.basename(path)}:{i}")
     # dependency direction: core must not depend on any cartograph crate
-    with open(os.path.join(ROOT, "crates/cartograph-core/Cargo.toml"), encoding="utf-8") as fh:
-        if re.search(r"^\s*cartograph-", fh.read(), re.M):
+    if True:
+        if re.search(r"^\s*cartograph-", read_text(os.path.join(ROOT, "crates/cartograph-core/Cargo.toml")), re.M):
             problems.append("cartograph-core depends on another cartograph crate")
     return problems
 
@@ -183,35 +205,44 @@ def qg006():
 def qg007():
     problems = []
     for f, needle in [
-        ("CHANGELOG.md", "M01"),
-        ("CHECKPOINTS.md", "M01"),
-        ("agentos/context/state.md", "M01"),
+        ("CHANGELOG.md", "M02"),
+        ("CHECKPOINTS.md", "M02"),
+        ("agentos/context/state.md", "M02"),
     ]:
         path = os.path.join(ROOT, f)
         if not os.path.exists(path):
             problems.append(f"missing {f}")
             continue
-        with open(path, encoding="utf-8") as fh:
-            if needle not in fh.read():
+        if True:
+            if needle not in read_text(path):
                 problems.append(f"{f} has no entry for the active milestone")
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M01)")
+@gate("QG-008", "Milestone acceptance (M02)")
 def qg008():
     problems = []
-    # M01 delivered the TypeScript extractor; the resolver is still a future
-    # milestone and must remain doc-only. Smuggled M02+ work fails this gate.
+    # M02 delivered the Python extractor; the resolver is still a future
+    # milestone and must remain doc-only. Smuggled M03+ work fails this gate.
     src = os.path.join(ROOT, "crates", "cartograph-resolver", "src")
-    rs_files = []
-    for dirpath, _, files in os.walk(src):
-        rs_files += [f for f in files if f.endswith(".rs")]
+    rs_files = sorted(os.path.basename(p) for p in source_files(src, ".rs"))
     if rs_files != ["lib.rs"]:
         problems.append(f"cartograph-resolver contains implementation files: {rs_files}")
-    with open(os.path.join(src, "lib.rs"), encoding="utf-8") as fh:
-        body = [line for line in fh if line.strip() and not line.strip().startswith("//")]
+    body = [
+        line
+        for line in read_text(os.path.join(src, "lib.rs")).splitlines()
+        if line.strip() and not line.strip().startswith("//")
+    ]
     if body:
         problems.append("cartograph-resolver/src/lib.rs contains non-doc code before M03")
+    # M02 deliverables must exist
+    for required in (
+        "crates/cartograph-parser/src/python.rs",
+        "crates/cartograph-parser/tests/fixtures/python",
+        "crates/cartograph-parser/benches/py_extraction.rs",
+    ):
+        if not os.path.exists(os.path.join(ROOT, required)):
+            problems.append(f"M02 deliverable missing: {required}")
     # the parser must actually exist now, with its fixture corpus
     for required in (
         "crates/cartograph-parser/src/typescript.rs",
@@ -222,23 +253,31 @@ def qg008():
             problems.append(f"M01 deliverable missing: {required}")
     # no Python grammar (M02) and no LSP (M04) dependencies yet.
     # Scan real dependency lines only - names in comments are not dependencies.
-    with open(os.path.join(ROOT, "Cargo.toml"), encoding="utf-8") as fh:
+    if True:
         dep_names = {
             m.group(1)
-            for line in fh
+            for line in read_text(os.path.join(ROOT, "Cargo.toml")).splitlines()
             if not line.lstrip().startswith("#")
             for m in [re.match(r'\s*"?([A-Za-z0-9_-]+)"?\s*=', line)]
             if m
         }
-    for premature in ("tree-sitter-python", "async-lsp", "lsp-types"):
+    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp"):
         if premature in dep_names:
-            problems.append(f"future-milestone dependency `{premature}` introduced at M01")
+            problems.append(f"future-milestone dependency `{premature}` introduced at M02")
     # the CLI must not pretend `analyze` exists before M09
-    with open(os.path.join(ROOT, "crates/cartograph-cli/src/main.rs"), encoding="utf-8") as fh:
-        if "Analyze" in fh.read():
+    if True:
+        if "Analyze" in read_text(os.path.join(ROOT, "crates/cartograph-cli/src/main.rs")):
             problems.append("CLI exposes an `analyze` command before M09")
+    # M03+ capability must be absent: no route normalization or matching
+    parser_src = os.path.join(ROOT, "crates/cartograph-parser/src")
+    forbidden = ("canonical_route", "normalize_route", "match_route", "resolve_route")
+    for path in source_files(parser_src, ".rs"):
+        for i, line in enumerate(read_text(path).splitlines(), 1):
+            code = line.split("//")[0]
+            if any(sym in code for sym in forbidden):
+                problems.append(f"M03 route resolution in {os.path.basename(path)}:{i}")
     # milestone definitions exist
-    for m in ("M00-foundation.md", "M01-typescript-extraction.md"):
+    for m in ("M00-foundation.md", "M01-typescript-extraction.md", "M02-python-extraction.md"):
         if not os.path.exists(os.path.join(ROOT, "agentos/milestones", m)):
             problems.append(f"missing milestone definition {m}")
     return problems

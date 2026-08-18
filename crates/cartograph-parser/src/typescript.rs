@@ -30,9 +30,10 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::error::ParserError;
 use crate::model::{
     CallSite, Callee, ConcatPart, ExportStatus, FileAnalysis, HttpCallObservation, HttpMethodHint,
-    Import, NamedImport, ParseStatus, SourceLanguage, Span, StringFact, Symbol, SymbolKind,
-    TemplatePart, UrlObservation,
+    Import, NamedImport, ParseStatus, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart,
+    UrlObservation,
 };
+use crate::syntax::{has_keyword_child, span_of};
 
 /// Per-file cap on recorded diagnostics; a `Truncated` marker notes overflow.
 const DIAGNOSTIC_CAP: usize = 25;
@@ -40,6 +41,26 @@ const DIAGNOSTIC_CAP: usize = 25;
 /// Object names whose `.get/.post/…` calls are observed as HTTP regardless of
 /// what the URL argument looks like.
 const HTTP_CLIENT_OBJECTS: [&str; 4] = ["axios", "client", "http", "api"];
+
+/// Which of the two grammars this extractor should use.
+///
+/// A dedicated enum rather than [`SourceLanguage`]: it makes handing Python to
+/// the TypeScript extractor impossible to express, instead of a runtime branch
+/// that has to decide what to do about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TsFlavor {
+    TypeScript,
+    Tsx,
+}
+
+impl TsFlavor {
+    fn language(self) -> SourceLanguage {
+        match self {
+            Self::TypeScript => SourceLanguage::TypeScript,
+            Self::Tsx => SourceLanguage::Tsx,
+        }
+    }
+}
 
 pub(crate) struct TypeScriptExtractor {
     typescript: Parser,
@@ -64,15 +85,11 @@ impl TypeScriptExtractor {
         Ok(Self { typescript, tsx })
     }
 
-    pub(crate) fn extract(
-        &mut self,
-        path: &str,
-        language: SourceLanguage,
-        source: &str,
-    ) -> FileAnalysis {
-        let parser = match language {
-            SourceLanguage::TypeScript => &mut self.typescript,
-            SourceLanguage::Tsx => &mut self.tsx,
+    pub(crate) fn extract(&mut self, path: &str, flavor: TsFlavor, source: &str) -> FileAnalysis {
+        let language = flavor.language();
+        let parser = match flavor {
+            TsFlavor::TypeScript => &mut self.typescript,
+            TsFlavor::Tsx => &mut self.tsx,
         };
 
         let mut analysis = FileAnalysis {
@@ -84,6 +101,7 @@ impl TypeScriptExtractor {
             calls: Vec::new(),
             strings: Vec::new(),
             http_calls: Vec::new(),
+            routes: Vec::new(), // TypeScript route declarations: not M02's scope
             diagnostics: Vec::new(),
         };
 
@@ -467,6 +485,9 @@ impl Walker<'_> {
             is_async,
             enclosing: self.scope.last().cloned(),
             export: export.status(),
+            // TypeScript decorator extraction is not part of M02; the field is
+            // shared, and TS fills it when a milestone needs it.
+            decorators: Vec::new(),
             span: span_of(node),
         });
     }
@@ -676,18 +697,6 @@ impl Walker<'_> {
 
 // ── Free helpers (no walker state) ──────────────────────────────────
 
-fn span_of(node: Node<'_>) -> Span {
-    let start = node.start_position();
-    let end = node.end_position();
-    #[allow(clippy::cast_possible_truncation)] // >4G-line files are not a real input
-    Span {
-        start_line: start.row as u32 + 1,
-        start_column: start.column as u32 + 1,
-        end_line: end.row as u32 + 1,
-        end_column: end.column as u32 + 1,
-    }
-}
-
 /// The content of a `string` node (fragments and escapes, quotes excluded).
 fn string_content(node: Node<'_>, source: &str) -> String {
     let mut out = String::new();
@@ -740,13 +749,6 @@ fn is_plus_expression(node: Node<'_>, source: &str) -> bool {
         && node
             .child_by_field_name("operator")
             .is_some_and(|op| op.utf8_text(source.as_bytes()) == Ok("+"))
-}
-
-/// Does the node have a bare keyword token child with this text?
-fn has_keyword_child(node: Node<'_>, keyword: &str) -> bool {
-    let mut cursor = node.walk();
-    node.children(&mut cursor)
-        .any(|c| !c.is_named() && c.kind() == keyword)
 }
 
 /// `export { a }` / `export default ident` applied after the walk.

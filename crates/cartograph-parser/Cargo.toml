@@ -21,6 +21,7 @@ thiserror.workspace = true
 # appear in this crate's public API - see src/typescript/mod.rs.
 tree-sitter.workspace = true
 tree-sitter-typescript.workspace = true
+tree-sitter-python.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -28,6 +29,10 @@ criterion.workspace = true
 
 [[bench]]
 name = "ts_extraction"
+harness = false
+
+[[bench]]
+name = "py_extraction"
 harness = false
 
 [lints]

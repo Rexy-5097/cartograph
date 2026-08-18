@@ -505,8 +505,15 @@ fn absolute_and_traversal_paths_are_refused() {
 #[test]
 fn unsupported_extensions_are_refused_not_guessed() {
     let mut analyzer = Analyzer::new().unwrap();
+    // `.py` became supported at M02, so the unsupported case now uses a
+    // language no extractor claims. Guessing a grammar from unknown source
+    // would fabricate facts.
     assert!(matches!(
-        analyzer.analyze_source("script.py", "x = 1"),
+        analyzer.analyze_source("main.go", "package main"),
+        Err(ParserError::UnsupportedLanguage { .. })
+    ));
+    assert!(matches!(
+        analyzer.analyze_source("README.md", "# hello"),
         Err(ParserError::UnsupportedLanguage { .. })
     ));
 }

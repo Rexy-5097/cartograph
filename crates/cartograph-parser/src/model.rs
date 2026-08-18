@@ -28,6 +28,8 @@ pub enum SourceLanguage {
     TypeScript,
     /// TypeScript with JSX (`.tsx`).
     Tsx,
+    /// Python (`.py`, `.pyi`).
+    Python,
 }
 
 impl SourceLanguage {
@@ -43,6 +45,11 @@ impl SourceLanguage {
             .any(|e| extension.eq_ignore_ascii_case(e))
         {
             Some(Self::TypeScript)
+        } else if ["py", "pyi"]
+            .iter()
+            .any(|e| extension.eq_ignore_ascii_case(e))
+        {
+            Some(Self::Python)
         } else {
             None
         }
@@ -54,6 +61,7 @@ impl std::fmt::Display for SourceLanguage {
         match self {
             Self::TypeScript => f.write_str("typescript"),
             Self::Tsx => f.write_str("tsx"),
+            Self::Python => f.write_str("python"),
         }
     }
 }
@@ -118,6 +126,10 @@ pub struct FileAnalysis {
     /// Syntactically HTTP-looking call sites. Observations only — see
     /// [`HttpCallObservation`].
     pub http_calls: Vec<HttpCallObservation>,
+    /// Route declarations found in the source. Observations only — see
+    /// [`RouteObservation`]. Empty for languages/files that declare none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub routes: Vec<RouteObservation>,
     /// Parse problems, capped per file.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -190,6 +202,15 @@ pub enum ExportStatus {
     Exported,
     /// `export default …`.
     DefaultExported,
+    /// The language has no export statement, so the question does not apply.
+    ///
+    /// Python's default. Python declares no exports: module-level names are
+    /// importable by definition, and the leading-underscore convention is
+    /// visible in the symbol's own name. Reporting `NotExported` here would
+    /// assert something the source never said. A module that *does* declare
+    /// `__all__` is different — that is a real export list, and symbols named
+    /// in it are marked [`ExportStatus::Exported`].
+    NotApplicable,
 }
 
 /// A declared symbol.
@@ -208,6 +229,14 @@ pub struct Symbol {
     pub enclosing: Option<String>,
     /// Whether and how the symbol is exported.
     pub export: ExportStatus,
+    /// Decorators applied to the declaration, as written, without the `@`.
+    ///
+    /// A dotted decorator keeps its path (`app.get`); a call keeps only the
+    /// callee (`app.get("/orders")` records `app.get`, and the route itself
+    /// becomes a [`RouteObservation`]). Recorded as observations: nothing here
+    /// asserts what a decorator *does*.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decorators: Vec<String>,
     /// Where the declaration is.
     pub span: Span,
 }
@@ -418,5 +447,86 @@ pub struct HttpCallObservation {
     /// The first argument, as observed.
     pub url: UrlObservation,
     /// Where the call is.
+    pub span: Span,
+}
+
+/// The declaration syntax a [`RouteObservation`] was matched from.
+///
+/// # Why this names a syntax rather than a framework
+///
+/// It originally named frameworks (`FastApi`, `Flask`, `Django`). Running the
+/// extractor over Flask's own repository disproved that: Flask 2.x supports
+/// `@app.get("/x")` shortcuts whose syntax is *identical* to `FastAPI`'s, and
+/// twenty Flask routes were consequently labelled `FastAPI` — one of them
+/// `@app.get("/result/<id>")`, carrying Flask's `<id>` dialect under a
+/// `FastAPI` label. A label that wrong is worse than none, and M03 would have
+/// inherited the error.
+///
+/// So this records what was actually seen. Determining the framework needs
+/// evidence this crate does not have (resolved imports, installed packages),
+/// and **M03 should canonicalise paths from the path syntax itself** —
+/// `{id}`, `<int:id>` and `:id` are distinguishable without knowing the
+/// framework, and reading them directly is more robust than trusting a label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum RouteDeclarationStyle {
+    /// A decorator named for an HTTP verb: `@app.get("/x")`, `@router.post(...)`.
+    ///
+    /// Used by `FastAPI` and by Flask 2.x's shortcuts; the syntax alone does
+    /// not distinguish them.
+    VerbDecorator,
+    /// A decorator carrying the method separately: `@app.route("/x", methods=[…])`.
+    ///
+    /// Flask's classic form, and the form Flask extensions reuse.
+    RouteDecorator,
+    /// A URL-configuration entry: `path("orders/", view)` / `re_path(...)`.
+    ///
+    /// Django's form.
+    UrlConfEntry,
+}
+
+/// A route declaration found in source.
+///
+/// # This is an observation, not an endpoint
+///
+/// It asserts only that a file contains syntax declaring a route with this
+/// shape. It does **not** assert that the route is reachable, that the
+/// framework is actually mounted, that the handler is the one that runs, or
+/// that any client calls it. It is never an edge.
+///
+/// Matching a route against an [`HttpCallObservation`] is the resolver's job
+/// (M04), and canonicalising the path across dialects is M03's. Neither
+/// happens here: the path is preserved exactly as written, unnormalised.
+///
+/// The path is preserved exactly as written, in whatever dialect the source
+/// used. The path reuses [`UrlObservation`] deliberately — a declared route path and
+/// a called URL are the same kind of thing observed from opposite ends, and
+/// giving M03 one shape to canonicalise from both sides is the point of a
+/// language-neutral model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteObservation {
+    /// The declaration syntax that was matched.
+    pub style: RouteDeclarationStyle,
+    /// HTTP methods the declaration states, in source order.
+    ///
+    /// **Empty means the source did not say.** It is never defaulted to `GET`:
+    /// Flask's `@app.route("/x")` implies GET only through framework
+    /// semantics, which is inference, not observation (RULE 009). A Flask
+    /// `methods=["GET", "POST"]` list yields both entries, which is why this
+    /// is a list rather than an `Option`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<HttpMethodHint>,
+    /// The declared path, exactly as written — `{id}`, `<int:id>` and regex
+    /// syntax are all preserved verbatim for M03 to canonicalise.
+    pub path: UrlObservation,
+    /// The handler symbol, when it is syntactically available.
+    ///
+    /// The decorated function's name for FastAPI/Flask; the referenced callable
+    /// for Django. `None` when the source does not name one statically — never
+    /// guessed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler: Option<String>,
+    /// Where the declaration is.
     pub span: Span,
 }

@@ -2,9 +2,11 @@
 
 > **Status: design only.** `cartograph-resolver` is an empty crate. This
 > documents the frozen design the M03–M06 implementations must satisfy.
-> Since M01 the *frontend extraction* inputs exist: `cartograph-parser`
-> produces call sites, string/template structure and HTTP observations
-> ([parser architecture](../architecture/parser.md)). Nothing is resolved yet.
+> Both sides' inputs now exist: M01 produces TypeScript call sites, template
+> structure and HTTP observations; M02 produces Python route observations,
+> HTTP observations and f-string structure
+> ([parser architecture](../architecture/parser.md)). **Nothing is resolved
+> yet** — no path is canonicalised and no observation is matched to another.
 
 The single subsystem that justifies the project. Pipeline:
 
