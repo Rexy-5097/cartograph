@@ -219,13 +219,13 @@ impl Walker<'_> {
                 }
                 // Descend anyway: substitutions may contain calls.
             }
-            "binary_expression" => {
-                if self.concat_depth == 0 && self.extract_concatenation(node) {
-                    self.concat_depth += 1;
-                    self.walk_children(node);
-                    self.concat_depth -= 1;
-                    return;
-                }
+            // The guard has a side effect (recording the fact) by design:
+            // the arm only fires when a concatenation was actually recorded.
+            "binary_expression" if self.concat_depth == 0 && self.extract_concatenation(node) => {
+                self.concat_depth += 1;
+                self.walk_children(node);
+                self.concat_depth -= 1;
+                return;
             }
             _ => {}
         }
