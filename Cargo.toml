@@ -20,10 +20,9 @@ authors = ["Cartograph contributors"]
 
 # Dependency policy (PROJECT_RULES.md, dossier §10):
 # every entry must answer "what concrete Cartograph problem does this solve
-# right now?". "We might need it later" is not an answer. Crates named in the
-# frozen stack but not yet needed (tree-sitter, async-lsp, redb, gix, notify,
-# rayon, tokio, rmcp) are deliberately absent until the milestone that uses
-# them lands.
+# right now?". "We might need it later" is not an answer. Frozen-stack crates
+# are added at the milestone that first uses them (tree-sitter arrived with
+# M01); the rest remain deliberately absent until theirs.
 [workspace.dependencies]
 # Edge records are serialised for `--json` output and, from M08, for golden
 # fixtures compared byte-for-byte in CI.
@@ -47,6 +46,12 @@ time = { version = "0.3", features = ["serde-well-known", "macros"] }
 # Statistical benchmarking. Performance claims are published, so they are
 # measured with confidence intervals rather than a stopwatch.
 criterion = "0.5"
+# M01: the TypeScript/TSX extractor. tree-sitter is the incremental,
+# error-tolerant parsing runtime named by the frozen stack; the grammar crate
+# supplies the TypeScript and TSX languages. Contained entirely inside
+# cartograph-parser's implementation and absent from its public API (ADR-0002).
+tree-sitter = "0.26"
+tree-sitter-typescript = "0.23"
 
 cartograph-core = { path = "crates/cartograph-core", version = "0.0.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.0.0" }

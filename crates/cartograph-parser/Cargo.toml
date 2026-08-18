@@ -8,9 +8,27 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-# No dependencies yet — deliberately. tree-sitter and its grammars arrive with
-# M01 (TypeScript extraction), which is the milestone that first needs them.
 [dependencies]
+# Path validation and error vocabulary come from the domain model; the parser
+# reuses core's repository-relative path rules rather than re-inventing them.
+cartograph-core.workspace = true
+# Extraction results serialise for `cartograph parse --json` and, at M08, for
+# golden-fixture comparison in CI.
+serde.workspace = true
+# Library-style typed errors, per the frozen stack's thiserror/anyhow split.
+thiserror.workspace = true
+# The parsing runtime and the TypeScript/TSX grammars. These types never
+# appear in this crate's public API - see src/typescript/mod.rs.
+tree-sitter.workspace = true
+tree-sitter-typescript.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "ts_extraction"
+harness = false
 
 [lints]
 workspace = true
