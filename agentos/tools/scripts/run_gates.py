@@ -205,9 +205,9 @@ def qg006():
 def qg007():
     problems = []
     for f, needle in [
-        ("CHANGELOG.md", "M03"),
-        ("CHECKPOINTS.md", "M03"),
-        ("agentos/context/state.md", "M03"),
+        ("CHANGELOG.md", "M04"),
+        ("CHECKPOINTS.md", "M04"),
+        ("agentos/context/state.md", "M04"),
     ]:
         path = os.path.join(ROOT, f)
         if not os.path.exists(path):
@@ -219,49 +219,47 @@ def qg007():
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M03)")
+@gate("QG-008", "Milestone acceptance (M04)")
 def qg008():
     problems = []
-    # M03 delivers canonical route normalisation. The defining constraint is
-    # that canonicalisation must not become matching: M04 owns the join.
     resolver_src = os.path.join(ROOT, "crates/cartograph-resolver/src")
     for required in (
-        "crates/cartograph-resolver/src/canonical.rs",
-        "crates/cartograph-resolver/src/normalize.rs",
-        "crates/cartograph-resolver/tests/canonicalization.rs",
-        "crates/cartograph-resolver/benches/canonicalization.rs",
-        "docs/resolver/canonical-routes.md",
+        "crates/cartograph-resolver/src/matching.rs",
+        "crates/cartograph-resolver/src/edge.rs",
+        "crates/cartograph-resolver/tests/matching.rs",
+        "crates/cartograph-resolver/tests/cross_stack.rs",
+        "crates/cartograph-resolver/benches/matching.rs",
+        "docs/resolver/matching.md",
     ):
         if not os.path.exists(os.path.join(ROOT, required)):
-            problems.append(f"M03 deliverable missing: {required}")
+            problems.append(f"M04 deliverable missing: {required}")
 
-    # M04 capability must be absent. These names would each mean the resolver
-    # had started joining two observations rather than canonicalising one.
+    # M05/M06 capability must be absent. These names would each mean the
+    # resolver had started evaluating constants or resolving ORM models.
     forbidden = (
-        "resolve_match",
-        "match_backend",
-        "create_http_edge",
-        "match_route",
-        "resolve_route",
-        "join_observations",
-        "cross_stack_match",
+        "evaluate_template",
+        "propagate_constant",
+        "constant_propagation",
+        "resolve_orm",
+        "OrmResolver",
+        "sqlalchemy",
+        "__tablename__",
+        "resolve_table",
+        "parse_sql",
     )
     for path in source_files(resolver_src, ".rs"):
         for i, line in enumerate(read_text(path).splitlines(), 1):
             code = line.split("//")[0]
             if any(sym in code for sym in forbidden):
-                problems.append(f"M04 matching in {os.path.basename(path)}:{i}")
+                problems.append(f"M05/M06 capability in {os.path.basename(path)}:{i}")
 
-    # The resolver must not construct graph edges at M03.
-    for path in source_files(resolver_src, ".rs"):
-        code = "\n".join(
-            line.split("//")[0] for line in read_text(path).splitlines()
-        )
-        for sym in ("EdgeSpec", "add_edge", "cartograph_graph", "cartograph_core::Edge"):
-            if sym in code:
-                problems.append(f"graph edge construction in {os.path.basename(path)}: {sym}")
+    # Edges may be produced only through the accepted-match gate.
+    edge_src = read_text(os.path.join(resolver_src, "edge.rs"))
+    if "is_accepted" not in edge_src and "accepted()" not in edge_src:
+        problems.append("edge.rs builds edges without gating on an accepted match")
 
-    # No future-milestone dependencies.
+    # No future-milestone dependencies. LSP is in the frozen stack but M04 did
+    # not need it: route matching joins observations, not symbols.
     dep_names = {
         m.group(1)
         for line in read_text(os.path.join(ROOT, "Cargo.toml")).splitlines()
@@ -269,20 +267,19 @@ def qg008():
         for m in [re.match(r'\s*"?([A-Za-z0-9_-]+)"?\s*=', line)]
         if m
     }
-    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp", "regex", "url"):
+    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp", "regex", "url", "tokio"):
         if premature in dep_names:
-            problems.append(f"future-milestone dependency `{premature}` introduced at M03")
+            problems.append(f"future-milestone dependency `{premature}` introduced at M04")
 
-    # The CLI must not pretend `analyze` exists before M09.
     if "Analyze" in read_text(os.path.join(ROOT, "crates/cartograph-cli/src/main.rs")):
         problems.append("CLI exposes an `analyze` command before M09")
 
-    # Milestone definitions exist.
     for m in (
         "M00-foundation.md",
         "M01-typescript-extraction.md",
         "M02-python-extraction.md",
         "M03-route-normalization.md",
+        "M04-cross-language-resolver.md",
     ):
         if not os.path.exists(os.path.join(ROOT, "agentos/milestones", m)):
             problems.append(f"missing milestone definition {m}")
