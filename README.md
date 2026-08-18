@@ -7,10 +7,10 @@ symbol-level, cross-language graph of a software system from source code,
 language semantics, HTTP boundaries, database schemas and Git history — and
 shows the evidence behind every edge it draws.
 
-> **Status: pre-alpha, milestone M00 of 17.** The engineering foundation exists.
-> The resolver does not. `cartograph analyze` is not implemented yet. Nothing in
-> this README describes behaviour the code does not have — see
-> [What works today](#what-works-today).
+> **Status: pre-alpha, milestone M01 of 17.** The engineering foundation and
+> the TypeScript/TSX extractor exist. The resolver does not. `cartograph
+> analyze` is not implemented yet. Nothing in this README describes behaviour
+> the code does not have — see [What works today](#what-works-today).
 
 ---
 
@@ -79,27 +79,30 @@ see [ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md).
 
 ## What works today
 
-M00 delivered the engineering foundation. Concretely:
+M00 delivered the engineering foundation; M01 delivered TypeScript extraction:
 
 | Component | State |
 |---|---|
 | `cartograph-core` — domain model, evidence, provenance, confidence | Implemented, tested |
 | `cartograph-graph` — architecture graph over `petgraph` | Implemented, tested |
-| `cartograph-cli` — `cartograph version` | Implemented |
-| `cartograph-parser` — tree-sitter extraction | **Empty. M01–M02.** |
+| `cartograph-parser` — tree-sitter TypeScript/TSX extraction | Implemented, tested (Python at M02) |
+| `cartograph-cli` — `cartograph version`, `cartograph parse` | Implemented |
 | `cartograph-resolver` — cross-language resolution | **Empty. M03–M06.** |
 | `cartograph-testkit` — fixtures | Implemented |
 
 ```console
-$ cargo run -p cartograph-cli -- version
-cartograph 0.0.0
-specification V3
-milestone M00
+$ cartograph parse ./frontend --json | jq .totals
 ```
 
-There are no accuracy numbers, no performance numbers and no benchmark results,
-because none have been measured. See [docs/benchmarks/](docs/benchmarks/) for
-what will be measured and when.
+`parse` reports **observed syntax** — symbols, imports, call sites, string and
+template structure, HTTP-shaped calls — plus structured diagnostics for files
+the grammar cannot fully parse. It never claims a resolved relationship; that
+is the resolver's job (M03–M06).
+
+No accuracy claim is published anywhere in this repository: accuracy does not
+exist before the resolver and its benchmark (M08). See
+[docs/benchmarks/](docs/benchmarks/) for what will be measured and the
+standard for publishing it.
 
 ---
 

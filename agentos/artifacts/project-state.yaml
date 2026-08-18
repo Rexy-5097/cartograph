@@ -4,38 +4,63 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M00
+current_milestone: M01
 status: IN_REVIEW            # IN_PROGRESS | IN_REVIEW | COMPLETE | BLOCKED
-current_branch: feature/m00-foundation
-next_allowed_milestone: M01  # unlocked only when M00 checkpoint is accepted
+current_branch: feature/m01-typescript-extraction
+next_allowed_milestone: M02  # unlocked only when M01 is accepted by the human owner
 
-last_checkpoint:                # ADR-0010: the tag is the authority for its SHA
-  milestone: M00
-  class: provisional            # accepted checkpoint is created at PR merge
-  tag: cartograph-m00-rc1
-  accepted_tag: null            # becomes cartograph-m00 on human acceptance
+milestones:
+  M00:
+    status: IN_REVIEW        # PR #1 open, pending human acceptance
+    provisional_tag: cartograph-m00-rc1
+    accepted_tag: null       # becomes cartograph-m00 at PR merge (ADR-0010)
+  M01:
+    status: IN_REVIEW
+    provisional_tag: cartograph-m01-rc1
+    accepted_tag: null       # becomes cartograph-m01 at acceptance
 
-gates:                       # last local run, 2026-08-18
+last_checkpoint:             # ADR-0010: the tag is the authority for its SHA
+  milestone: M01
+  class: provisional
+  tag: cartograph-m01-rc1
+  accepted_tag: null
+
+gates:                       # last local run, 2026-08-19
   repository: PASS           # QG-001
-  fmt: PASS                  # QG-002 — cargo fmt --all -- --check
-  clippy: PASS               # QG-003 — -D warnings, all targets/features
-  tests: PASS                # QG-004 — 50 passed, 0 failed
-  security: PASS             # QG-005 — no secrets, no machine paths in tracked files
-  architecture: PASS         # QG-006 — no prohibited deps, petgraph not public
+  fmt: PASS                  # QG-002 - cargo fmt --all -- --check
+  clippy: PASS               # QG-003 - -D warnings, all targets/features
+  tests: PASS                # QG-004 - 82 passed, 0 failed
+  security: PASS             # QG-005 - no secrets, no machine paths in tracked files
+  architecture: PASS         # QG-006 - no prohibited deps, petgraph contained
   documentation: PASS        # QG-007
-  milestone_acceptance: PASS # QG-008 — M00 criteria
+  milestone_acceptance: PASS # QG-008 - M01 criteria
   agentos_validator: PASS    # 99/100
   ci: PENDING                # recorded when the PR's CI run completes
 
 tests:
-  total: 50
+  total: 82
   failed: 0
 
 benchmarks:
-  harness: compiles
-  published_numbers: none    # nothing measured is published before M08/M09
+  harness: ts_extraction group runs (criterion)
+  published_numbers: none    # internal only until methodology is documented (M08+)
+
+smoke_tests:
+  - corpus: pmndrs/zustand (shallow clone, outside repo)
+    files: 35
+    clean: 30
+    with_errors: 5
+    failed: 0
+    http_observations: 0     # zustand makes no HTTP calls - no false positives
+  - corpus: vercel/swr (shallow clone, outside repo)
+    files: 194
+    clean: 191
+    with_errors: 3
+    failed: 0
+    http_observations: 10
 
 open_risks:
-  - exfat-volume-quirks      # no hard links; AppleDouble sidecars; documented
-  - uncalibrated-confidence  # priors only until M08
-  - graph-local-node-identity # content-addressing lands at M10
+  - exfat-volume-quirks
+  - uncalibrated-confidence
+  - graph-local-node-identity
+  - ts-grammar-gaps           # advanced type-level syntax yields diagnostics (documented)

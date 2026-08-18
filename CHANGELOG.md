@@ -10,6 +10,47 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M01, TypeScript extraction
+
+**The first real analyzer.** `cartograph-parser` now extracts syntactic facts
+from TypeScript and TSX using tree-sitter (the runtime is contained in one
+private module; the public API is Cartograph's own language-neutral fact
+model):
+
+- **Imports** — default, namespace, named (+aliases), type-only, side-effect.
+- **Symbols** — functions (+async), classes, methods, module-scope variables,
+  interfaces, type aliases, enums; enclosing-symbol tracking; export status
+  including `export {…}` clauses and anonymous `export default` expressions.
+- **Call sites** — `foo()`, `a.b.c()`, `new Foo()`, argument counts.
+  Computed/unreliable callees are skipped, not guessed.
+- **Strings** — literals (escapes as written), template literals with full
+  substitution structure preserved for M05's evaluator (never pre-resolved),
+  flattened `+` concatenation chains.
+- **HTTP observations** — `fetch`/`axios.*`/known-client verb calls recorded
+  as *syntactic observations* with method hints (never defaulted) and
+  literal/template/dynamic URL shapes. Observations are explicitly not
+  `HttpCall` edges; the resolver creates edges at M04.
+- **Diagnostics** — error-tolerant extraction: broken regions become
+  structured, source-text-free diagnostics; the rest of the file (and the
+  repository walk) continues. Non-UTF-8 and unreadable files fail softly.
+- **CLI** — `cartograph parse <path> [--json]` walks a file or tree and
+  reports facts and diagnostics. `analyze` remains absent until M09.
+- **Tests** — 28 parser integration tests over a fixture corpus (all 22
+  mandated syntax categories), 4 new CLI tests; 82 workspace tests total.
+- **Benchmarks** — Criterion `ts_extraction` group (single small file,
+  synthetic 50/500-function modules, 100-file synthetic project), fully
+  deterministic in-memory inputs.
+
+**Checkpoint policy repair (ADR-0010).** Provisional checkpoints
+(`cartograph-mNN-rcK`, exact PR head) are now distinct from accepted
+checkpoints (`cartograph-mNN`, exact merge commit, created only at human
+acceptance). The premature `cartograph-m00` tag was retired after a safety
+determination and replaced by `cartograph-m00-rc1`.
+
+Dependencies added: `tree-sitter` 0.26, `tree-sitter-typescript` 0.23 —
+required by this milestone's actual parsing work. No LSP, no Python grammar,
+no future-milestone dependency.
+
 ### Added — M00, engineering foundation
 
 **Rust workspace** with six crates:

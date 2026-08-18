@@ -36,21 +36,21 @@ adding it three times.
 
 ## Crates
 
-| Crate | Owns | State at M00 |
+| Crate | Owns | State |
 |---|---|---|
 | `cartograph-core` | Domain model: nodes, edges, evidence, provenance, confidence | Implemented |
 | `cartograph-graph` | The architecture graph, traversal | Implemented |
-| `cartograph-parser` | tree-sitter extraction, per language | Reserved (M01–M02) |
+| `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX implemented (M01); Python at M02 |
 | `cartograph-resolver` | LSP, route matching, cross-language and ORM resolution | Reserved (M03–M06) |
-| `cartograph-cli` | The `cartograph` binary | `version` only |
+| `cartograph-cli` | The `cartograph` binary | `version`, `parse` |
 | `cartograph-testkit` | Fixtures and builders. Never a runtime dependency | Implemented |
 
 ### Dependency direction
 
 ```
-cli ──► core
+cli ──► core, parser
 graph ──► core ──► (nothing Cartograph-owned)
-parser ──► core          (from M01)
+parser ──► core
 resolver ──► core, parser, graph   (from M03)
 testkit ──► core
 ```

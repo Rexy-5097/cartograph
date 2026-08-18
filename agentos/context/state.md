@@ -7,20 +7,25 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M00 — Engineering foundation** |
-| Status | Complete pending human review (PR open) |
-| Branch | `feature/m00-foundation` |
-| Next permitted milestone | M01 (after M00 PR is accepted by the human owner) |
-| Last checkpoint | none yet — M00 is the first |
+| Active milestone | **M01 — TypeScript extraction** |
+| Status | Complete pending human review (PR open, stacked on M00's PR #1) |
+| Branch | `feature/m01-typescript-extraction` |
+| Next permitted milestone | M02 (after M01 is accepted by the human owner) |
+| Last checkpoint | `cartograph-m01-rc1` (provisional; ADR-0010) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
 
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
-  enforced by construction), architecture graph over petgraph, CLI `version`
-  command, testkit with the spec's worked cross-stack chain as fixtures.
-- 50 tests passing; fmt/clippy(-D warnings)/check clean; Criterion harness
-  compiles (no published numbers).
+  enforced by construction), architecture graph over petgraph, testkit with
+  the spec's worked cross-stack chain as fixtures.
+- **M01: TypeScript/TSX extractor** (tree-sitter, contained behind a
+  language-neutral fact model): imports, symbols (+enclosing/+export), call
+  sites, string/template/concatenation structure, HTTP observations,
+  error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
+  (35 files) and swr (194 files).
+- 82 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+  criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
   SECURITY, CONTRIBUTING, AGENTS, AGENTOS docs; CI; PR/issue templates;
@@ -29,9 +34,10 @@
 
 ## What does NOT exist (deliberately)
 
-No parsing, no resolution, no LSP, no storage, no incremental engine, no
-desktop app, no MCP, no AI integration. `cartograph-parser` and
-`cartograph-resolver` are empty crates reserved for M01+.
+No Python extraction (M02), no route normalization (M03), no resolution and no
+LSP (M04+), no template *evaluation* (M05 — structure is preserved, not
+evaluated), no ORM (M06), no storage, no incremental engine, no desktop, no
+MCP, no AI. `cartograph-resolver` remains a doc-only crate.
 
 ## Open risks
 
@@ -45,4 +51,5 @@ desktop app, no MCP, no AI integration. `cartograph-parser` and
 
 | Date | Session outcome |
 |---|---|
+| 2026-08-19 | M00 checkpoint semantics repaired (ADR-0010: provisional rc tags vs accepted tags; premature cartograph-m00 retired, rc1 created at exact PR head). M01 executed: tree-sitter TS/TSX extractor, fact model, diagnostics, CLI `parse`, 22-category fixture corpus, 82 tests, criterion group, two real-repo smoke tests. PR opened; stopped per RULE 025. |
 | 2026-08-18 | M00 executed end-to-end: workspace, domain model, graph, CLI, testkit, AgentOS vendored + adapted, governance docs, gates, CI, PR opened. Stopped per RULE 025. |
