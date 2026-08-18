@@ -1,0 +1,18 @@
+# Pinned toolchain.
+#
+# Local and CI must agree. Before this file, CI installed `stable` — a moving
+# target — while a developer's machine used whatever it happened to have. The
+# gap reached eight months (1.91.1 vs 1.97.1), and the symptom was clippy
+# lints that fired only in CI: `collapsible_match` in the TypeScript walker at
+# M01 and again in the Python walker at M02, each costing a round trip.
+#
+# rustup honours this file automatically for every cargo and rustc invocation,
+# so a fresh checkout builds with exactly this toolchain and no setup step.
+#
+# Raising it is a deliberate change: bump the version, run `make check`
+# locally, and fix whatever the newer lints find in the same commit — never in
+# a follow-up, because a red main is what pinning exists to prevent.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
