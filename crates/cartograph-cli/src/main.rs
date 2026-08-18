@@ -5,11 +5,12 @@
 //! logic of its own; when `analyze` arrives at M09 it will call into the core
 //! exactly as the other two clients do.
 //!
-//! # What exists at M03
+//! # What exists at M04
 //!
 //! `cartograph version`; `cartograph parse`, the extractor over a file or tree
-//! reporting syntactic facts and diagnostics; and `cartograph normalize`,
-//! which canonicalises the route and HTTP-call observations `parse` finds.
+//! reporting syntactic facts and diagnostics; `cartograph normalize`, which
+//! canonicalises the observations `parse` finds; and `cartograph match`, which
+//! joins client calls to backend routes and reports the evidence.
 //! `analyze` and `trace` are the deliverables of later milestones and are
 //! deliberately absent rather than present and stubbed: a command that exists
 //! but does not work is a documentation defect.
@@ -61,6 +62,17 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Match client HTTP calls against backend routes (M04).
+    ///
+    /// Reports each decision with its candidates, confidence and evidence.
+    /// Ambiguous results produce no edge and say so.
+    Match {
+        /// A file, or a directory to walk.
+        path: PathBuf,
+        /// Emit the full match model as JSON instead of a summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print version and build information.
     Version {
         /// Emit JSON instead of text.
@@ -70,6 +82,7 @@ enum Command {
 }
 
 mod discovery;
+mod match_cmd;
 mod normalize_cmd;
 mod parse_cmd;
 
@@ -101,6 +114,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Normalize { path, json } => normalize_cmd::run(&path, json)?,
         Command::Parse { path, json } => parse_cmd::run(&path, json)?,
+        Command::Match { path, json } => match_cmd::run(&path, json)?,
         Command::Version { json } => version(json)?,
     }
 
@@ -169,9 +183,9 @@ mod tests {
     #[test]
     fn analysis_commands_are_absent_until_the_milestone_that_implements_them() {
         // The command set is a deliberate milestone decision: `parse` landed
-        // with M01, `normalize` with M03; `analyze`/`trace` are M09
-        // deliverables and must not appear to work before they do. If this
-        // test fails, the scope moved.
+        // with M01, `normalize` with M03, `match` with M04; `analyze`/`trace`
+        // are M09 deliverables and must not appear to work before they do. If
+        // this test fails, the scope moved.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
@@ -179,6 +193,6 @@ mod tests {
             .collect();
         // Declaration order, which is also pipeline order in `--help`:
         // parse produces observations, normalize canonicalises them.
-        assert_eq!(names, vec!["parse", "normalize", "version"]);
+        assert_eq!(names, vec!["parse", "normalize", "match", "version"]);
     }
 }

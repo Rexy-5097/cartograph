@@ -18,6 +18,8 @@ cartograph-core.workspace = true
 cartograph-parser.workspace = true
 # `cartograph normalize` canonicalises the parser's observations (M03).
 cartograph-resolver.workspace = true
+# `cartograph match` builds the HttpCall edges an accepted match produces.
+cartograph-graph.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true
