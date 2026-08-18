@@ -13,6 +13,10 @@ authors.workspace = true
 # parser's fact model directly. No language server yet: async-lsp and lsp-types
 # arrive with M04, the milestone that first drives one.
 cartograph-parser.workspace = true
+# M04 builds the first HttpCall edges, so it needs the domain model's
+# Confidence/Provenance/Evidence and the graph they go into.
+cartograph-core.workspace = true
+cartograph-graph.workspace = true
 # Canonical routes serialise for `cartograph normalize --json` and, from M08,
 # for golden fixtures compared byte-for-byte in CI.
 serde.workspace = true
@@ -20,6 +24,10 @@ serde.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 criterion.workspace = true
+
+[[bench]]
+name = "matching"
+harness = false
 
 [[bench]]
 name = "canonicalization"
