@@ -5,13 +5,14 @@
 //! logic of its own; when `analyze` arrives at M09 it will call into the core
 //! exactly as the other two clients do.
 //!
-//! # What exists at M01
+//! # What exists at M03
 //!
-//! `cartograph version`, and `cartograph parse` — the M01 extractor over a
-//! file or tree, reporting syntactic facts and diagnostics. `analyze` and
-//! `trace` are the deliverables of later milestones and are deliberately
-//! absent rather than present and stubbed: a command that exists but does not
-//! work is a documentation defect.
+//! `cartograph version`; `cartograph parse`, the extractor over a file or tree
+//! reporting syntactic facts and diagnostics; and `cartograph normalize`,
+//! which canonicalises the route and HTTP-call observations `parse` finds.
+//! `analyze` and `trace` are the deliverables of later milestones and are
+//! deliberately absent rather than present and stubbed: a command that exists
+//! but does not work is a documentation defect.
 
 use std::path::PathBuf;
 
@@ -49,6 +50,17 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Canonicalise the route and HTTP-call observations under a path (M03).
+    ///
+    /// Shows each observation's raw form beside its canonical form. Client
+    /// calls are not matched against route declarations; that is M04.
+    Normalize {
+        /// A TypeScript/TSX/Python file, or a directory to walk.
+        path: PathBuf,
+        /// Emit the full canonical model as JSON instead of a summary.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print version and build information.
     Version {
         /// Emit JSON instead of text.
@@ -57,6 +69,8 @@ enum Command {
     },
 }
 
+mod discovery;
+mod normalize_cmd;
 mod parse_cmd;
 
 /// Version information, in the shape the `--json` output promises.
@@ -85,6 +99,7 @@ fn main() -> Result<()> {
     init_tracing(cli.verbose);
 
     match cli.command {
+        Command::Normalize { path, json } => normalize_cmd::run(&path, json)?,
         Command::Parse { path, json } => parse_cmd::run(&path, json)?,
         Command::Version { json } => version(json)?,
     }
@@ -154,13 +169,16 @@ mod tests {
     #[test]
     fn analysis_commands_are_absent_until_the_milestone_that_implements_them() {
         // The command set is a deliberate milestone decision: `parse` landed
-        // with M01; `analyze`/`trace` are M09 deliverables and must not appear
-        // to work before they do. If this test fails, the scope moved.
+        // with M01, `normalize` with M03; `analyze`/`trace` are M09
+        // deliverables and must not appear to work before they do. If this
+        // test fails, the scope moved.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
             .map(clap::Command::get_name)
             .collect();
-        assert_eq!(names, vec!["parse", "version"]);
+        // Declaration order, which is also pipeline order in `--help`:
+        // parse produces observations, normalize canonicalises them.
+        assert_eq!(names, vec!["parse", "normalize", "version"]);
     }
 }
