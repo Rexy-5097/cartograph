@@ -1,0 +1,38 @@
+project:
+  name: "Backend API Service"
+  version: "0.1.0"
+  profile: "backend"
+  framework: "FastAPI"
+  languages:
+    - "Python"
+  owner: "lead-engineer"
+  goals: "Build production-grade REST API with auth, persistence, and observability."
+  deadline: "2026-12-31"
+  status: "INITIALIZED"
+
+enabled_features:
+  standards:
+    - code_quality
+    - testing
+    - documentation
+    - security
+    - api_design
+  agents:
+    - orchestrator
+    - chief-architect
+    - planner
+    - security-reviewer
+    - ai-reviewer
+    - qa-reviewer
+    - docs-reviewer
+    - release-reviewer
+  quality_gates:
+    - QG-001
+    - QG-002
+    - QG-003
+    - QG-005
+    - QG-006
+    - QG-008
+  metrics:
+    - quality
+    - performance

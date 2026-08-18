@@ -1,0 +1,83 @@
+name: AgentOS Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-lint:
+    name: Python Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint Python files
+        run: ruff check tools/ runtime/ validation/runner/ --ignore E501
+
+  yaml-lint:
+    name: YAML Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Lint YAML files
+        run: |
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 200}}}" \
+            .agentos/ profiles/ runtime/policies/ validation/manifest.yaml
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+      - name: Lint Markdown files
+        run: |
+          markdownlint '**/*.md' \
+            --ignore node_modules \
+            --ignore '.github/**' \
+            --config .markdownlint.json || true
+
+  link-check:
+    name: Link Checker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check internal markdown links
+        run: |
+          python3 -c "
+          import os, re, sys
+          root = '.'
+          broken = []
+          for dirpath, _, files in os.walk(root):
+              if '.git' in dirpath or 'node_modules' in dirpath:
+                  continue
+              for f in files:
+                  if not f.endswith('.md'):
+                      continue
+                  path = os.path.join(dirpath, f)
+                  content = open(path).read()
+                  links = re.findall(r'\[.*?\]\((?!http|mailto|#)([^)]+)\)', content)
+                  for link in links:
+                      clean = link.split('#')[0]
+                      if not clean:
+                          continue
+                      resolved = os.path.abspath(os.path.join(dirpath, clean))
+                      if not os.path.exists(resolved):
+                          broken.append(f'{f}: broken link -> {link}')
+          if broken:
+              print('Broken links found:')
+              for b in broken:
+                  print(' -', b)
+              sys.exit(1)
+          else:
+              print('All internal links valid.')
+          "

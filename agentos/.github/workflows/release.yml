@@ -1,0 +1,39 @@
+name: AgentOS Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run final validation
+        run: |
+          python3 tools/scripts/validate_agentos.py
+          python3 validation/runner/execute_suite.py
+          python3 tools/scripts/bootstrap_project.py --self-test
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AgentOS v${{ steps.version.outputs.VERSION }}"
+          body_path: RELEASE_NOTES_v1.0.0.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'beta') }}

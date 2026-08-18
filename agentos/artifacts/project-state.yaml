@@ -1,0 +1,40 @@
+# Machine-readable project state. Human twin: ../context/state.md
+# RULE: this file may not claim a gate PASS unless the gate actually ran and passed.
+project: cartograph
+spec_version: V3
+spec_frozen: 2026-08
+
+current_milestone: M00
+status: IN_REVIEW            # IN_PROGRESS | IN_REVIEW | COMPLETE | BLOCKED
+current_branch: feature/m00-foundation
+next_allowed_milestone: M01  # unlocked only when M00 checkpoint is accepted
+
+last_checkpoint:
+  milestone: null            # M00 tag is created after human acceptance
+  commit: null
+  tag: null
+
+gates:                       # last local run, 2026-08-18
+  repository: PASS           # QG-001
+  fmt: PASS                  # QG-002 — cargo fmt --all -- --check
+  clippy: PASS               # QG-003 — -D warnings, all targets/features
+  tests: PASS                # QG-004 — 50 passed, 0 failed
+  security: PASS             # QG-005 — no secrets, no machine paths in tracked files
+  architecture: PASS         # QG-006 — no prohibited deps, petgraph not public
+  documentation: PASS        # QG-007
+  milestone_acceptance: PASS # QG-008 — M00 criteria
+  agentos_validator: PASS    # 99/100
+  ci: PENDING                # recorded when the PR's CI run completes
+
+tests:
+  total: 50
+  failed: 0
+
+benchmarks:
+  harness: compiles
+  published_numbers: none    # nothing measured is published before M08/M09
+
+open_risks:
+  - exfat-volume-quirks      # no hard links; AppleDouble sidecars; documented
+  - uncalibrated-confidence  # priors only until M08
+  - graph-local-node-identity # content-addressing lands at M10

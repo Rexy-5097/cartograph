@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""Cartograph quality gates QG-001 … QG-008, executable.
+
+Run from anywhere: resolves the repository root relative to this file.
+Exit 0 only if every gate passes. CI runs exactly this script, so a local
+`make gates` and CI cannot disagree.
+
+Definitions: agentos/gates/. This script is Cartograph-owned (not upstream
+AgentOS); it lives beside the framework tooling for discoverability.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+RESULTS = []
+
+
+def gate(gate_id, name):
+    def deco(fn):
+        def wrapper():
+            try:
+                problems = fn() or []
+            except Exception as e:  # a crashed gate is a failed gate
+                problems = [f"gate crashed: {e}"]
+            RESULTS.append((gate_id, name, problems))
+            status = "PASS" if not problems else "FAIL"
+            print(f"[{status}] {gate_id} {name}")
+            for p in problems:
+                print(f"       - {p}")
+        return wrapper
+    return deco
+
+
+def run(cmd, timeout=1200):
+    return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+
+
+def tracked_files():
+    out = run(["git", "ls-files"]).stdout
+    return [line for line in out.splitlines() if line]
+
+
+@gate("QG-001", "Repository integrity")
+def qg001():
+    problems = []
+    required = [
+        "Cargo.toml", "Makefile", "LICENSE", ".gitignore", ".gitattributes",
+        "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md",
+        "CODE_OF_CONDUCT.md", "AGENTS.md", "AGENTOS.md", "PROJECT_RULES.md",
+        "ARCHITECTURE.md", "ROADMAP.md", "CHECKPOINTS.md",
+        "agentos/PROJECT_CONFIG.yaml", "agentos/artifacts/project-state.yaml",
+        ".github/workflows/ci.yml", ".github/pull_request_template.md",
+        ".github/CODEOWNERS",
+    ]
+    for f in required:
+        if not os.path.exists(os.path.join(ROOT, f)):
+            problems.append(f"missing {f}")
+    crates = ["cartograph-core", "cartograph-graph", "cartograph-parser",
+              "cartograph-resolver", "cartograph-cli", "cartograph-testkit"]
+    for c in crates:
+        if not os.path.exists(os.path.join(ROOT, "crates", c, "Cargo.toml")):
+            problems.append(f"missing crate {c}")
+    sidecars = [f for f in tracked_files() if os.path.basename(f).startswith("._")]
+    if sidecars:
+        problems.append(f"{len(sidecars)} AppleDouble sidecar file(s) tracked, e.g. {sidecars[0]}")
+    return problems
+
+
+@gate("QG-002", "Formatting")
+def qg002():
+    r = run(["cargo", "fmt", "--all", "--", "--check"])
+    return [] if r.returncode == 0 else ["cargo fmt --check failed:\n" + (r.stdout or r.stderr)[:800]]
+
+
+@gate("QG-003", "Lints (clippy -D warnings)")
+def qg003():
+    r = run(["cargo", "clippy", "--workspace", "--all-targets", "--all-features",
+             "--", "-D", "warnings"])
+    return [] if r.returncode == 0 else ["clippy failed:\n" + r.stderr[-1200:]]
+
+
+@gate("QG-004", "Tests")
+def qg004():
+    r = run(["cargo", "test", "--workspace"])
+    return [] if r.returncode == 0 else ["cargo test failed:\n" + (r.stdout + r.stderr)[-1200:]]
+
+
+SECRET_PATTERNS = [
+    (re.compile(r"ghp_[A-Za-z0-9]{20,}"), "GitHub personal access token"),
+    (re.compile(r"gho_[A-Za-z0-9]{20,}"), "GitHub OAuth token"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "AWS access key"),
+    (re.compile(r"-----BEGIN (RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY"), "private key block"),
+    (re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"), "Slack token"),
+]
+
+# Machine-specific path detectors. Placeholder/example paths that documentation
+# legitimately uses are allowed; a real user home or this project's real volume
+# is not.
+MACHINE_PATH = re.compile(r"(/Users/[a-z][a-z0-9_.-]+/|/home/[a-z][a-z0-9_.-]+/|C:\\Users\\[A-Za-z][^\\]*\\)")
+ALLOWED_PATH_HINTS = ("dev/", "External/", "user/", "username/", "example", "<", "you/")
+TEXT_EXT = {".rs", ".toml", ".md", ".yml", ".yaml", ".py", ".json", ".sh", ".txt", ""}
+
+
+@gate("QG-005", "Security & secrets")
+def qg005():
+    problems = []
+    for f in tracked_files():
+        base = os.path.basename(f)
+        if base == ".env" or base.endswith((".pem", ".key", ".p12")) or base == "credentials.json":
+            problems.append(f"credential-shaped file tracked: {f}")
+        if os.path.splitext(f)[1] not in TEXT_EXT:
+            continue
+        path = os.path.join(ROOT, f)
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for pat, label in SECRET_PATTERNS:
+            if pat.search(text):
+                problems.append(f"{label} pattern in {f}")
+        for m in MACHINE_PATH.finditer(text):
+            # Normalise separators so `C:\Users\dev\` and `/home/dev/`
+            # hit the same placeholder allowlist.
+            frag = m.group(0).replace("\\", "/")
+            if not any(h in frag for h in ALLOWED_PATH_HINTS):
+                problems.append(f"machine-specific path `{m.group(0)}` in {f}")
+    return problems
+
+
+PROHIBITED_DEPS = [
+    "neo4j", "sqlx", "diesel", "postgres", "redis", "aws-sdk", "rusoto",
+    "kafka", "rdkafka", "kube", "langchain", "qdrant", "milvus", "pinecone",
+]
+
+
+@gate("QG-006", "Architecture compliance")
+def qg006():
+    problems = []
+    manifests = [f for f in tracked_files() if f.endswith("Cargo.toml")]
+    dep_line = re.compile(r'^\s*"?([A-Za-z0-9_-]+)"?\s*=')
+    for mf in manifests:
+        with open(os.path.join(ROOT, mf), encoding="utf-8") as fh:
+            in_deps = False
+            for line in fh:
+                s = line.strip()
+                if s.startswith("["):
+                    in_deps = "dependencies" in s
+                    continue
+                if in_deps:
+                    m = dep_line.match(line)
+                    if m and m.group(1).lower() in PROHIBITED_DEPS:
+                        problems.append(f"prohibited v1 dependency `{m.group(1)}` in {mf}")
+    # petgraph containment: only cartograph-graph may depend on it...
+    for mf in manifests:
+        if mf == "crates/cartograph-graph/Cargo.toml" or mf == "Cargo.toml":
+            continue
+        with open(os.path.join(ROOT, mf), encoding="utf-8") as fh:
+            if re.search(r"^\s*petgraph", fh.read(), re.M):
+                problems.append(f"petgraph dependency outside cartograph-graph: {mf}")
+    # ...and it may not leak through cartograph-graph's public API.
+    graph_src = os.path.join(ROOT, "crates", "cartograph-graph", "src")
+    for dirpath, _, files in os.walk(graph_src):
+        for name in files:
+            if not name.endswith(".rs"):
+                continue
+            with open(os.path.join(dirpath, name), encoding="utf-8") as fh:
+                for i, line in enumerate(fh, 1):
+                    if re.search(r"\bpub\b.*petgraph::", line) or re.search(r"pub use .*petgraph", line):
+                        problems.append(f"petgraph in public API: {name}:{i}")
+    # dependency direction: core must not depend on any cartograph crate
+    with open(os.path.join(ROOT, "crates/cartograph-core/Cargo.toml"), encoding="utf-8") as fh:
+        if re.search(r"^\s*cartograph-", fh.read(), re.M):
+            problems.append("cartograph-core depends on another cartograph crate")
+    return problems
+
+
+@gate("QG-007", "Documentation & change tracking")
+def qg007():
+    problems = []
+    for f, needle in [
+        ("CHANGELOG.md", "M00"),
+        ("CHECKPOINTS.md", "M00"),
+        ("agentos/context/state.md", "M00"),
+    ]:
+        path = os.path.join(ROOT, f)
+        if not os.path.exists(path):
+            problems.append(f"missing {f}")
+            continue
+        with open(path, encoding="utf-8") as fh:
+            if needle not in fh.read():
+                problems.append(f"{f} has no entry for the active milestone")
+    return problems
+
+
+@gate("QG-008", "Milestone acceptance (M00)")
+def qg008():
+    problems = []
+    # future-milestone work must not be smuggled in: parser and resolver stay empty
+    for crate in ("cartograph-parser", "cartograph-resolver"):
+        src = os.path.join(ROOT, "crates", crate, "src")
+        rs_files = []
+        for dirpath, _, files in os.walk(src):
+            rs_files += [f for f in files if f.endswith(".rs")]
+        if rs_files != ["lib.rs"]:
+            problems.append(f"{crate} contains implementation files: {rs_files}")
+        with open(os.path.join(src, "lib.rs"), encoding="utf-8") as fh:
+            body = [line for line in fh if line.strip() and not line.strip().startswith("//")]
+        if body:
+            problems.append(f"{crate}/src/lib.rs contains non-doc code at M00")
+    # milestone definition exists
+    if not os.path.exists(os.path.join(ROOT, "agentos/milestones/M00-foundation.md")):
+        problems.append("missing milestone definition M00-foundation.md")
+    return problems
+
+
+def main():
+    print(f"Cartograph quality gates — root: {ROOT}\n")
+    for fn in [qg001, qg002, qg003, qg004, qg005, qg006, qg007, qg008]:
+        fn()
+    failed = [(g, n) for g, n, p in RESULTS if p]
+    print()
+    if failed:
+        print(f"RESULT: FAIL ({len(failed)}/{len(RESULTS)} gates failed)")
+        return 1
+    print(f"RESULT: PASS ({len(RESULTS)}/{len(RESULTS)} gates)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

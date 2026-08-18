@@ -1,0 +1,67 @@
+# Cartograph's AgentOS project configuration.
+#
+# Compiled from the flagship profile: Cartograph is a production-quality
+# engineering effort with research components (calibration, benchmarking,
+# dynamic string analysis), so every standard, agent and gate is active.
+project:
+  name: Cartograph
+  version: 0.0.0
+  profile: flagship
+  framework: Rust workspace (tree-sitter + LSP + petgraph under a Cartograph-owned domain graph)
+  languages:
+  - Rust
+  - TypeScript   # desktop UI, from M11
+  owner: Rexy-5097
+  goals: >-
+    A local-first architectural intelligence engine that derives a verified,
+    symbol-level, cross-language graph of a software system — TypeScript
+    frontend through HTTP boundary through Python handler through ORM model to
+    database table — with evidence, provenance and confidence on every edge.
+    Deterministic analysis first, evidence second, inference third, the model
+    last and never in the graph.
+  deadline: '2027-02-28'   # ~6 months from spec freeze (August 2026), 17 milestones
+  status: ACTIVE
+  specification: Frozen Engineering Specification V3, August 2026
+
+enabled_features:
+  standards:
+  - code_quality
+  - testing
+  - documentation
+  - security
+  - research        # calibration, CrossStack-Bench
+  - api_design      # core graph API consumed by three clients
+  - ui_ux           # from M11
+  agents:
+  - orchestrator
+  - chief-architect
+  - planner
+  - science-reviewer
+  - security-reviewer
+  - performance-reviewer
+  - ui-reviewer
+  - qa-reviewer
+  - docs-reviewer
+  - release-reviewer
+  quality_gates:
+  - QG-001
+  - QG-002
+  - QG-003
+  - QG-004
+  - QG-005
+  - QG-006
+  - QG-007
+  - QG-008
+  metrics:
+  - quality
+  - performance
+  - benchmarks
+
+# Cartograph-specific extensions. The framework ignores keys it does not know.
+cartograph:
+  spec_version: V3
+  rules_document: ../PROJECT_RULES.md
+  milestones_dir: milestones/
+  gates_dir: gates/
+  state_file: artifacts/project-state.yaml
+  adr_dir: ../docs/adr/        # Cartograph ADRs; artifacts/decisions/ holds upstream framework ADRs

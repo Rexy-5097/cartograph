@@ -1,0 +1,31 @@
+# CODEOWNERS
+# GitHub automatically requests review from code owners when PRs touch these files.
+# Format: <pattern> <owner1> <owner2> ...
+
+# Default owner for everything
+*                           @lead-engineer
+
+# Core framework files — requires senior review
+AGENTOS.md                  @lead-engineer
+ENGINEERING_PRINCIPLES.md   @lead-engineer
+VERSION_POLICY.md           @lead-engineer
+COMPATIBILITY.md            @lead-engineer
+
+# Runtime — requires architecture review
+runtime/                    @lead-engineer
+runtime/kernel/             @lead-engineer
+runtime/harness/            @lead-engineer
+runtime/loop/               @lead-engineer
+
+# Agent contracts — requires AI team review
+agents/                     @lead-engineer
+
+# Validator — requires QA review
+tools/scripts/validate_agentos.py  @lead-engineer
+
+# GitHub Actions — requires DevOps review
+.github/workflows/          @lead-engineer
+
+# Security-sensitive files
+SECURITY.md                 @lead-engineer
+integrations/               @lead-engineer
