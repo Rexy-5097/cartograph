@@ -58,7 +58,7 @@ jobs:
         run: cargo bench --workspace --no-run
 
   gates:
-    name: quality gates QG-001…008
+    name: quality gates QG-001…009
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

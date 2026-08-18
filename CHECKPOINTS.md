@@ -282,6 +282,51 @@ evidence naming both sides and the rules that fired. `cartograph match` CLI.
 against 1000 routes ~7.9 µs; 1000 routes × 100 clients end-to-end ~1.22 ms.
 Internal only, not published.
 
+### Verification findings
+
+Fixtures were green throughout while the matcher was producing false edges on
+real input; both defects below were found by inspecting real-repository output
+by hand, not by any synthetic test.
+
+**False positives found and fixed (2).**
+
+| Corpus | Before | After | Cause |
+|---|---|---|---|
+| pallets/flask | 167 accepted edges | 29 | A bare catch-all `/{path:path}` in one test module matched client calls from every other module — 138 false edges from a single route. |
+| pallets/flask | included above | — | `GET /user_id` matched `GET /{name}` declared in an unrelated module. |
+
+Both candidates shared **zero static segments** with the client path. Root
+cause: a route made entirely of variable positions accepts a whole class of
+paths, so aligning with it is not evidence about any one call. Fix: an accepted
+match now requires at least one shared static segment (the root path
+discriminates by equality). Regression tests
+`a_bare_catch_all_route_does_not_swallow_unrelated_calls` and
+`a_single_parameter_route_does_not_capture_every_one_segment_call` name where
+each came from.
+
+**Differential check after the fix.** Flask 167 → 29 edges; the 138 removed
+were all catch-all artefacts. The 29 survivors were inspected by hand and are
+genuine — Flask's tutorial test suite calling its own blog routes
+(`POST /1/update` → `GET|POST /{id}/update` → `update`). Django-REST-Framework
+was unchanged at 50, all same-module `urlpatterns` calls at 0.784, correctly
+reduced for Django's undeclared method.
+
+**Investigated, not a defect.** `full-stack-fastapi-template` reports 100%
+unsupported (63 of 63). Classified as a true refusal: that template builds
+every URL from an `${API_URL}` prefix, so the path length is unknown and no
+alignment is safe. M05's constant propagation is what unlocks it. Recorded
+rather than silently accepted.
+
+**Output inspected by hand:** an exact literal match, a parameter-bound
+boundary case, an ambiguous pair, a method-mismatch negative, and an
+uninterpreted regex — plus the evidence string and candidate reasons for each
+accepted edge.
+
+**Defects found during implementation:** four clippy findings and one
+`PathCompatibility` fallback arm, each fixed before the next slice began.
+
+**Unresolved limitations** are listed below; none is an unexplained output.
+
 ### Known limitations
 
 Route mount prefixes not composed (largest source of missed matches); no
@@ -311,7 +356,12 @@ clients never matched; OpenAPI confirmation deferred.
 ### Gate results
 | Gate | Result |
 |---|---|
-| fmt / clippy / tests / CI / QG-001…008 | |
+| fmt / clippy / tests / CI / QG-001…009 | |
+
+### Verification findings
+<!-- Required by QG-009. What was found, what was fixed, before/after counts,
+     real-repository observations. If nothing was found, state what was run to
+     establish that — "none" alone fails the gate. -->
 
 ### Benchmark state
 ### Known limitations

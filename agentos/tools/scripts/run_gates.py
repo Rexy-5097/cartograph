@@ -286,9 +286,160 @@ def qg008():
     return problems
 
 
+# Test files each milestone owns. QG-009 measures the milestone under
+# development, so it needs to know which files that milestone brought.
+MILESTONE_TESTS = {
+    "M00": ["crates/cartograph-core/src", "crates/cartograph-graph/tests"],
+    "M01": ["crates/cartograph-parser/tests/typescript_extraction.rs"],
+    "M02": ["crates/cartograph-parser/tests/python_extraction.rs"],
+    "M03": ["crates/cartograph-resolver/tests/canonicalization.rs"],
+    "M04": [
+        "crates/cartograph-resolver/tests/matching.rs",
+        "crates/cartograph-resolver/tests/cross_stack.rs",
+    ],
+}
+
+# Milestones whose logic can silently produce wrong output, so synthetic
+# fixtures alone are not evidence.
+HIGH_RISK = {"M04", "M05", "M06", "M07", "M08", "M10", "M12", "M13"}
+
+# An assertion is "negative" when it asserts a refusal. Matched against
+# assertion bodies rather than test names, so a reassuring name cannot pass.
+REFUSAL_MARKERS = (
+    "NoMatch",
+    "Ambiguous",
+    "Unsupported",
+    "is_none()",
+    "is_empty()",
+    "edges, 0",
+    "edge_count(), 0",
+    "assert!(!",
+    "is_err()",
+    "NotApplicable",
+    "Methods::Unknown",
+    "must not",
+    "never",
+    "not guessed",
+    "no edge",
+)
+
+
+def current_milestone():
+    """The milestone under development, from the project state artifact."""
+    state = read_text(os.path.join(ROOT, "agentos/artifacts/project-state.yaml"))
+    m = re.search(r"^current_milestone:\s*(\S+)", state, re.M)
+    return m.group(1) if m else None
+
+
+def milestone_test_sources(milestone):
+    """(path, text) for every test file the milestone owns."""
+    out = []
+    for entry in MILESTONE_TESTS.get(milestone, []):
+        full = os.path.join(ROOT, entry)
+        if os.path.isdir(full):
+            out += [(p, read_text(p)) for p in source_files(full, ".rs")]
+        elif os.path.exists(full):
+            out.append((full, read_text(full)))
+    return out
+
+
+def split_tests(text):
+    """Splits a Rust test file into per-test bodies."""
+    bodies = []
+    for chunk in text.split("#[test]")[1:]:
+        # A test body ends where the next attribute or a top-level `}` does.
+        end = chunk.find("\n}\n")
+        bodies.append(chunk if end == -1 else chunk[: end + 2])
+    return bodies
+
+
+def checkpoint_entry(milestone):
+    """The CHECKPOINTS.md section for one milestone."""
+    text = read_text(os.path.join(ROOT, "CHECKPOINTS.md"))
+    m = re.search(rf"^## {milestone} — .*?(?=^## |\Z)", text, re.M | re.S)
+    return m.group(0) if m else ""
+
+
+@gate("QG-009", "Continuous verification")
+def qg009():
+    problems = []
+    milestone = current_milestone()
+    if not milestone:
+        return ["cannot determine the current milestone from project-state.yaml"]
+
+    sources = milestone_test_sources(milestone)
+    if milestone in MILESTONE_TESTS and not sources:
+        problems.append(f"{milestone} declares test files that do not exist")
+
+    # 1 + 2. The milestone has tests, and enough of them assert refusals.
+    bodies = [b for _, text in sources for b in split_tests(text)]
+    if sources and not bodies:
+        problems.append(f"{milestone} has test files but no tests in them")
+    if bodies:
+        negative = sum(
+            1 for b in bodies if any(marker in b for marker in REFUSAL_MARKERS)
+        )
+        minimum = max(1, len(bodies) // 4)
+        if negative < minimum:
+            problems.append(
+                f"{milestone}: only {negative} of {len(bodies)} tests assert a refusal; "
+                f"at least {minimum} required (a feature that never refuses is the failure mode)"
+            )
+
+    # 3. Standing invariants, for the subsystems that exist.
+    all_tests = "\n".join(
+        read_text(p)
+        for d in ("crates/cartograph-resolver/tests", "crates/cartograph-parser/tests")
+        for p in source_files(os.path.join(ROOT, d), ".rs")
+    )
+    if os.path.exists(os.path.join(ROOT, "crates/cartograph-resolver/src/edge.rs")):
+        invariants = {
+            "ambiguity produces no accepted edge": ("Ambiguous", "accepted().is_none()"),
+            "an unknown method never becomes GET": ("never_read_as_get", "defaulting"),
+            "accepted edges carry evidence": ("evidence()", "Evidence"),
+        }
+        for name, markers in invariants.items():
+            if not any(m in all_tests for m in markers):
+                problems.append(f"no test covers the invariant: {name}")
+
+    entry = checkpoint_entry(milestone)
+    if not entry:
+        problems.append(f"CHECKPOINTS.md has no entry for {milestone}")
+    else:
+        # 4. High-risk milestones show real-repository validation.
+        if milestone in HIGH_RISK:
+            has_corpus = re.search(
+                r"(flask|django|fastapi|swr|zustand|repositor)", entry, re.I
+            )
+            if not has_corpus:
+                problems.append(
+                    f"{milestone} is high-risk but its checkpoint records no "
+                    "real-repository validation"
+                )
+        # 5 + 6. Verification findings, with substance.
+        m = re.search(r"### Verification findings(.*?)(?=^### |\Z)", entry, re.M | re.S)
+        if not m:
+            problems.append(
+                f"{milestone} checkpoint has no '### Verification findings' section"
+            )
+        else:
+            findings = m.group(1).strip()
+            if len(findings) < 120:
+                problems.append(
+                    f"{milestone} verification findings are too thin to be evidence "
+                    "(state what was tested, not just an outcome)"
+                )
+            if re.fullmatch(r"(?i)none\.?", findings):
+                problems.append(
+                    f"{milestone} verification findings say only 'none'; "
+                    "state what was run to establish that"
+                )
+    return problems
+
+
 def main():
     print(f"Cartograph quality gates — root: {ROOT}\n")
-    for fn in [qg001, qg002, qg003, qg004, qg005, qg006, qg007, qg008]:
+    for fn in [qg001, qg002, qg003, qg004, qg005, qg006, qg007, qg008, qg009]:
         fn()
     failed = [(g, n) for g, n, p in RESULTS if p]
     print()

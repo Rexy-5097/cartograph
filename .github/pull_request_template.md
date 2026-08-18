@@ -10,7 +10,7 @@
 
 - [ ] Scope matches the active milestone — nothing from a future milestone smuggled in
 - [ ] `make check` passes locally (fmt, clippy -D warnings, tests, AgentOS validator)
-- [ ] `make gates` passes (QG-001…008)
+- [ ] `make gates` passes (QG-001…009)
 - [ ] New dependencies: each one answers "what concrete problem does this solve **now**?" below
 - [ ] No secrets, tokens, or machine-specific paths in the diff
 - [ ] CHANGELOG.md updated; CHECKPOINTS.md and project-state.yaml reflect reality
