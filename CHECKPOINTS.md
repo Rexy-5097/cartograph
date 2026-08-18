@@ -92,7 +92,7 @@ quality gates QG-001 – QG-008; milestone and checkpoint systems; nine ADRs.
 | Status | **PENDING HUMAN REVIEW** — not accepted |
 | Date | 2026-08-19 |
 | Branch | `feature/m01-typescript-extraction` (stacked on `feature/m00-foundation`) |
-| Provisional checkpoint | `cartograph-m01-rc1` (annotated; the tag is the SHA authority) |
+| Provisional checkpoint | `cartograph-m01-rc2` (annotated; the tag is the SHA authority; rc1 retired — its head failed CI's newer clippy) |
 | Accepted checkpoint | *none yet* — `cartograph-m01` is created at acceptance |
 
 ### Scope delivered
@@ -130,7 +130,7 @@ module-scope variables only; grammar gaps on advanced type-level syntax
 
 ### Rollback point
 
-`cartograph-m01-rc1`; previous state `cartograph-m00-rc1`.
+`cartograph-m01-rc2`; previous state `cartograph-m00-rc1`.
 
 ---
 

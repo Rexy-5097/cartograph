@@ -16,13 +16,13 @@ milestones:
     accepted_tag: null       # becomes cartograph-m00 at PR merge (ADR-0010)
   M01:
     status: IN_REVIEW
-    provisional_tag: cartograph-m01-rc1
+    provisional_tag: cartograph-m01-rc2
     accepted_tag: null       # becomes cartograph-m01 at acceptance
 
 last_checkpoint:             # ADR-0010: the tag is the authority for its SHA
   milestone: M01
   class: provisional
-  tag: cartograph-m01-rc1
+  tag: cartograph-m01-rc2
   accepted_tag: null
 
 gates:                       # last local run, 2026-08-19
@@ -35,7 +35,7 @@ gates:                       # last local run, 2026-08-19
   documentation: PASS        # QG-007
   milestone_acceptance: PASS # QG-008 - M01 criteria
   agentos_validator: PASS    # 99/100
-  ci: PENDING                # recorded when the PR's CI run completes
+  ci: PASS                   # PR #2 run 32175186271 - all three jobs green
 
 tests:
   total: 82
