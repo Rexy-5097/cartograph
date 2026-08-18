@@ -7,11 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M03 — Canonical route normalization** |
-| Status | M00–M02 **ACCEPTED**; M03 complete and gate-clean, pending human review (PR #4) |
-| Branch | `feature/m03-route-normalization` |
-| Next permitted milestone | M04 — **locked** until M03 is accepted |
-| Last accepted checkpoint | `cartograph-m02` (immutable, merge commit `eaba30b`) |
+| Active milestone | **M04 — Cross-language resolution** |
+| Status | M00–M03 **ACCEPTED**; M04 in progress |
+| Branch | `feature/m04-cross-language-resolution` |
+| Next permitted milestone | M05 — **locked** until M04 is accepted |
+| Last accepted checkpoint | `cartograph-m03` (immutable, merge commit `ca0d206`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists

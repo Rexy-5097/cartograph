@@ -199,11 +199,11 @@ Provisional predecessor `cartograph-m02-rc1` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m03-route-normalization` (from `main`) |
-| Provisional checkpoint | `cartograph-m03-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m03` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m03-route-normalization` · PR [#4](https://github.com/Rexy-5097/cartograph/pull/4) (merged) |
+| Provisional checkpoint | `cartograph-m03-rc1` (retained for traceability) |
+| **Accepted checkpoint** | **`cartograph-m03`** — merge commit `ca0d206`, immutable |
 
 ### Scope delivered
 
@@ -240,7 +240,8 @@ deliberately generous, so a structurally readable pattern is still refused.
 
 ### Rollback point
 
-`cartograph-m03-rc1`; previous accepted checkpoint `cartograph-m02`.
+`cartograph-m03` (accepted). Previous accepted checkpoint: `cartograph-m02`.
+Provisional predecessor `cartograph-m03-rc1` remains available.
 
 ---
 

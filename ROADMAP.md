@@ -20,8 +20,8 @@ complete when its **gate passes**, not when its code exists (RULE 017).
 | **M00** | Workspace, six crates, CI, clippy, criterion, tracing | Day 2 | **Accepted** (`cartograph-m00`) |
 | **M01** | TypeScript extraction — symbols, imports, calls, strings | Day 4 | **Accepted** (`cartograph-m01`) |
 | **M02** | Python extraction — FastAPI, Flask, Django routes | Day 5 | **Accepted** (`cartograph-m02`) |
-| **M03** | Path normalisation to canonical form | Day 6 | **In progress** |
-| M04 | Cross-language resolver — TS call to Python handler | Day 8 | Not started |
+| **M03** | Path normalisation to canonical form | Day 6 | **Accepted** (`cartograph-m03`) |
+| **M04** | Cross-language resolver — TS call to Python handler | Day 8 | **In progress** |
 | M05 | Template evaluator for dynamic URLs | Day 11 | Not started |
 | M06 | ORM resolution — handler to model to table | Day 13 | Not started |
 | M07 | Full verified chain on a real repository | Day 14 | Not started |
