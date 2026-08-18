@@ -2,6 +2,9 @@
 //!
 //! # Why `parse` exists as its own command
 //!
+//! Languages are detected from the file extension: TypeScript/TSX (M01) and
+//! Python (M02) are recognised, and a mixed repository is walked in one pass.
+//!
 //! `cartograph analyze` is the M09 deliverable — the full pipeline producing a
 //! graph. Shipping it now, wired only to extraction, would misrepresent what
 //! the product does (a command that exists but half-works is a documentation
@@ -21,13 +24,20 @@ use serde::Serialize;
 use tracing::debug;
 
 /// Directories never worth descending into.
-const SKIP_DIRS: [&str; 6] = [
+const SKIP_DIRS: [&str; 11] = [
     "node_modules",
     ".git",
     "dist",
     "build",
     "coverage",
     "target",
+    // Python equivalents: vendored or generated trees whose contents are not
+    // the project's own source.
+    "__pycache__",
+    "site-packages",
+    "venv",
+    ".venv",
+    "migrations",
 ];
 
 /// Aggregate counts across a run.
@@ -42,6 +52,7 @@ struct Totals {
     calls: usize,
     strings: usize,
     http_observations: usize,
+    route_observations: usize,
     diagnostics: usize,
 }
 
@@ -150,6 +161,7 @@ fn tally(analyses: &[FileAnalysis]) -> Totals {
         totals.calls += analysis.calls.len();
         totals.strings += analysis.strings.len();
         totals.http_observations += analysis.http_calls.len();
+        totals.route_observations += analysis.routes.len();
         totals.diagnostics += analysis.diagnostics.len();
     }
     totals
@@ -163,7 +175,7 @@ fn print_summary(analyses: &[FileAnalysis], totals: &Totals, elapsed: std::time:
             ParseStatus::Failed => "FAILED",
         };
         println!(
-            "{:<7} {}  symbols {:<4} imports {:<3} calls {:<4} strings {:<4} http {}",
+            "{:<7} {}  symbols {:<4} imports {:<3} calls {:<4} strings {:<4} http {:<3} routes {}",
             status,
             analysis.path,
             analysis.symbols.len(),
@@ -171,6 +183,7 @@ fn print_summary(analyses: &[FileAnalysis], totals: &Totals, elapsed: std::time:
             analysis.calls.len(),
             analysis.strings.len(),
             analysis.http_calls.len(),
+            analysis.routes.len(),
         );
         for diagnostic in &analysis.diagnostics {
             match diagnostic.span {
@@ -195,6 +208,10 @@ fn print_summary(analyses: &[FileAnalysis], totals: &Totals, elapsed: std::time:
     println!(
         "HTTP observed  {}   (syntactic observations, not resolved edges)",
         totals.http_observations
+    );
+    println!(
+        "Routes observed {}  (declarations found in source, not verified endpoints)",
+        totals.route_observations
     );
     println!("Diagnostics    {}", totals.diagnostics);
     println!("Completed in   {elapsed:.2?}");
