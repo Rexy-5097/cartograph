@@ -245,6 +245,55 @@ Provisional predecessor `cartograph-m03-rc1` remains available.
 
 ---
 
+## M04 — Cross-language route resolution
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m04-cross-language-resolution` (from `main`) |
+| Provisional checkpoint | `cartograph-m04-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m04` is created at acceptance |
+
+### Scope delivered
+
+The first semantic join and the first `HttpCall` edges. Candidate generation
+over an arity-bucketed route index; deterministic method and path compatibility
+rules; a discriminating-evidence requirement; ambiguity that produces no edge;
+explicit refusals for unresolved prefixes, uncanonicalisable paths and absolute
+hosts. Edge construction with confidence, provenance `route-matcher`, and
+evidence naming both sides and the rules that fired. `cartograph match` CLI.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 241 tests |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-008 | PASS — 8/8 |
+| AgentOS validator | PASS — 99/100 |
+
+### Benchmark state
+
+`matching`: per-decision 136–399 ns; index build 1000 routes ~470 µs; match
+against 1000 routes ~7.9 µs; 1000 routes × 100 clients end-to-end ~1.22 ms.
+Internal only, not published.
+
+### Known limitations
+
+Route mount prefixes not composed (largest source of missed matches); no
+same-service scoping; test-client calls matched like any other; absolute-host
+clients never matched; OpenAPI confirmation deferred.
+
+### Rollback point
+
+`cartograph-m04-rc1`; previous accepted checkpoint `cartograph-m03`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown

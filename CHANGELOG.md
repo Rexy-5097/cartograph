@@ -10,6 +10,52 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M04, cross-language route resolution
+
+**The first semantic join, and the first `HttpCall` edges.** A TypeScript or
+Python client call is now matched against Python route declarations and, when
+the evidence supports it, becomes a graph edge carrying confidence, provenance
+and the case for itself.
+
+- **Candidate generation** — routes indexed by segment count, wildcards held
+  separately. Method is deliberately not an index key, since an undeclared
+  method is compatible with everything. Client calls can never be indexed as
+  routes; uncanonicalisable routes are never indexed at all.
+- **Method rules** — exact within a declared set; disjoint methods are not
+  candidates at all; an undeclared method on either side is a candidate but
+  never exact, and is **never read as GET**.
+- **Path rules** — static segments compare exactly; a server parameter accepts
+  a concrete client value; a client's unknown value is aligned but undetermined,
+  and against a server literal is possible-but-unverified. A trailing wildcard
+  consumes one or more segments; a wildcard elsewhere is refused.
+- **Discriminating evidence** — an accepted match must share at least one
+  static segment. Found by running the matcher over real repositories: a bare
+  catch-all route was producing 138 false edges in Flask's own repository, and
+  a `/{name}` route was capturing every one-segment call.
+- **Ambiguity produces no edge.** Several plausible routes is an unanswered
+  question; choosing arbitrarily would make every downstream confidence number
+  inherit a guess. Candidates are retained for inspection.
+- **Explicit refusals** — an unresolved template prefix (M05 unlocks these), an
+  uncanonicalisable path, and a client call to an absolute host.
+- **Edges** — `HttpCall` from the client file to the route's handler function,
+  with provenance `route-matcher`, the specification's uncalibrated priors
+  (0.98 exact, down to 0.65 wildcard, × 0.8 for an undeclared method), and
+  evidence naming both sides and the rules that fired.
+- **CLI** — `cartograph match <path> [--json]` reports every decision including
+  the refusals, because a resolver is only as trustworthy as what it declines
+  to claim.
+- **Tests** — 38 matching, 12 end-to-end cross-stack fixtures (the
+  specification's CheckoutButton → create_order chain among them); 236
+  workspace tests total.
+- **Benchmarks** — deterministic `matching` group covering each outcome,
+  index construction and scaling.
+
+**Deliberately not added.** No LSP: route matching joins observations, not
+symbols, and M02 already extracts the handler syntactically. No OpenAPI
+confirmation yet — named in the milestone definition, deferred so the
+route-matching core landed first. No ORM, no constant propagation, no new
+dependency of any kind.
+
 ### Added — M03, canonical route normalisation
 
 **Both sides of the eventual join now speak one language.** `cartograph-resolver`
