@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Active milestone | **M03 — Canonical route normalization** |
-| Status | M00, M01 and M02 **ACCEPTED**; M03 in progress |
+| Status | M00–M02 **ACCEPTED**; M03 complete and gate-clean, pending human review (PR #4) |
 | Branch | `feature/m03-route-normalization` |
 | Next permitted milestone | M04 — **locked** until M03 is accepted |
 | Last accepted checkpoint | `cartograph-m02` (immutable, merge commit `eaba30b`) |
@@ -19,6 +19,10 @@
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
   enforced by construction), architecture graph over petgraph, testkit with
   the spec's worked cross-stack chain as fixtures.
+- **M03: canonical route normalisation** — one observation in, one canonical
+  form out. Five parameter dialects, URL decomposition, template structure,
+  explicit refusal of regexes and dynamic paths. No matching: a `CanonicalRoute`
+  cannot reference another observation.
 - **M02: Python extractor** (peer of the TypeScript one behind one dispatch):
   imports, symbols with `__all__` handling, decorators, calls, f-strings,
   HTTP observations, and shared `RouteObservation` for verb/route decorators
@@ -28,7 +32,7 @@
   sites, string/template/concatenation structure, HTTP observations,
   error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
   (35 files) and swr (194 files).
-- 132 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+- 191 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
   criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
@@ -38,8 +42,7 @@
 
 ## What does NOT exist (deliberately)
 
-No route normalization (M03), no resolution and no
-LSP (M04+), no template *evaluation* (M05 — structure is preserved, not
+No resolution and no LSP (M04+), no template *evaluation* (M05 — structure is preserved, not
 evaluated), no ORM (M06), no storage, no incremental engine, no desktop, no
 MCP, no AI. `cartograph-resolver` remains a doc-only crate.
 

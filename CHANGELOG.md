@@ -10,6 +10,49 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M03, canonical route normalisation
+
+**Both sides of the eventual join now speak one language.** `cartograph-resolver`
+canonicalises a route declaration or a client call URL into a `CanonicalRoute`.
+
+- **Canonical model** — `Segment` (`Static` / `Parameter` / `Dynamic` /
+  `Wildcard`), `Methods` (`Unknown` or `Declared`), `CanonicalPath` with
+  scheme, authority, query, fragment and trailing-slash preserved,
+  `NormalizationStatus`, `NormalizationNote` and `RouteProvenance`.
+- **Dialects** — colon (`:id`), curly (`{id}`, `{id:int}`), angle (`<id>`,
+  `<int:id>`, `<uuid:id>`, `<slug:s>`), path converters and `*`/`**` catch-alls,
+  and templates. Converter order differs between Flask/Django and Starlette;
+  both are read correctly. All parameter dialects share the shape `/orders/{*}`.
+- **Methods** — case-insensitive, deduplicated, deterministically ordered. A
+  missing method is `Unknown`, **never defaulted to GET**.
+- **URL decomposition** — scheme, authority, query and fragment separated from
+  the path. Query parameter names never become path parameters.
+- **Templates** consumed structurally, never evaluated; a leading substitution
+  flags the prefix unknown rather than pretending `` `${BASE}/orders` `` is
+  `/orders`.
+- **Refusals over guesses** — Django `re_path` regexes and dynamic paths
+  (`'/' + param`) are `Unsupported` with the raw form retained. "Cannot safely
+  normalise" is a usable fact; "probably this route" is not.
+- **CLI** — `cartograph normalize <path> [--json]` shows each observation's raw
+  form beside its canonical form, and states in its own output that client
+  calls are not matched against routes.
+- **Tests** — 59 canonicalisation tests asserting exact canonical output, a
+  large share of them negative; 191 workspace tests total.
+- **Benchmarks** — deterministic `canonicalization` criterion group.
+
+**The M04 boundary is the point of this milestone.** Canonicalisation is
+per-observation: a `CanonicalRoute` has five fields and none can reference
+another observation, so no match can be expressed. `same_shape` and
+`compatible_method` are structural predicates — two unrelated services can
+share a shape — and answering "could these be comparable?" is not answering
+"do these connect?". No edge, no confidence, no cross-language claim exists.
+
+`HttpMethodHint::from_name` became public so the resolver and parser share one
+method-name table rather than maintaining two that could disagree.
+
+No new external dependency: the resolver uses only `cartograph-parser` and
+`serde`, with URL decomposition hand-written against the standard library.
+
 ### Added — M02, Python extraction
 
 **A second language into the same fact model.** `cartograph-parser` now

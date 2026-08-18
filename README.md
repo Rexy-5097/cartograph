@@ -7,8 +7,9 @@ symbol-level, cross-language graph of a software system from source code,
 language semantics, HTTP boundaries, database schemas and Git history — and
 shows the evidence behind every edge it draws.
 
-> **Status: pre-alpha, milestone M02 of 17.** The engineering foundation and
-> the TypeScript/TSX and Python extractors exist. The resolver does not. `cartograph
+> **Status: pre-alpha, milestone M03 of 17.** The engineering foundation, the
+> TypeScript/TSX and Python extractors, and canonical route normalisation
+> exist. Cross-stack resolution does not. `cartograph
 > analyze` is not implemented yet. Nothing in this README describes behaviour
 > the code does not have — see [What works today](#what-works-today).
 
@@ -79,15 +80,15 @@ see [ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md).
 
 ## What works today
 
-M00 delivered the engineering foundation; M01 and M02 delivered extraction:
+M00 delivered the engineering foundation, M01–M02 extraction, M03 canonicalisation:
 
 | Component | State |
 |---|---|
 | `cartograph-core` — domain model, evidence, provenance, confidence | Implemented, tested |
 | `cartograph-graph` — architecture graph over `petgraph` | Implemented, tested |
 | `cartograph-parser` — tree-sitter TypeScript/TSX **and Python** extraction | Implemented, tested |
-| `cartograph-cli` — `cartograph version`, `cartograph parse` | Implemented |
-| `cartograph-resolver` — cross-language resolution | **Empty. M03–M06.** |
+| `cartograph-cli` — `version`, `parse`, `normalize` | Implemented |
+| `cartograph-resolver` — canonical route normalisation | Implemented, tested (matching is M04) |
 | `cartograph-testkit` — fixtures | Implemented |
 
 ```console
@@ -99,11 +100,16 @@ template structure, HTTP-shaped calls, and (Python) route declarations — plus
 structured diagnostics for files the grammar cannot fully parse. It walks
 mixed `.ts`/`.tsx`/`.py` trees in one pass.
 
-It never claims a resolved relationship. A route observation means "this file
-declares a route that looks like this", not "this endpoint exists"; an HTTP
-observation means "this file contains a call shaped like a request", not "it
-reaches that handler". Connecting the two is the resolver's job (M03–M06), and
-that distinction is the whole point of the architecture.
+`normalize` canonicalises those observations — `/orders/:id`, `/orders/{id}`
+and `/orders/<int:id>` all become the shape `/orders/{*}` — while keeping each
+one's raw form and source position.
+
+Neither command claims a resolved relationship. A route observation means "this
+file declares a route that looks like this", not "this endpoint exists"; an
+HTTP observation means "this file contains a call shaped like a request", not
+"it reaches that handler". Canonicalisation makes the two sides *comparable*;
+actually connecting them is M04, and that distinction is the whole point of the
+architecture.
 
 No accuracy claim is published anywhere in this repository: accuracy does not
 exist before the resolver and its benchmark (M08). See

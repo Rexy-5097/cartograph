@@ -41,17 +41,17 @@ adding it three times.
 | `cartograph-core` | Domain model: nodes, edges, evidence, provenance, confidence | Implemented |
 | `cartograph-graph` | The architecture graph, traversal | Implemented |
 | `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX (M01) and Python (M02) implemented |
-| `cartograph-resolver` | LSP, route matching, cross-language and ORM resolution | Reserved (M03–M06) |
+| `cartograph-resolver` | Canonical routes (M03); LSP, matching and ORM resolution to come | Canonicalisation implemented (M03) |
 | `cartograph-cli` | The `cartograph` binary | `version`, `parse` |
 | `cartograph-testkit` | Fixtures and builders. Never a runtime dependency | Implemented |
 
 ### Dependency direction
 
 ```
-cli ──► core, parser
+cli ──► core, parser, resolver
 graph ──► core ──► (nothing Cartograph-owned)
 parser ──► core
-resolver ──► core, parser, graph   (from M03)
+resolver ──► parser          (core and graph join when M04 produces edges)
 testkit ──► core
 ```
 
@@ -126,6 +126,10 @@ The single subsystem that justifies the project.
 Frontend and backend are analysed independently, then joined on a canonical
 route form. Where an OpenAPI document exists it is ground truth and inference is
 skipped.
+
+Normalisation (M03) is implemented and deliberately stops short of the join:
+each observation is canonicalised on its own, and no `CanonicalRoute` can
+reference another. See [docs/resolver/canonical-routes.md](docs/resolver/canonical-routes.md).
 
 See [docs/resolver/](docs/resolver/).
 

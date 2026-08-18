@@ -15,30 +15,15 @@
 //! Output: a human summary by default, the full fact model with `--json`
 //! (stdout is pure JSON; logs stay on stderr).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use cartograph_parser::Analyzer;
-use cartograph_parser::model::{FileAnalysis, ParseStatus, SourceLanguage};
+use cartograph_parser::model::{FileAnalysis, ParseStatus};
+
+use crate::discovery;
 use serde::Serialize;
 use tracing::debug;
-
-/// Directories never worth descending into.
-const SKIP_DIRS: [&str; 11] = [
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    "coverage",
-    "target",
-    // Python equivalents: vendored or generated trees whose contents are not
-    // the project's own source.
-    "__pycache__",
-    "site-packages",
-    "venv",
-    ".venv",
-    "migrations",
-];
 
 /// Aggregate counts across a run.
 #[derive(Debug, Default, Serialize)]
@@ -66,7 +51,7 @@ struct JsonReport {
 
 /// Runs extraction over `path` (a file or a directory tree).
 pub fn run(path: &Path, json: bool) -> Result<()> {
-    let (root, files) = discover(path)?;
+    let (root, files) = discovery::discover(path)?;
     if files.is_empty() {
         bail!("no TypeScript or TSX files under {}", path.display());
     }
@@ -97,52 +82,6 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
         print_summary(&results, &totals, elapsed);
-    }
-    Ok(())
-}
-
-/// Finds the analysis root and the repository-relative candidate files.
-fn discover(path: &Path) -> Result<(PathBuf, Vec<String>)> {
-    let metadata =
-        std::fs::metadata(path).with_context(|| format!("cannot access {}", path.display()))?;
-
-    if metadata.is_file() {
-        let root = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .context("file name is not valid UTF-8")?
-            .to_owned();
-        if SourceLanguage::from_path(&name).is_none() {
-            bail!("`{name}` is not a TypeScript or TSX file");
-        }
-        return Ok((root, vec![name]));
-    }
-
-    let mut files = Vec::new();
-    walk(path, path, &mut files)?;
-    files.sort();
-    Ok((path.to_path_buf(), files))
-}
-
-fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result<()> {
-    for entry in std::fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue; // non-UTF-8 names cannot become repository-relative paths
-        };
-        if entry.file_type()?.is_dir() {
-            if name.starts_with('.') || SKIP_DIRS.contains(&name) {
-                continue;
-            }
-            walk(root, &path, out)?;
-        } else if SourceLanguage::from_path(name).is_some() {
-            if let Ok(rel) = path.strip_prefix(root) {
-                // Forward slashes: these are repository-relative fact paths.
-                out.push(rel.to_string_lossy().replace('\\', "/"));
-            }
-        }
     }
     Ok(())
 }

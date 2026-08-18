@@ -389,7 +389,14 @@ pub enum HttpMethodHint {
 }
 
 impl HttpMethodHint {
-    pub(crate) fn from_name(name: &str) -> Option<Self> {
+    /// Maps a method name to a hint, case-insensitively.
+    ///
+    /// `None` for a name that does not identify a known method — never a
+    /// default (RULE 009). Public because the resolver canonicalises method
+    /// names too (M03), and two independent name tables would eventually
+    /// disagree about what `PATCH` means.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "get" => Some(Self::Get),
             "post" => Some(Self::Post),

@@ -1,41 +1,58 @@
 //! Cross-language resolution.
 //!
-//! # Status: reserved, not implemented
+//! # Status: canonicalisation only (M03)
 //!
-//! This crate is empty on purpose. M00 establishes the workspace; resolution
-//! begins at M03.
+//! This is the subsystem the product exists for, and it is built in stages.
+//! What exists today is **M03: canonical route normalisation** — one
+//! observation in, one canonical form out.
 //!
-//! This is the subsystem the product exists for. A React component, an HTTP
-//! route, a Python handler and a database table are four artefacts in three
-//! languages with no shared symbol table. Connecting them is not a graph
-//! problem — it is three compiler problems:
+//! ```text
+//! RouteObservation   ─┐
+//!                     ├─► normalize ─► CanonicalRoute
+//! HttpCallObservation ─┘
+//! ```
 //!
-//! 1. **Partial evaluation of constructed URLs.** `` `${BASE}/orders/${id}` ``
-//!    must become `/api/v1/orders/{*}` through constant propagation and
-//!    abstract interpretation over string values. Unknown segments stay
-//!    explicitly unknown; the resolver never guesses a value (RULE 010).
-//! 2. **Normalisation across route dialects.** `/orders/:id`,
-//!    `/orders/{id}`, `/orders/<int:id>` and `` /orders/${id} `` denote one
-//!    route and must collapse to one canonical form.
-//! 3. **ORM model resolution.** Handler to service to repository to model to
-//!    table.
+//! # The boundary this crate is currently defending
 //!
-//! Where an `OpenAPI` document exists it is ground truth and inference is
-//! skipped.
+//! ```text
+//! M03 (here):    raw observation ─► canonical representation
+//! M04 (not yet): client call + backend route ─► MATCH ─► evidenced edge
+//! ```
 //!
-//! Planned scope, in milestone order:
+//! Canonicalisation is a **per-observation** transformation. Nothing here
+//! compares a client call with a route declaration, decides they describe the
+//! same endpoint, attaches confidence, or produces a graph edge. The
+//! structural helpers this crate exposes — [`CanonicalRoute::same_shape`] and
+//! [`CanonicalRoute::compatible_method`] — answer "could these be
+//! comparable?", a question about two shapes, never a claim about two systems.
 //!
-//! | Milestone | Scope                                                       |
-//! |-----------|-------------------------------------------------------------|
-//! | M03       | Canonical route normalisation                               |
-//! | M04       | Cross-language resolver: TypeScript call site to Python handler |
-//! | M05       | Template evaluator for dynamically constructed URLs         |
-//! | M06       | ORM resolution: handler to model to table                   |
+//! Everything downstream depends on that separation holding: a canonical form
+//! that quietly assumed a match would make every later confidence number
+//! meaningless.
 //!
-//! # One rule that will not move
+//! # What normalisation will not do
 //!
-//! No language model participates in any of this. Every edge this crate
-//! eventually produces is computed by static analysis and carries the evidence
-//! for its own claim. A model may explain a subgraph after the fact (M16); it
-//! may never propose an edge. See RULE 007 and
+//! - **Infer parameters from values.** `/orders/123` keeps `123` as a static
+//!   segment. Only route syntax declares a parameter.
+//! - **Evaluate templates.** `` `${BASE}/orders` `` yields an unknown leading
+//!   segment, not a resolved prefix. Evaluation is M05.
+//! - **Interpret regular expressions.** A Django `re_path` pattern is
+//!   [`NormalizationStatus::Unsupported`] with its raw form retained. "Cannot
+//!   safely normalise" is a usable fact; "probably this route" is not.
+//! - **Default a missing method.** [`Methods::Unknown`] is a state, not a gap
+//!   to fill with `GET`.
+//! - **Collapse trailing slashes.** `/orders` and `/orders/` stay distinct.
+//!
+//! Still to come: the cross-language join and LSP-backed symbol resolution
+//! (M04), template evaluation (M05), ORM resolution (M06). No language model
+//! participates in any of it — see RULE 007 and
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
+
+pub mod canonical;
+pub mod normalize;
+
+pub use canonical::{
+    CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
+    ObservationKind, RouteProvenance, Segment,
+};
+pub use normalize::{normalize_client_call, normalize_method, normalize_route_declaration};
