@@ -92,6 +92,7 @@ dependencies = [
  "anyhow",
  "cartograph-core",
  "cartograph-parser",
+ "cartograph-resolver",
  "clap",
  "serde",
  "serde_json",
@@ -139,6 +140,12 @@ dependencies = [
 [[package]]
 name = "cartograph-resolver"
 version = "0.0.0"
+dependencies = [
+ "cartograph-parser",
+ "criterion",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "cartograph-testkit"

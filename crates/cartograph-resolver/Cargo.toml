@@ -1,6 +1,6 @@
 [package]
 name = "cartograph-resolver"
-description = "Cross-language resolution: HTTP boundaries, route matching, ORM models."
+description = "Cross-language resolution: canonical routes, HTTP boundaries, ORM models."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,22 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-# No dependencies yet — deliberately. async-lsp and lsp-types arrive with the
-# milestone that first drives a language server (M04).
 [dependencies]
+# M03 canonicalises the observations the parser produces, so it consumes the
+# parser's fact model directly. No language server yet: async-lsp and lsp-types
+# arrive with M04, the milestone that first drives one.
+cartograph-parser.workspace = true
+# Canonical routes serialise for `cartograph normalize --json` and, from M08,
+# for golden fixtures compared byte-for-byte in CI.
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "canonicalization"
+harness = false
 
 [lints]
 workspace = true
