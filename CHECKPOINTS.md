@@ -145,6 +145,55 @@ Provisional predecessor `cartograph-m01-rc3` remains available.
 
 ---
 
+## M02 — Python extraction
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m02-python-extraction` (from `main`) |
+| Provisional checkpoint | `cartograph-m02-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m02` is created at acceptance |
+
+### Scope delivered
+
+tree-sitter Python extractor as a peer of the TypeScript one behind a single
+dispatch; imports, symbols (with `__all__` handling and no invented exports),
+decorators, calls, strings and f-strings, HTTP observations, and a new shared
+`RouteObservation` for verb decorators, `@app.route` and URL-conf entries.
+CLI walks mixed `.ts`/`.tsx`/`.py` trees. 32-category fixture corpus,
+`py_extraction` benchmarks, three real-repository smoke corpora.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 132 tests |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-008 | PASS — 8/8 |
+| AgentOS validator | PASS — 99/100 |
+| Smoke tests | 384 real Python files, 0 failed parses, 0 diagnostics |
+
+### Benchmark state
+
+`py_extraction`: small fixture ~56 µs; 500-route module ~12.4 ms; 100-file
+project ~36.9 ms. Internal only, not published.
+
+### Known limitations
+
+Route receivers must be recognisable; non-literal Django patterns skipped;
+test-client calls counted as HTTP observations; decorator arguments beyond the
+path not extracted; tuple/attribute assignment targets not recorded.
+
+### Rollback point
+
+`cartograph-m02-rc1`; previous accepted checkpoint `cartograph-m01`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown

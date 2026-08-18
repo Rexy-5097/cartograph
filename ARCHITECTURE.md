@@ -40,7 +40,7 @@ adding it three times.
 |---|---|---|
 | `cartograph-core` | Domain model: nodes, edges, evidence, provenance, confidence | Implemented |
 | `cartograph-graph` | The architecture graph, traversal | Implemented |
-| `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX implemented (M01); Python at M02 |
+| `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX (M01) and Python (M02) implemented |
 | `cartograph-resolver` | LSP, route matching, cross-language and ORM resolution | Reserved (M03–M06) |
 | `cartograph-cli` | The `cartograph` binary | `version`, `parse` |
 | `cartograph-testkit` | Fixtures and builders. Never a runtime dependency | Implemented |

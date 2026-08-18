@@ -10,6 +10,53 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M02, Python extraction
+
+**A second language into the same fact model.** `cartograph-parser` now
+extracts Python with tree-sitter, as a peer of the TypeScript extractor behind
+one `Analyzer::dispatch`; both share `src/syntax.rs` so a span means the same
+thing in both languages.
+
+- **Imports** — `import x`, `import x as y`, `from m import a`, aliases,
+  relative (`.`, `..`) and wildcard forms. Specifiers stay unresolved strings.
+- **Symbols** — functions, `async def`, classes, methods, nested functions,
+  module-scope variables, with enclosing-symbol tracking. **No invented export
+  semantics**: Python symbols are `NotApplicable` rather than `NotExported`,
+  except where a module declares `__all__`, which is a real export list.
+- **Decorators** — recorded as observations on the symbol they decorate.
+- **Calls** — `foo()`, `obj.foo()`, `pkg.mod.fn()`, `ClassName()` (recorded
+  with `is_new = false`; Python has no `new`). Subscript and call-of-call
+  callees are skipped rather than guessed.
+- **Strings** — literals including triple-quoted, f-strings with substitution
+  structure preserved verbatim, `+` concatenation chains. `f"/orders/{id}"`
+  stays symbolic; evaluating it is M05's work.
+- **Route observations** — a new shared `RouteObservation` carrying declaration
+  style, declared methods, the path *verbatim* and the handler. Verb decorators
+  (`@app.get`), method-list decorators (`@app.route(..., methods=[…])`) and
+  URL-conf entries (`path()`, `re_path()`) are all recognised. Declared methods
+  are a list because Flask genuinely declares sets; an empty list means the
+  source did not say and is never defaulted to GET.
+- **HTTP observations** — `requests`/`httpx`/`session`/`client`/`http`/
+  `aiohttp` verbs, plus any receiver with a path-like first argument. Dict and
+  environment lookups (`config.get`, `os.environ.get`) are excluded.
+- **CLI** — `cartograph parse` detects Python automatically and walks mixed
+  `.ts`/`.tsx`/`.py` trees in one pass, reporting route counts explicitly as
+  observations rather than endpoints.
+- **Tests** — 47 Python integration tests over a 32-category fixture corpus;
+  129 workspace tests total, with every M00/M01 test still green.
+- **Benchmarks** — deterministic `py_extraction` criterion group.
+
+**Correction driven by evidence.** The route fact originally carried a
+`RouteFramework` (`FastApi`/`Flask`/`Django`). Running the extractor over
+Flask's own repository produced twenty routes labelled FastAPI, because Flask
+2.x supports `@app.get(...)` with identical syntax — one of them
+`@app.get("/result/<id>")`, carrying Flask's `<id>` dialect under a FastAPI
+label. The field is now `RouteDeclarationStyle`, naming the syntax actually
+matched, and M03 is directed to canonicalise from the path syntax itself.
+
+Dependency added: `tree-sitter-python` 0.25 — the Python grammar, required by
+this milestone's parsing work. No LSP, no Pyright, no other new dependency.
+
 ### Added — M01, TypeScript extraction
 
 **The first real analyzer.** `cartograph-parser` now extracts syntactic facts
