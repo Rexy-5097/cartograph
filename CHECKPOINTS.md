@@ -149,11 +149,11 @@ Provisional predecessor `cartograph-m01-rc3` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m02-python-extraction` (from `main`) |
-| Provisional checkpoint | `cartograph-m02-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m02` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m02-python-extraction` · PR [#3](https://github.com/Rexy-5097/cartograph/pull/3) (merged) |
+| Provisional checkpoint | `cartograph-m02-rc1` (retained for traceability) |
+| **Accepted checkpoint** | **`cartograph-m02`** — merge commit `eaba30b`, immutable |
 
 ### Scope delivered
 
@@ -190,7 +190,8 @@ path not extracted; tuple/attribute assignment targets not recorded.
 
 ### Rollback point
 
-`cartograph-m02-rc1`; previous accepted checkpoint `cartograph-m01`.
+`cartograph-m02` (accepted). Previous accepted checkpoint: `cartograph-m01`.
+Provisional predecessor `cartograph-m02-rc1` remains available.
 
 ---
 

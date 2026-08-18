@@ -4,9 +4,9 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M02
-status: PENDING_HUMAN_REVIEW
-current_branch: feature/m02-python-extraction
+current_milestone: M03
+status: IN_PROGRESS
+current_branch: feature/m03-route-normalization
 next_allowed_milestone: M03      # LOCKED until M02 is accepted by the human owner
 
 milestones:
@@ -25,19 +25,25 @@ milestones:
     accepted_tag: cartograph-m01
     merge_commit: 88c2b88e0ae19a09fc1dc264fd480741134c46a0
   M02:
-    status: PENDING_HUMAN_REVIEW
+    status: ACCEPTED
+    accepted: 2026-08-19
     pull_request: 3
-    base: main
-    provisional_tag: cartograph-m02-rc1
-    accepted_tag: null                    # becomes cartograph-m02 at merge (ADR-0010)
+    provisional_tag: cartograph-m02-rc1   # retained for traceability
+    accepted_tag: cartograph-m02          # immutable
+    merge_commit: eaba30b32a730d6f1c889f0cf7e3c237780d6d18
+  M03:
+    status: IN_PROGRESS
+    pull_request: null
+    provisional_tag: null                 # cartograph-m03-rc1 once gates pass
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M01
+  milestone: M02
   class: accepted
-  tag: cartograph-m01
-  merge_commit: 88c2b88e0ae19a09fc1dc264fd480741134c46a0
+  tag: cartograph-m02
+  merge_commit: eaba30b32a730d6f1c889f0cf7e3c237780d6d18
 
-gates:                           # M02 branch, 2026-08-19
+gates:                           # M02 as merged into main, 2026-08-19
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
@@ -47,7 +53,7 @@ gates:                           # M02 branch, 2026-08-19
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PENDING                    # recorded when PR #3 CI completes
+  ci: PASS                       # PR #3 green from base main
 
 tests:
   total: 132

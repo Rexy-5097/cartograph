@@ -7,12 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M02 — Python extraction** |
-| Status | M00 and M01 **ACCEPTED**; M02 complete and gate-clean, pending human review (PR #3) |
-| Branch | `feature/m02-python-extraction` |
-| Next permitted milestone | M03 — **locked** until M02 is accepted |
-| M02 provisional checkpoint | `cartograph-m02-rc1` |
-| Last accepted checkpoint | `cartograph-m01` (immutable, merge commit `88c2b88`) |
+| Active milestone | **M03 — Canonical route normalization** |
+| Status | M00, M01 and M02 **ACCEPTED**; M03 in progress |
+| Branch | `feature/m03-route-normalization` |
+| Next permitted milestone | M04 — **locked** until M03 is accepted |
+| Last accepted checkpoint | `cartograph-m02` (immutable, merge commit `eaba30b`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
