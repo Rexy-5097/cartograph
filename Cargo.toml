@@ -1,0 +1,81 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/cartograph-core",
+    "crates/cartograph-graph",
+    "crates/cartograph-parser",
+    "crates/cartograph-resolver",
+    "crates/cartograph-cli",
+    "crates/cartograph-testkit",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/Rexy-5097/cartograph"
+homepage = "https://github.com/Rexy-5097/cartograph"
+authors = ["Cartograph contributors"]
+
+# Dependency policy (PROJECT_RULES.md, dossier §10):
+# every entry must answer "what concrete Cartograph problem does this solve
+# right now?". "We might need it later" is not an answer. Crates named in the
+# frozen stack but not yet needed (tree-sitter, async-lsp, redb, gix, notify,
+# rayon, tokio, rmcp) are deliberately absent until the milestone that uses
+# them lands.
+[workspace.dependencies]
+# Edge records are serialised for `--json` output and, from M08, for golden
+# fixtures compared byte-for-byte in CI.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Library error types (core, graph). Typed, no backtrace machinery.
+thiserror = "2.0"
+# Application boundary error handling (CLI only), per the frozen stack.
+anyhow = "1.0"
+# Graph algorithms underneath the Cartograph domain graph. StableGraph keeps
+# indices valid across removals, which the incremental engine (M10) needs.
+# Never re-exported: see ADR-0003.
+petgraph = "0.8"
+# CLI argument parsing, derive API.
+clap = { version = "4.5", features = ["derive"] }
+# Structured logging. Spans are how the resolver is debugged from M04 onward.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Edge records carry an RFC 3339 `created_at`; the data model requires it.
+time = { version = "0.3", features = ["serde-well-known", "macros"] }
+# Statistical benchmarking. Performance claims are published, so they are
+# measured with confidence intervals rather than a stopwatch.
+criterion = "0.5"
+
+cartograph-core = { path = "crates/cartograph-core", version = "0.0.0" }
+cartograph-graph = { path = "crates/cartograph-graph", version = "0.0.0" }
+cartograph-parser = { path = "crates/cartograph-parser", version = "0.0.0" }
+cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.0.0" }
+cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.0.0" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# The graph and resolver deal in domain vocabulary; module-name repetition
+# (graph::GraphError) reads better than the alternatives.
+module_name_repetitions = "allow"
+
+[profile.dev]
+# Line tables only. Halves target-directory size on the external SSD without
+# losing backtraces (dossier §10, development machine notes).
+debug = 1
+opt-level = 0
+
+[profile.dev.package."*"]
+# Dependencies are compiled once and then reused; optimising them costs one
+# slow build and makes every test run afterwards meaningfully faster.
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 4

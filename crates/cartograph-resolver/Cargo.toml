@@ -1,0 +1,16 @@
+[package]
+name = "cartograph-resolver"
+description = "Cross-language resolution: HTTP boundaries, route matching, ORM models."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# No dependencies yet — deliberately. async-lsp and lsp-types arrive with the
+# milestone that first drives a language server (M04).
+[dependencies]
+
+[lints]
+workspace = true

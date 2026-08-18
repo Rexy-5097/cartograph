@@ -1,0 +1,27 @@
+[package]
+name = "cartograph-graph"
+description = "The Cartograph architecture graph. Owns its domain model; petgraph sits underneath."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+cartograph-core.workspace = true
+petgraph.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+cartograph-testkit.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "graph_build"
+harness = false
+
+[lints]
+workspace = true

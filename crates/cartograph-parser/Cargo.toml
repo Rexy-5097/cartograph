@@ -1,0 +1,16 @@
+[package]
+name = "cartograph-parser"
+description = "Language-specific extraction: symbols, imports, call sites, string literals."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# No dependencies yet — deliberately. tree-sitter and its grammars arrive with
+# M01 (TypeScript extraction), which is the milestone that first needs them.
+[dependencies]
+
+[lints]
+workspace = true
