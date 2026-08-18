@@ -1,0 +1,567 @@
+# AgentOS Repository Manifest
+# Complete inventory of all files, their roles, and ownership layers.
+# Layers: infrastructure (template-owned) | project (project-owned) | generated (accumulated)
+# This file is the single source of truth for what the repository contains.
+
+manifest:
+  version: "0.1.0"
+  generated: "2026-07-02"
+  phase_current: 1
+
+files:
+  # ─── Root Documentation ──────────────────────────────────────────────────
+
+  README.md:
+    layer: infrastructure
+    phase: 1
+    description: "Repository overview, architecture diagram, and navigation"
+    status: complete
+
+  ENGINEERING_PRINCIPLES.md:
+    layer: infrastructure
+    phase: 1
+    description: "Philosophical foundation — governs all agents, workflows, standards"
+    status: complete
+
+  VERSION_POLICY.md:
+    layer: infrastructure
+    phase: 1
+    description: "Semantic versioning rules and compatibility expectations"
+    status: complete
+
+  CONTRIBUTING.md:
+    layer: infrastructure
+    phase: 1
+    description: "Contribution guidelines, standards, and PR process"
+    status: complete
+
+  INSTALL.md:
+    layer: infrastructure
+    phase: 7
+    description: "Setup and customization guide"
+    status: placeholder
+
+  CHANGELOG.md:
+    layer: infrastructure
+    phase: ongoing
+    description: "Template version history"
+    status: active
+
+  LICENSE:
+    layer: infrastructure
+    phase: 1
+    description: "MIT License"
+    status: complete
+
+  VERSION:
+    layer: infrastructure
+    phase: ongoing
+    description: "Semantic version of the template"
+    status: active
+
+  .gitignore:
+    layer: infrastructure
+    phase: 1
+    description: "Git ignore patterns for Python, Node, ML, OS, secrets"
+    status: complete
+
+  # ─── AgentOS Runtime ─────────────────────────────────────────────────────
+
+  .agentos/config.yml:
+    layer: infrastructure
+    phase: 1
+    description: "WAT config, agent roster, trigger map, artifact naming"
+    status: complete
+
+  .agentos/manifest.yml:
+    layer: infrastructure
+    phase: ongoing
+    description: "This file — inventory of all repository files"
+    status: active
+
+  # ─── Context Layer — Project-owned ───────────────────────────────────────
+
+  context/vision.md:
+    layer: project
+    phase: 2
+    description: "Project vision, goals, and success criteria"
+    status: placeholder
+
+  context/workflow.md:
+    layer: project
+    phase: 2
+    description: "Project-adapted master workflow"
+    status: placeholder
+
+  context/state.md:
+    layer: project
+    phase: 2
+    description: "Live project state tracker (update every session)"
+    status: placeholder
+
+  context/architecture.md:
+    layer: project
+    phase: 2
+    description: "System architecture overview"
+    status: placeholder
+
+  context/tech_stack.md:
+    layer: project
+    phase: 2
+    description: "Technology choices and rationale"
+    status: placeholder
+
+  context/decisions.md:
+    layer: project
+    phase: 2
+    description: "ADR index — links to artifacts/decisions/"
+    status: active
+
+  context/memory.md:
+    layer: project
+    phase: 2
+    description: "Agent context buffer — running project context"
+    status: placeholder
+
+  # ─── Workflows — Infrastructure ──────────────────────────────────────────
+
+  workflows/master.md:
+    layer: infrastructure
+    phase: 2
+    description: "Master orchestration SOP"
+    status: placeholder
+
+  workflows/feature_development.md:
+    layer: infrastructure
+    phase: 2
+    description: "Feature development SOP"
+    status: placeholder
+
+  workflows/bug_fix.md:
+    layer: infrastructure
+    phase: 2
+    description: "Bug fix SOP"
+    status: placeholder
+
+  workflows/research.md:
+    layer: infrastructure
+    phase: 2
+    description: "Research and experimentation SOP"
+    status: placeholder
+
+  workflows/release.md:
+    layer: infrastructure
+    phase: 2
+    description: "Release preparation SOP"
+    status: placeholder
+
+  workflows/incident_response.md:
+    layer: infrastructure
+    phase: 2
+    description: "Incident response SOP"
+    status: placeholder
+
+  # ─── Agents — Infrastructure ─────────────────────────────────────────────
+
+  agents/orchestrator.md:
+    layer: infrastructure
+    phase: 4
+    description: "Routes tasks, bundles reviews, merges outputs"
+    status: placeholder
+
+  agents/chief-architect.md:
+    layer: infrastructure
+    phase: 4
+    description: "Final authority on architecture and conflict resolution"
+    status: placeholder
+
+  agents/planner.md:
+    layer: infrastructure
+    phase: 4
+    description: "Scope, milestones, and task decomposition"
+    status: placeholder
+
+  agents/ai-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "ML model and AI system reviewer"
+    status: placeholder
+
+  agents/science-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Scientific validity and reproducibility reviewer"
+    status: placeholder
+
+  agents/security-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Security and threat model reviewer"
+    status: placeholder
+
+  agents/performance-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Performance and scalability reviewer"
+    status: placeholder
+
+  agents/ui-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "UI/UX and accessibility reviewer"
+    status: placeholder
+
+  agents/qa-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Quality assurance reviewer (milestone gates)"
+    status: placeholder
+
+  agents/docs-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Documentation completeness reviewer"
+    status: placeholder
+
+  agents/release-reviewer.md:
+    layer: infrastructure
+    phase: 4
+    description: "Release readiness and shipping reviewer"
+    status: placeholder
+
+  # ─── Tools — Infrastructure ──────────────────────────────────────────────
+
+  tools/mcp/template.yml:
+    layer: infrastructure
+    phase: 1
+    description: "MCP server integration template"
+    status: complete
+
+  # ─── Standards — Infrastructure ──────────────────────────────────────────
+
+  standards/code_quality.md:
+    layer: infrastructure
+    phase: 3
+    description: "Code quality and style standard"
+    status: complete
+
+  standards/testing.md:
+    layer: infrastructure
+    phase: 3
+    description: "Testing requirements standard"
+    status: complete
+
+  standards/documentation.md:
+    layer: infrastructure
+    phase: 3
+    description: "Documentation quality standard"
+    status: complete
+
+  standards/security.md:
+    layer: infrastructure
+    phase: 3
+    description: "Security requirements standard"
+    status: complete
+
+  standards/ai_ml.md:
+    layer: infrastructure
+    phase: 3
+    description: "AI/ML system quality standard"
+    status: complete
+
+  standards/research.md:
+    layer: infrastructure
+    phase: 3
+    description: "Scientific research standard"
+    status: complete
+
+  standards/api_design.md:
+    layer: infrastructure
+    phase: 3
+    description: "API design standard"
+    status: complete
+
+  standards/data_engineering.md:
+    layer: infrastructure
+    phase: 3
+    description: "Data engineering standard"
+    status: complete
+
+  standards/ui_ux.md:
+    layer: infrastructure
+    phase: 3
+    description: "UI/UX and accessibility standard"
+    status: complete
+
+  # ─── Metrics — Infrastructure + Project ──────────────────────────────────
+
+  metrics/performance.md:
+    layer: infrastructure
+    phase: 3
+    description: "Performance targets (populate per project)"
+    status: complete
+
+  metrics/quality.md:
+    layer: infrastructure
+    phase: 3
+    description: "Quality targets (populate per project)"
+    status: complete
+
+  metrics/benchmarks.md:
+    layer: infrastructure
+    phase: 3
+    description: "Research and AI benchmarks (populate per project)"
+    status: complete
+
+  # ─── Checklists — Infrastructure ─────────────────────────────────────────
+
+  checklists/feature_completion.md:
+    layer: infrastructure
+    phase: 5
+    description: "Feature completion milestone checklist"
+    status: complete
+
+  checklists/pull_request.md:
+    layer: infrastructure
+    phase: 5
+    description: "Pull request checklist"
+    status: complete
+
+  checklists/qa.md:
+    layer: infrastructure
+    phase: 5
+    description: "QA milestone checklist"
+    status: complete
+
+  checklists/research_validation.md:
+    layer: infrastructure
+    phase: 5
+    description: "Research validation checklist"
+    status: complete
+
+  checklists/release.md:
+    layer: infrastructure
+    phase: 5
+    description: "Release readiness checklist"
+    status: complete
+
+  checklists/deployment.md:
+    layer: infrastructure
+    phase: 5
+    description: "Deployment checklist"
+    status: complete
+
+  checklists/bug_fix.md:
+    layer: infrastructure
+    phase: 5
+    description: "Bug fix closure checklist"
+    status: complete
+
+  checklists/security_review.md:
+    layer: infrastructure
+    phase: 5
+    description: "Security review checklist"
+    status: complete
+
+  # ─── Templates — Infrastructure ──────────────────────────────────────────
+
+  templates/SCHEMA.md:
+    layer: infrastructure
+    phase: 6
+    description: "Artifact Schema Specification defining metadata rules"
+    status: complete
+
+  templates/experiment_log.md:
+    layer: infrastructure
+    phase: 6
+    description: "Experiment log template → artifacts/experiments/"
+    status: complete
+
+  templates/decision_record.md:
+    layer: infrastructure
+    phase: 6
+    description: "ADR template → artifacts/decisions/"
+    status: complete
+
+  templates/architecture_review.md:
+    layer: infrastructure
+    phase: 6
+    description: "Architecture review template → artifacts/decisions/"
+    status: complete
+
+  templates/bug_report.md:
+    layer: infrastructure
+    phase: 6
+    description: "Bug report template"
+    status: complete
+
+  templates/feature_proposal.md:
+    layer: infrastructure
+    phase: 6
+    description: "Feature proposal template"
+    status: complete
+
+  templates/meeting_notes.md:
+    layer: infrastructure
+    phase: 6
+    description: "Meeting notes template"
+    status: complete
+
+  templates/release_notes.md:
+    layer: infrastructure
+    phase: 6
+    description: "Release notes template → artifacts/releases/"
+    status: complete
+
+  templates/sprint_plan.md:
+    layer: infrastructure
+    phase: 6
+    description: "Sprint plan template"
+    status: complete
+
+  templates/risk_register.md:
+    layer: infrastructure
+    phase: 6
+    description: "Risk register template"
+    status: complete
+
+  templates/incident_report.md:
+    layer: infrastructure
+    phase: 6
+    description: "Incident report template"
+    status: complete
+
+
+  # ─── Artifacts — Generated ───────────────────────────────────────────────
+
+  "artifacts/decisions/":
+    layer: generated
+    description: "Architecture Decision Records (ADRs) — never delete"
+
+  "artifacts/experiments/":
+    layer: generated
+    description: "Completed experiment logs"
+
+  "artifacts/incidents/":
+    layer: generated
+    description: "Post-mortem records"
+
+  "artifacts/releases/":
+    layer: generated
+    description: "Release notes history"
+
+  # ─── Lessons — Hybrid ────────────────────────────────────────────────────
+
+  lessons/:
+    layer: hybrid
+    description: "Institutional memory — lessons learned over the project lifetime"
+
+  # ─── Integrations — Infrastructure + Project ─────────────────────────────
+
+  "integrations/claude/":
+    layer: infrastructure
+    description: "Claude-specific configuration (isolated from core)"
+
+  "integrations/gemini/":
+    layer: infrastructure
+    description: "Gemini-specific configuration (isolated from core)"
+
+  "integrations/codex/":
+    layer: infrastructure
+    description: "Codex-specific configuration (isolated from core)"
+
+  "integrations/antigravity/":
+    layer: infrastructure
+    description: "Antigravity-specific configuration (isolated from core)"
+
+  # ─── Bootstrap — System ──────────────────────────────────────────────────
+
+  BOOTSTRAP.md:
+    layer: infrastructure
+    phase: 8
+    description: "Universal starting guide for AI bootstrap"
+    status: complete
+
+  START_PROJECT.md:
+    layer: infrastructure
+    phase: 8
+    description: "AI Entry Specification containing the bootstrap prompt"
+    status: complete
+
+  tools/scripts/bootstrap_project.py:
+    layer: infrastructure
+    phase: 8
+    description: "Interactive Python CLI bootstrapper script"
+    status: complete
+
+  PROJECT_CONFIG.yaml:
+    layer: generated
+    description: "Dynamic project config compiled after bootstrap execution"
+
+  # ─── Harness — System Kernel ─────────────────────────────────────────────
+
+  "runtime/policies/":
+    layer: infrastructure
+    description: "Policy configurations for routing, context, quality, tools, and retries"
+
+  "runtime/harness/":
+    layer: infrastructure
+    description: "Harness operating kernel modular Python implementation"
+
+  tools/scripts/harness_engine.py:
+    layer: infrastructure
+    phase: 9
+    description: "Harness Engine CLI entry point script"
+    status: complete
+
+  tools/scripts/harness_specification.md:
+    layer: infrastructure
+    phase: 9
+    description: "Harness Engine interface specification and contracts"
+    status: complete
+
+  # ─── Loop & Kernel — Iterative Runtime ───────────────────────────────────
+
+  "runtime/kernel/":
+    layer: infrastructure
+    description: "Shared runtime kernel implementation (scheduler, managers, loggers)"
+
+  "runtime/loop/":
+    layer: infrastructure
+    description: "Loop Engine iterative execution modules"
+
+  tools/scripts/simulate_agent_runtime.py:
+    layer: infrastructure
+    description: "Dry-run simulation environment launcher"
+    status: complete
+
+  # ─── Validation & Production — Verification ──────────────────────────────
+
+  "validation/":
+    layer: infrastructure
+    description: "Synthetic executable validation suite scenario library and runners"
+
+  "production_validation/":
+    layer: infrastructure
+    phase: 12
+    description: "Production benchmarks and Release Candidate validation logs"
+
+  "production_certification/":
+    layer: infrastructure
+    phase: 13
+    description: "v1.0.0 Stable Production Certification reports and release checklist"
+
+  "examples/":
+    layer: documentation
+    phase: 13
+    description: "Golden path onboarding guides for Backend, AI, Research, and Flagship projects"
+
+  COMPATIBILITY.md:
+    layer: documentation
+    phase: 13
+    description: "Upgrade paths and backward compatibility policies"
+
+
+
+
+

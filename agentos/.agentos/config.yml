@@ -1,0 +1,116 @@
+# AgentOS Runtime Configuration
+# Controls template-level defaults and behavior settings.
+# This file is NOT read by agents in context — it is for tooling only.
+# Do NOT commit project-specific secrets here.
+
+template:
+  name: "agentos-template"
+  version: "0.1.0"
+  description: "AgentOS Engineering Operating System Template"
+
+# WAT Layer configuration
+wat:
+  # Agents are invoked explicitly — never automatically
+  agent_invocation: explicit
+  # Default: one reviewer per task
+  default_reviewers: 1
+  # Conflict resolution escalates to chief-architect
+  conflict_resolution: chief-architect
+  # Routing is handled by orchestrator
+  router: orchestrator
+
+# Knowledge (context) layer settings
+context:
+  # Files agents must read before beginning any task
+  required_context:
+    - context/vision.md
+    - context/state.md
+    - context/workflow.md
+  # Files agents read conditionally based on task type
+  conditional_context:
+    architecture_tasks:
+      - context/architecture.md
+      - context/tech_stack.md
+    release_tasks:
+      - context/decisions.md
+      - artifacts/releases/
+    ai_tasks:
+      - context/architecture.md
+      - metrics/benchmarks.md
+    research_tasks:
+      - metrics/benchmarks.md
+      - artifacts/experiments/
+
+# Agent roster
+agents:
+  routing:
+    - orchestrator
+  authority:
+    - chief-architect
+  planning:
+    - planner
+  reviewers:
+    - ai-reviewer
+    - science-reviewer
+    - security-reviewer
+    - performance-reviewer
+    - ui-reviewer
+    - qa-reviewer
+    - docs-reviewer
+    - release-reviewer
+
+# Agent trigger map
+# Maps change domains to the appropriate reviewer agent
+# The orchestrator uses this map to determine routing
+trigger_map:
+  model_code: ai-reviewer
+  training_pipeline: ai-reviewer
+  calibration: science-reviewer
+  experiment: science-reviewer
+  frontend: ui-reviewer
+  accessibility: ui-reviewer
+  auth: security-reviewer
+  api: security-reviewer
+  data_handling: security-reviewer
+  infrastructure: performance-reviewer
+  critical_path: performance-reviewer
+  documentation: docs-reviewer
+  release: release-reviewer
+  architecture: chief-architect
+  security: security-reviewer
+  testing: qa-reviewer
+
+# Tool integration settings
+tools:
+  mcp:
+    enabled: true
+    config_dir: tools/mcp/
+  scripts:
+    enabled: true
+    script_dir: tools/scripts/
+
+# Artifact naming conventions
+artifacts:
+  decisions:
+    format: "ADR-{number:04d}-{slug}.md"
+    dir: "artifacts/decisions/"
+  experiments:
+    format: "EXP-{YYYY-MM-DD}-{slug}.md"
+    dir: "artifacts/experiments/"
+  incidents:
+    format: "INC-{YYYY-MM-DD}-{slug}.md"
+    dir: "artifacts/incidents/"
+  releases:
+    format: "REL-{version}.md"
+    dir: "artifacts/releases/"
+  lessons:
+    format: "{YYYY-MM-DD}-{slug}.md"
+    dir: "lessons/"
+
+# Vendor integrations
+integrations:
+  dir: "integrations/"
+  vendors:
+    - claude
+    - gemini
+    - codex

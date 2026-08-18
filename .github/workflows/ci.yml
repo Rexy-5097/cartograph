@@ -1,0 +1,86 @@
+# Cartograph CI.
+#
+# Runs exactly what `make check` and `make gates` run locally, so a green local
+# run and a green CI run cannot disagree. Linux is the primary target for speed;
+# macOS is added at M09 when platform binaries ship.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: fmt · clippy · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Formatting (QG-002)
+        run: cargo fmt --all -- --check
+
+      - name: Clippy, warnings denied (QG-003)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Tests (QG-004)
+        run: cargo test --workspace
+
+      - name: Benchmarks compile
+        run: cargo bench --workspace --no-run
+
+  gates:
+    name: quality gates QG-001…008
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-gates-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-gates-${{ runner.os }}-
+
+      - name: Run gates
+        run: python3 agentos/tools/scripts/run_gates.py
+
+  agentos:
+    name: AgentOS validator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet PyYAML
+      - name: Validate framework health
+        run: python3 agentos/tools/scripts/validate_agentos.py

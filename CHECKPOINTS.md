@@ -1,0 +1,110 @@
+# Checkpoints
+
+Every milestone produces a reproducible checkpoint: an annotated tag, a gate
+result and a rollback point. Policy:
+[ADR-0010](docs/adr/ADR-0010-checkpoint-tag-policy.md).
+
+## Checkpoint policy
+
+| Class | Tag | Created when | Points at | Guarantees |
+|---|---|---|---|---|
+| Provisional | `cartograph-mNN-rcK` | Gates pass, PR (re)submitted | Exact PR head | Superseded by `rcK+1` on review changes; retired only while unaccepted |
+| Accepted | `cartograph-mNN` | Human owner accepts (merges) the PR | Exact accepted commit on `main` | **Never moved or deleted**; final rc also retained |
+
+**The tag is the authority for its SHA.** Ledger entries reference checkpoints
+by tag name; a quoted SHA is informational and `git rev-parse <tag>` wins.
+(Recording a tag's SHA in a committed ledger always produces a commit outside
+the tag — the defect that ADR-0010 repairs.)
+
+### Acceptance procedure (per milestone)
+
+1. Human owner reviews and merges the milestone PR.
+2. Tag the merge commit: `git tag -a cartograph-mNN -m "Accepted checkpoint MNN" <merge-sha> && git push origin cartograph-mNN`
+3. Flip the milestone to ACCEPTED in this file and in
+   `agentos/artifacts/project-state.yaml` (next milestone unlocks).
+
+## Rolling back
+
+```bash
+git checkout cartograph-mNN         # accepted checkpoint
+git checkout cartograph-mNN-rcK     # provisional state under review
+git switch -c fix/from-mNN cartograph-mNN
+```
+
+---
+
+## M00 — Engineering foundation
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Branch | `feature/m00-foundation` · PR [#1](https://github.com/Rexy-5097/cartograph/pull/1) |
+| Provisional checkpoint | `cartograph-m00-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m00` is created on the merge commit at acceptance |
+| Specification | Frozen Engineering Spec V3 |
+
+> **Checkpoint repair (2026-08-19).** The original `cartograph-m00` tag was
+> created prematurely at internal completion and pointed one commit short of
+> the reviewed PR state. Per [ADR-0010](docs/adr/ADR-0010-checkpoint-tag-policy.md)
+> it was retired (safety determined first: zero forks, zero releases, PR
+> unmerged, milestone unaccepted) and replaced by provisional
+> `cartograph-m00-rc1` at the exact PR head. The name `cartograph-m00` is
+> reserved for the accepted checkpoint.
+
+### Scope delivered
+
+Rust workspace with six crates; domain model with evidence, provenance and
+confidence; architecture graph over `petgraph`; `cartograph version`; AgentOS
+v1.0.0 vendored and adapted; GitHub repository, CI and pull request governance;
+quality gates QG-001 – QG-008; milestone and checkpoint systems; nine ADRs.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 50 tests |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo bench --no-run` | PASS |
+| AgentOS validator | PASS — 99/100 |
+| QG-001 … QG-008 | PASS — 8/8 (local run 2026-08-18; CI re-runs on the PR) |
+| CI | *(recorded on merge)* |
+
+### Known limitations
+
+- No parsing, no resolution, no storage. `cartograph-parser` and
+  `cartograph-resolver` are empty by design.
+- Node identity is graph-local and not content-addressed (M10).
+- No benchmark results exist. Criterion is wired up; no number is published.
+- Confidence values are uncalibrated priors (M08).
+
+### Rollback point
+
+`cartograph-m00-rc1`. There is no earlier checkpoint — M00 is the first.
+
+---
+
+## Template for subsequent entries
+
+```markdown
+## MNN — <title>
+
+| Field | Value |
+|---|---|
+| Status | IN REVIEW / ACCEPTED / FAILED |
+| Date | YYYY-MM-DD |
+| Provisional checkpoint | cartograph-mNN-rcK |
+| Accepted checkpoint | cartograph-mNN (merge commit; at acceptance only) |
+| Branch | feature/mNN-slug |
+| Pull request | #N |
+
+### Gate results
+| Gate | Result |
+|---|---|
+| fmt / clippy / tests / CI / QG-001…008 | |
+
+### Benchmark state
+### Known limitations
+### Rollback point
+```

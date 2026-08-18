@@ -1,0 +1,31 @@
+name: AgentOS Validate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: AgentOS Health Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run AgentOS Validator
+        run: python3 tools/scripts/validate_agentos.py
+
+      - name: Run Synthetic Validation Suite
+        run: python3 validation/runner/execute_suite.py
+
+      - name: Bootstrap Self-Test
+        run: python3 tools/scripts/bootstrap_project.py --self-test

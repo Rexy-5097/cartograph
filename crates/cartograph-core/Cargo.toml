@@ -1,0 +1,20 @@
+[package]
+name = "cartograph-core"
+description = "Cartograph domain model: nodes, edges, evidence, provenance and confidence."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
