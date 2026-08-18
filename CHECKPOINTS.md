@@ -195,6 +195,55 @@ Provisional predecessor `cartograph-m02-rc1` remains available.
 
 ---
 
+## M03 — Canonical route normalisation
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m03-route-normalization` (from `main`) |
+| Provisional checkpoint | `cartograph-m03-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m03` is created at acceptance |
+
+### Scope delivered
+
+Canonical route model (`Segment`, `Methods`, `CanonicalPath`,
+`NormalizationStatus`, `NormalizationNote`, `RouteProvenance`) and a
+deterministic normalisation pipeline in `cartograph-resolver`, consuming both
+Python route declarations and TypeScript/Python client-call URLs. Five
+parameter dialects, URL decomposition, template structure, and explicit refusal
+of regexes and dynamic paths. `cartograph normalize` CLI command. 59
+canonicalisation tests, `canonicalization` benchmarks.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 191 tests |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-008 | PASS — 8/8 |
+| AgentOS validator | PASS — 99/100 |
+
+### Benchmark state
+
+`canonicalization`: 8-route fixture ~2.06 µs; 1000 literal routes ~350 µs;
+1000 templates ~551 µs. Internal only, not published.
+
+### Known limitations
+
+Route mount prefixes not applied (needs cross-file resolution, M04); no
+relative-path resolution against a base URL (M05); regex detection is
+deliberately generous, so a structurally readable pattern is still refused.
+
+### Rollback point
+
+`cartograph-m03-rc1`; previous accepted checkpoint `cartograph-m02`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown
