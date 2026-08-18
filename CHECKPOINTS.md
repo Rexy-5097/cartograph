@@ -99,11 +99,11 @@ provisional state. There is no earlier checkpoint — M00 is the first.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m01-typescript-extraction` (stacked on `feature/m00-foundation`) |
-| Provisional checkpoint | `cartograph-m01-rc2` (annotated; the tag is the SHA authority; rc1 retired — its head failed CI's newer clippy) |
-| Accepted checkpoint | *none yet* — `cartograph-m01` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m01-typescript-extraction` · PR [#2](https://github.com/Rexy-5097/cartograph/pull/2) (merged) |
+| Provisional checkpoint | `cartograph-m01-rc3` (retained for traceability; rc1/rc2 superseded pre-acceptance) |
+| **Accepted checkpoint** | **`cartograph-m01`** — merge commit `88c2b88`, immutable |
 
 ### Scope delivered
 
@@ -140,7 +140,8 @@ module-scope variables only; grammar gaps on advanced type-level syntax
 
 ### Rollback point
 
-`cartograph-m01-rc2`; previous state `cartograph-m00-rc1`.
+`cartograph-m01` (accepted). Previous accepted checkpoint: `cartograph-m00`.
+Provisional predecessor `cartograph-m01-rc3` remains available.
 
 ---
 

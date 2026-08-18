@@ -17,9 +17,9 @@ complete when its **gate passes**, not when its code exists (RULE 017).
 
 | Milestone | Deliverable | Target | Status |
 |---|---|---|---|
-| **M00** | Workspace, six crates, CI, clippy, criterion, tracing | Day 2 | **In review** |
-| M01 | TypeScript extraction — symbols, imports, calls, strings | Day 4 | Not started |
-| M02 | Python extraction — FastAPI, Flask, Django routes | Day 5 | Not started |
+| **M00** | Workspace, six crates, CI, clippy, criterion, tracing | Day 2 | **Accepted** (`cartograph-m00`) |
+| **M01** | TypeScript extraction — symbols, imports, calls, strings | Day 4 | **Accepted** (`cartograph-m01`) |
+| **M02** | Python extraction — FastAPI, Flask, Django routes | Day 5 | **In progress** |
 | M03 | Path normalisation to canonical form | Day 6 | Not started |
 | M04 | Cross-language resolver — TS call to Python handler | Day 8 | Not started |
 | M05 | Template evaluator for dynamic URLs | Day 11 | Not started |
@@ -35,6 +35,11 @@ complete when its **gate passes**, not when its code exists (RULE 017).
 | M15 | MCP server | Week 21 | Not started |
 | M16 | ASK — explanation over subgraph evidence | Week 24 | Not started |
 | M17 | Public launch and technical writeup | Week 25 | Not started |
+
+Statuses here are the human-readable view; the authoritative record is
+[`agentos/artifacts/project-state.yaml`](agentos/artifacts/project-state.yaml),
+and accepted milestones are pinned by immutable tags (see
+[CHECKPOINTS.md](CHECKPOINTS.md)).
 
 Machine-readable state: [`agentos/artifacts/project-state.yaml`](agentos/artifacts/project-state.yaml).
 Milestone definitions: [`agentos/milestones/`](agentos/milestones/).

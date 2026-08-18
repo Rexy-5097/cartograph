@@ -7,12 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M01 — TypeScript extraction** (PR #2 open against `main`) |
-| Status | M00 **ACCEPTED** and merged; M01 complete and gate-clean, pending human review |
-| Branch | `feature/m01-typescript-extraction` |
-| Next permitted milestone | M02 — **locked** until M01 is accepted |
-| Last accepted checkpoint | `cartograph-m00` (immutable, merge commit `ab196a1`) |
-| M01 provisional checkpoint | `cartograph-m01-rc3` |
+| Active milestone | **M02 — Python extraction** |
+| Status | M00 and M01 **ACCEPTED**; M02 in progress |
+| Branch | `feature/m02-python-extraction` |
+| Next permitted milestone | M03 — **locked** until M02 is accepted |
+| Last accepted checkpoint | `cartograph-m01` (immutable, merge commit `88c2b88`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
