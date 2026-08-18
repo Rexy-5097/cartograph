@@ -4,38 +4,52 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M00
-status: IN_REVIEW            # IN_PROGRESS | IN_REVIEW | COMPLETE | BLOCKED
-current_branch: feature/m00-foundation
-next_allowed_milestone: M01  # unlocked only when M00 checkpoint is accepted
+current_milestone: M01
+status: PENDING_HUMAN_REVIEW   # M01 PR #2 is open against main
+current_branch: main           # acceptance transition; M01 work lives on feature/m01-typescript-extraction
+next_allowed_milestone: M02    # LOCKED until M01 is accepted by the human owner
 
-last_checkpoint:                # ADR-0010: the tag is the authority for its SHA
+milestones:
+  M00:
+    status: ACCEPTED
+    accepted: 2026-08-19
+    pull_request: 1
+    provisional_tag: cartograph-m00-rc1
+    accepted_tag: cartograph-m00
+    merge_commit: ab196a105f3bf8054992dacca2548e383ff09be3
+  M01:
+    status: PENDING_HUMAN_REVIEW
+    pull_request: 2
+    provisional_tag: cartograph-m01-rc2   # superseded if the PR head moves
+    accepted_tag: null                    # becomes cartograph-m01 at merge (ADR-0010)
+
+last_checkpoint:               # ADR-0010: the tag is the authority for its SHA
   milestone: M00
-  class: provisional            # accepted checkpoint is created at PR merge
-  tag: cartograph-m00-rc1
-  accepted_tag: null            # becomes cartograph-m00 on human acceptance
+  class: accepted
+  tag: cartograph-m00
+  merge_commit: ab196a105f3bf8054992dacca2548e383ff09be3
 
-gates:                       # last local run, 2026-08-18
-  repository: PASS           # QG-001
-  fmt: PASS                  # QG-002 — cargo fmt --all -- --check
-  clippy: PASS               # QG-003 — -D warnings, all targets/features
-  tests: PASS                # QG-004 — 50 passed, 0 failed
-  security: PASS             # QG-005 — no secrets, no machine paths in tracked files
-  architecture: PASS         # QG-006 — no prohibited deps, petgraph not public
-  documentation: PASS        # QG-007
-  milestone_acceptance: PASS # QG-008 — M00 criteria
-  agentos_validator: PASS    # 99/100
-  ci: PENDING                # recorded when the PR's CI run completes
+gates:                         # M00 as merged; M01's own results live on its branch
+  repository: PASS             # QG-001
+  fmt: PASS                    # QG-002
+  clippy: PASS                 # QG-003
+  tests: PASS                  # QG-004
+  security: PASS               # QG-005
+  architecture: PASS           # QG-006
+  documentation: PASS          # QG-007
+  milestone_acceptance: PASS   # QG-008
+  agentos_validator: PASS      # 99/100
+  ci: PASS                     # PR #1 run 32173133338 - all three jobs green
 
 tests:
-  total: 50
+  total: 50                    # M00 as merged
   failed: 0
 
 benchmarks:
   harness: compiles
-  published_numbers: none    # nothing measured is published before M08/M09
+  published_numbers: none      # nothing measured is published before M08/M09
 
 open_risks:
-  - exfat-volume-quirks      # no hard links; AppleDouble sidecars; documented
-  - uncalibrated-confidence  # priors only until M08
-  - graph-local-node-identity # content-addressing lands at M10
+  - exfat-volume-quirks
+  - uncalibrated-confidence
+  - graph-local-node-identity

@@ -7,11 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M00 — Engineering foundation** |
-| Status | Complete pending human review (PR open) |
-| Branch | `feature/m00-foundation` |
-| Next permitted milestone | M01 (after M00 PR is accepted by the human owner) |
-| Last checkpoint | none yet — M00 is the first |
+| Active milestone | **M01 — TypeScript extraction** (PR #2 open) |
+| Status | M00 **ACCEPTED** and merged; M01 pending human review |
+| Branch | `main` (M01 work on `feature/m01-typescript-extraction`) |
+| Next permitted milestone | M02 — **locked** until M01 is accepted |
+| Last checkpoint | `cartograph-m00` (accepted, immutable) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists

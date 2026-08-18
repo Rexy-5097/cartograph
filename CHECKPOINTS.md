@@ -23,6 +23,14 @@ the tag — the defect that ADR-0010 repairs.)
 3. Flip the milestone to ACCEPTED in this file and in
    `agentos/artifacts/project-state.yaml` (next milestone unlocks).
 
+Steps 2 and 3 are **acceptance bookkeeping**, not development: they record the
+outcome of a review that has already happened, on a commit that already exists.
+They are performed directly on `main` and are the single narrow carve-out to
+RULE 020 — which exists to stop *unreviewed implementation* reaching `main`, not
+to stop `main` from stating the truth about itself. A bookkeeping commit may
+touch only this file, `agentos/artifacts/project-state.yaml` and
+`agentos/context/state.md`; anything else belongs in a milestone PR.
+
 ## Rolling back
 
 ```bash
@@ -37,10 +45,11 @@ git switch -c fix/from-mNN cartograph-mNN
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Branch | `feature/m00-foundation` · PR [#1](https://github.com/Rexy-5097/cartograph/pull/1) |
-| Provisional checkpoint | `cartograph-m00-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m00` is created on the merge commit at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m00-foundation` · PR [#1](https://github.com/Rexy-5097/cartograph/pull/1) (merged) |
+| Provisional checkpoint | `cartograph-m00-rc1` (retained for traceability) |
+| **Accepted checkpoint** | **`cartograph-m00`** — merge commit `ab196a1`, immutable |
 | Specification | Frozen Engineering Spec V3 |
 
 > **Checkpoint repair (2026-08-19).** The original `cartograph-m00` tag was
@@ -81,7 +90,8 @@ quality gates QG-001 – QG-008; milestone and checkpoint systems; nine ADRs.
 
 ### Rollback point
 
-`cartograph-m00-rc1`. There is no earlier checkpoint — M00 is the first.
+`cartograph-m00` (accepted). `cartograph-m00-rc1` remains as the pre-merge
+provisional state. There is no earlier checkpoint — M00 is the first.
 
 ---
 
