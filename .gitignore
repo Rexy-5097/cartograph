@@ -1,0 +1,57 @@
+# ─── Rust ──────────────────────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock IS committed. Cartograph ships a binary; a reproducible build of
+# a released version matters more than testing against fresh dependency
+# versions, and CI can update it deliberately.
+
+# ─── Benchmarks and profiling ──────────────────────────────────────────────
+# Criterion writes reports and baselines into target/, which is already
+# ignored. These cover profiling output written elsewhere.
+*.profraw
+perf.data*
+*.trace
+flamegraph.svg
+
+# ─── Analysis output ───────────────────────────────────────────────────────
+# The local graph database Cartograph writes when analysing a repository.
+# It contains derived information about the user's source and must never be
+# committed (RULE 011).
+.cartograph/
+*.cartograph.redb
+
+# ─── Secrets ───────────────────────────────────────────────────────────────
+# Credentials live in the OS keychain, never in files (RULE 014). These
+# patterns are a backstop, not the mechanism.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+
+# ─── Python (vendored AgentOS toolchain only) ──────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+
+# ─── Node (desktop application, from M11) ──────────────────────────────────
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ─── macOS ─────────────────────────────────────────────────────────────────
+.DS_Store
+
+# AppleDouble sidecar files. The repository lives on an exFAT volume, which
+# has no native extended-attribute support, so macOS materialises xattrs as
+# `._name` files next to every file it touches — including inside .git, where
+# they make Git print "non-monotonic index" errors. `make clean-sidecars`
+# removes them. See docs/development/external-storage.md.
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes

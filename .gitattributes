@@ -1,0 +1,30 @@
+# Normalise line endings to LF in the repository. Without this, a contributor
+# on Windows commits CRLF and every subsequent diff is noise.
+* text=auto eol=lf
+
+# Rust and config files are always text.
+*.rs text
+*.toml text
+*.md text
+*.yml text
+*.yaml text
+
+# Binary files — never normalise.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.redb binary
+
+# Cargo.lock is generated; collapse it in pull request diffs so review
+# attention goes to the dependency change in Cargo.toml instead.
+Cargo.lock linguist-generated=true
+
+# The vendored AgentOS framework is not Cartograph's own source. Excluding it
+# from language statistics keeps the repository reading as the Rust project it
+# is rather than a Python one.
+agentos/** linguist-vendored=true
