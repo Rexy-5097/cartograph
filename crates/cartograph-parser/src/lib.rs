@@ -31,12 +31,16 @@
 //! repository walk. [`ParserError`] is reserved for caller mistakes (bad path,
 //! unsupported extension) and environment failures (grammar load).
 //!
-//! Languages at M01: TypeScript and TSX. Python arrives at M02.
+//! Languages: TypeScript and TSX (M01), Python (M02). Each language has its
+//! own private extractor module; [`Analyzer::dispatch`] is the single place
+//! files are routed to one.
 
 pub mod diagnostics;
 pub mod error;
 pub mod model;
 
+mod python;
+mod syntax;
 mod typescript;
 
 use std::path::Path;
@@ -53,6 +57,7 @@ use model::{FileAnalysis, ParseStatus, SourceLanguage};
 /// one per worker (planned for the milestone that measures the need).
 pub struct Analyzer {
     typescript: typescript::TypeScriptExtractor,
+    python: python::PythonExtractor,
 }
 
 impl Analyzer {
@@ -65,6 +70,7 @@ impl Analyzer {
     pub fn new() -> Result<Self, ParserError> {
         Ok(Self {
             typescript: typescript::TypeScriptExtractor::new()?,
+            python: python::PythonExtractor::new()?,
         })
     }
 
@@ -88,7 +94,7 @@ impl Analyzer {
         let path = normalize_rel_path(rel_path)?;
         let language = SourceLanguage::from_path(&path)
             .ok_or(ParserError::UnsupportedLanguage { path: path.clone() })?;
-        Ok(self.typescript.extract(&path, language, source))
+        Ok(self.dispatch(&path, language, source))
     }
 
     /// Reads and analyses `repo_root`/`rel_path`.
@@ -129,7 +135,24 @@ impl Analyzer {
                 "file is not valid UTF-8".to_owned(),
             ));
         };
-        Ok(self.typescript.extract(&path, language, &source))
+        Ok(self.dispatch(&path, language, &source))
+    }
+
+    /// Routes a file to the extractor that owns its language.
+    ///
+    /// The single place languages are dispatched; each extractor is handed a
+    /// flavor type it can actually parse.
+    fn dispatch(&mut self, path: &str, language: SourceLanguage, source: &str) -> FileAnalysis {
+        match language {
+            SourceLanguage::TypeScript => {
+                self.typescript
+                    .extract(path, typescript::TsFlavor::TypeScript, source)
+            }
+            SourceLanguage::Tsx => self
+                .typescript
+                .extract(path, typescript::TsFlavor::Tsx, source),
+            SourceLanguage::Python => self.python.extract(path, source),
+        }
     }
 }
 
@@ -159,6 +182,7 @@ fn failed_analysis(
         calls: Vec::new(),
         strings: Vec::new(),
         http_calls: Vec::new(),
+        routes: Vec::new(),
         diagnostics: vec![Diagnostic {
             severity: Severity::Error,
             kind,
