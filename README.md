@@ -7,9 +7,10 @@ symbol-level, cross-language graph of a software system from source code,
 language semantics, HTTP boundaries, database schemas and Git history — and
 shows the evidence behind every edge it draws.
 
-> **Status: pre-alpha, milestone M03 of 17.** The engineering foundation, the
-> TypeScript/TSX and Python extractors, and canonical route normalisation
-> exist. Cross-stack resolution does not. `cartograph
+> **Status: pre-alpha, milestone M04 of 17.** The cross-stack chain now
+> resolves: a TypeScript call site is matched to a Python handler and becomes
+> an evidenced graph edge. ORM resolution, the desktop app and MCP do not
+> exist. `cartograph
 > analyze` is not implemented yet. Nothing in this README describes behaviour
 > the code does not have — see [What works today](#what-works-today).
 
@@ -80,20 +81,28 @@ see [ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md).
 
 ## What works today
 
-M00 delivered the engineering foundation, M01–M02 extraction, M03 canonicalisation:
+M00 delivered the foundation, M01–M02 extraction, M03 canonicalisation, M04 the first semantic join:
 
 | Component | State |
 |---|---|
 | `cartograph-core` — domain model, evidence, provenance, confidence | Implemented, tested |
 | `cartograph-graph` — architecture graph over `petgraph` | Implemented, tested |
 | `cartograph-parser` — tree-sitter TypeScript/TSX **and Python** extraction | Implemented, tested |
-| `cartograph-cli` — `version`, `parse`, `normalize` | Implemented |
-| `cartograph-resolver` — canonical route normalisation | Implemented, tested (matching is M04) |
+| `cartograph-cli` — `version`, `parse`, `normalize`, `match` | Implemented |
+| `cartograph-resolver` — canonical routes + cross-language matching | Implemented, tested (ORM is M06) |
 | `cartograph-testkit` — fixtures | Implemented |
 
 ```console
-$ cartograph parse ./frontend --json | jq .totals
+$ cartograph match ./my-project
+web/src/CheckoutButton.tsx:5  POST /api/orders
+    ↓ MATCH (exact)   confidence 0.98   provenance route_matcher
+      api/orders.py:6  POST /api/orders  → create_order
 ```
+
+That is the chain the product exists to produce — and it is refused rather than
+guessed when the evidence is thin: ambiguous candidates produce no edge, an
+unresolved `${BASE}` prefix is declined until M05, and a call to an absolute
+host is never joined to a local route.
 
 `parse` reports **observed syntax** — symbols, imports, call sites, string and
 template structure, HTTP-shaped calls, and (Python) route declarations — plus

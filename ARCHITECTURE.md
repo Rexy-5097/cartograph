@@ -41,7 +41,7 @@ adding it three times.
 | `cartograph-core` | Domain model: nodes, edges, evidence, provenance, confidence | Implemented |
 | `cartograph-graph` | The architecture graph, traversal | Implemented |
 | `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX (M01) and Python (M02) implemented |
-| `cartograph-resolver` | Canonical routes (M03); LSP, matching and ORM resolution to come | Canonicalisation implemented (M03) |
+| `cartograph-resolver` | Canonical routes, cross-language matching, edge construction | M03–M04 implemented; ORM at M06 |
 | `cartograph-cli` | The `cartograph` binary | `version`, `parse` |
 | `cartograph-testkit` | Fixtures and builders. Never a runtime dependency | Implemented |
 
@@ -51,7 +51,7 @@ adding it three times.
 cli ──► core, parser, resolver
 graph ──► core ──► (nothing Cartograph-owned)
 parser ──► core
-resolver ──► parser          (core and graph join when M04 produces edges)
+resolver ──► parser, core, graph
 testkit ──► core
 ```
 
@@ -127,9 +127,11 @@ Frontend and backend are analysed independently, then joined on a canonical
 route form. Where an OpenAPI document exists it is ground truth and inference is
 skipped.
 
-Normalisation (M03) is implemented and deliberately stops short of the join:
-each observation is canonicalised on its own, and no `CanonicalRoute` can
-reference another. See [docs/resolver/canonical-routes.md](docs/resolver/canonical-routes.md).
+Normalisation (M03) canonicalises each observation on its own; matching (M04)
+is the first stage permitted to relate two of them, and the only one permitted
+to create an `HttpCall` edge. See
+[docs/resolver/canonical-routes.md](docs/resolver/canonical-routes.md) and
+[docs/resolver/matching.md](docs/resolver/matching.md).
 
 See [docs/resolver/](docs/resolver/).
 

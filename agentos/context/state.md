@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Active milestone | **M04 — Cross-language resolution** |
-| Status | M00–M03 **ACCEPTED**; M04 in progress |
+| Status | M00–M03 **ACCEPTED**; M04 complete and gate-clean, pending human review (PR #5) |
 | Branch | `feature/m04-cross-language-resolution` |
 | Next permitted milestone | M05 — **locked** until M04 is accepted |
 | Last accepted checkpoint | `cartograph-m03` (immutable, merge commit `ca0d206`) |
@@ -19,6 +19,11 @@
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
   enforced by construction), architecture graph over petgraph, testkit with
   the spec's worked cross-stack chain as fixtures.
+- **M04: cross-language route matching** — the first semantic join and the
+  first `HttpCall` edges, with candidate indexing, deterministic compatibility
+  rules, a discriminating-evidence requirement, and ambiguity that produces no
+  edge. Validated on FastAPI/Flask/DRF; the discriminating rule removed 138
+  false edges found in Flask's own repository.
 - **M03: canonical route normalisation** — one observation in, one canonical
   form out. Five parameter dialects, URL decomposition, template structure,
   explicit refusal of regexes and dynamic paths. No matching: a `CanonicalRoute`
@@ -32,7 +37,7 @@
   sites, string/template/concatenation structure, HTTP observations,
   error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
   (35 files) and swr (194 files).
-- 191 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+- 241 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
   criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
@@ -42,7 +47,7 @@
 
 ## What does NOT exist (deliberately)
 
-No resolution and no LSP (M04+), no template *evaluation* (M05 — structure is preserved, not
+No template evaluation (M05), no ORM (M06), no LSP, no template *evaluation* (M05 — structure is preserved, not
 evaluated), no ORM (M06), no storage, no incremental engine, no desktop, no
 MCP, no AI. `cartograph-resolver` remains a doc-only crate.
 

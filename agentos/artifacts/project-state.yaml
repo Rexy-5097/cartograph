@@ -5,7 +5,7 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M04
-status: IN_PROGRESS
+status: PENDING_HUMAN_REVIEW
 current_branch: feature/m04-cross-language-resolution
 next_allowed_milestone: M05    # LOCKED until M04 is accepted by the human owner
 
@@ -39,10 +39,11 @@ milestones:
     accepted_tag: cartograph-m03          # immutable
     merge_commit: ca0d2067e0e83ea8c6dbb42bf970102777e1899a
   M04:
-    status: IN_PROGRESS
-    pull_request: null
-    provisional_tag: null                 # cartograph-m04-rc1 once gates pass
-    accepted_tag: null
+    status: PENDING_HUMAN_REVIEW
+    pull_request: 5
+    base: main
+    provisional_tag: cartograph-m04-rc1
+    accepted_tag: null                    # becomes cartograph-m04 at merge (ADR-0010)
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M03
@@ -50,24 +51,24 @@ last_checkpoint:                 # ADR-0010: the tag is the authority for its SH
   tag: cartograph-m03
   merge_commit: ca0d2067e0e83ea8c6dbb42bf970102777e1899a
 
-gates:                           # M03 branch, 2026-08-19
+gates:                           # M04 branch, 2026-08-19
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 191 passed, 0 failed
+  tests: PASS                    # QG-004 - 241 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
-  milestone_acceptance: PASS     # QG-008 - M03 criteria - M02 criteria
+  milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PASS                       # PR #4 green from base main
+  ci: PENDING                    # recorded when PR #5 CI completes
 
 tests:
-  total: 191
+  total: 241
   failed: 0
 
 benchmarks:
-  harness: ts_extraction, py_extraction and canonicalization groups run (criterion)
+  harness: ts_extraction, py_extraction, canonicalization and matching groups run (criterion)
   published_numbers: none        # internal only until methodology is documented (M08+)
 
 smoke_tests:                     # robustness only - no accuracy claim

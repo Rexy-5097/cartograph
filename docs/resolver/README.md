@@ -2,9 +2,10 @@
 
 > **Status: design only.** `cartograph-resolver` is an empty crate. This
 > documents the frozen design the M03–M06 implementations must satisfy.
-> **M03 has landed**: route and URL observations are canonicalised into one
-> comparable form — see [canonical-routes.md](canonical-routes.md). Matching
-> the two sides is still M04 and does not exist.
+> **M03 and M04 have landed**: observations are canonicalised
+> ([canonical-routes.md](canonical-routes.md)) and then matched into evidenced
+> `HttpCall` edges ([matching.md](matching.md)). Template evaluation (M05) and
+> ORM resolution (M06) do not exist.
 >
 > Both sides' inputs now exist: M01 produces TypeScript call sites, template
 > structure and HTTP observations; M02 produces Python route observations,
