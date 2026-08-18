@@ -24,8 +24,8 @@ Tags follow `cartograph-mNN`.
 |---|---|
 | Status | **PENDING HUMAN REVIEW** |
 | Branch | `feature/m00-foundation` |
-| Tag | `cartograph-m00` *(created after the pull request is accepted)* |
-| Commit | *(recorded on tag creation)* |
+| Tag | `cartograph-m00` (annotated, pushed) |
+| Commit | `35ec77a` |
 | Specification | Frozen Engineering Spec V3 |
 
 ### Scope delivered
@@ -45,7 +45,7 @@ quality gates QG-001 – QG-008; milestone and checkpoint systems; nine ADRs.
 | `cargo check --workspace --all-targets` | PASS |
 | `cargo bench --no-run` | PASS |
 | AgentOS validator | PASS — 99/100 |
-| QG-001 … QG-008 | *(recorded on merge)* |
+| QG-001 … QG-008 | PASS — 8/8 (local run 2026-08-18; CI re-runs on the PR) |
 | CI | *(recorded on merge)* |
 
 ### Known limitations

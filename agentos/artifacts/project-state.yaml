@@ -10,9 +10,9 @@ current_branch: feature/m00-foundation
 next_allowed_milestone: M01  # unlocked only when M00 checkpoint is accepted
 
 last_checkpoint:
-  milestone: null            # M00 tag is created after human acceptance
-  commit: null
-  tag: null
+  milestone: M00             # PR #1 pending human review
+  commit: 35ec77a
+  tag: cartograph-m00
 
 gates:                       # last local run, 2026-08-18
   repository: PASS           # QG-001
