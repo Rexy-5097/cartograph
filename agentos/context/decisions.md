@@ -14,3 +14,4 @@
 | [0007](../../docs/adr/ADR-0007-no-llm-graph-construction.md) | No LLM graph construction, ever | Accepted |
 | [0008](../../docs/adr/ADR-0008-external-ssd-workspace.md) | Repository and build artifacts on external SSD | Accepted |
 | [0009](../../docs/adr/ADR-0009-vendored-agentos.md) | AgentOS vendored under `agentos/` with minimal modification | Accepted |
+| [0010](../../docs/adr/ADR-0010-checkpoint-tag-policy.md) | Provisional vs accepted checkpoint tags | Accepted |

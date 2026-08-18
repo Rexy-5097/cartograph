@@ -1,20 +1,35 @@
 # Checkpoints
 
-Every completed milestone produces a reproducible checkpoint: a commit, an
-annotated tag, a gate result and a rollback point.
+Every milestone produces a reproducible checkpoint: an annotated tag, a gate
+result and a rollback point. Policy:
+[ADR-0010](docs/adr/ADR-0010-checkpoint-tag-policy.md).
 
-**Milestone tags are never deleted, moved or rewritten.** If a later milestone
-breaks the project, the previous checkpoint must still be recoverable. That
-guarantee is the reason this file exists.
+## Checkpoint policy
+
+| Class | Tag | Created when | Points at | Guarantees |
+|---|---|---|---|---|
+| Provisional | `cartograph-mNN-rcK` | Gates pass, PR (re)submitted | Exact PR head | Superseded by `rcK+1` on review changes; retired only while unaccepted |
+| Accepted | `cartograph-mNN` | Human owner accepts (merges) the PR | Exact accepted commit on `main` | **Never moved or deleted**; final rc also retained |
+
+**The tag is the authority for its SHA.** Ledger entries reference checkpoints
+by tag name; a quoted SHA is informational and `git rev-parse <tag>` wins.
+(Recording a tag's SHA in a committed ledger always produces a commit outside
+the tag — the defect that ADR-0010 repairs.)
+
+### Acceptance procedure (per milestone)
+
+1. Human owner reviews and merges the milestone PR.
+2. Tag the merge commit: `git tag -a cartograph-mNN -m "Accepted checkpoint MNN" <merge-sha> && git push origin cartograph-mNN`
+3. Flip the milestone to ACCEPTED in this file and in
+   `agentos/artifacts/project-state.yaml` (next milestone unlocks).
 
 ## Rolling back
 
 ```bash
-git checkout cartograph-mNN     # inspect a checkpoint
+git checkout cartograph-mNN         # accepted checkpoint
+git checkout cartograph-mNN-rcK     # provisional state under review
 git switch -c fix/from-mNN cartograph-mNN
 ```
-
-Tags follow `cartograph-mNN`.
 
 ---
 
@@ -22,11 +37,19 @@ Tags follow `cartograph-mNN`.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** |
-| Branch | `feature/m00-foundation` |
-| Tag | `cartograph-m00` (annotated, pushed) |
-| Commit | `35ec77a` |
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Branch | `feature/m00-foundation` · PR [#1](https://github.com/Rexy-5097/cartograph/pull/1) |
+| Provisional checkpoint | `cartograph-m00-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m00` is created on the merge commit at acceptance |
 | Specification | Frozen Engineering Spec V3 |
+
+> **Checkpoint repair (2026-08-19).** The original `cartograph-m00` tag was
+> created prematurely at internal completion and pointed one commit short of
+> the reviewed PR state. Per [ADR-0010](docs/adr/ADR-0010-checkpoint-tag-policy.md)
+> it was retired (safety determined first: zero forks, zero releases, PR
+> unmerged, milestone unaccepted) and replaced by provisional
+> `cartograph-m00-rc1` at the exact PR head. The name `cartograph-m00` is
+> reserved for the accepted checkpoint.
 
 ### Scope delivered
 
@@ -58,7 +81,7 @@ quality gates QG-001 – QG-008; milestone and checkpoint systems; nine ADRs.
 
 ### Rollback point
 
-This tag. There is no earlier checkpoint — M00 is the first.
+`cartograph-m00-rc1`. There is no earlier checkpoint — M00 is the first.
 
 ---
 
@@ -69,10 +92,10 @@ This tag. There is no earlier checkpoint — M00 is the first.
 
 | Field | Value |
 |---|---|
-| Status | PASS / FAIL |
+| Status | IN REVIEW / ACCEPTED / FAILED |
 | Date | YYYY-MM-DD |
-| Commit | <sha> |
-| Tag | cartograph-mNN |
+| Provisional checkpoint | cartograph-mNN-rcK |
+| Accepted checkpoint | cartograph-mNN (merge commit; at acceptance only) |
 | Branch | feature/mNN-slug |
 | Pull request | #N |
 
