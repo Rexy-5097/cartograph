@@ -53,6 +53,7 @@
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
 
 pub mod canonical;
+pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
 pub mod matching;
@@ -62,6 +63,10 @@ pub mod symbolic;
 pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,
+};
+pub use dynamic::{
+    ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
+    with_resolved_url,
 };
 pub use edge::add_edge_for_match;
 pub use evaluator::{Scope, evaluate_expression, evaluate_string_fact};
