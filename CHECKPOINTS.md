@@ -344,6 +344,109 @@ Provisional predecessor `cartograph-m04-rc1` remains available.
 
 ---
 
+## M05 — Dynamic URL and endpoint resolution
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m05-dynamic-url-resolution` (from `main`) |
+| Provisional checkpoint | `cartograph-m05-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m05` is created at acceptance |
+
+### Scope delivered
+
+Symbolic string value model; restricted expression evaluation over module
+constants, templates, f-strings, concatenation and environment reads;
+cross-file constant propagation through exported bindings; partial URL
+reconstruction into an ordinary `UrlObservation`; integration with the
+unchanged M04 matcher. `cartograph match` resolves dynamic URLs.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 297 tests |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 99/100 |
+
+### Benchmark state
+
+`evaluation`: literal constant 35.9 ns · transitive constant 166 ns ·
+environment read 29.5 ns · scope from 200 constants 18.8 µs · 100-importer
+project 51.8 µs. Internal only.
+
+### Verification findings
+
+**A real defect, found only by running the binary.** The evaluator was wired
+into `cartograph match`, the workspace compiled, and all 54 resolver unit tests
+passed — while the command still ran the M04-only path. One of four edits had
+silently failed to apply because its anchor no longer matched after an earlier
+reformat. Fixture tests could not catch it because they call the library
+directly. Found by inspecting real-repository output and noticing
+`Dynamic URLs 0 fully resolved, 0 partially` when 63 templates should have
+reached the evaluator. Fixed, and two CLI-level regression tests added
+(`match_resolves_an_imported_constant_end_to_end`,
+`match_still_refuses_an_environment_backed_url`) so the gap between "the
+library works" and "the command works" is now covered.
+
+**Real-repository before/after — no change, and that is the honest result.**
+
+| Corpus | M04 decisions | M05 decisions | Edges before → after | Dynamic URLs seen |
+|---|---|---|---|---|
+| tiangolo/full-stack-fastapi-template | 63 unsupported | 63 unsupported | 0 → 0 | 63 partial |
+| pallets/flask | 23/6/288/0/14 | 23/6/288/0/14 | 29 → 29 | 12 partial |
+| encode/django-rest-framework | 0/50/271/95/22 | 0/50/271/95/22 | 50 → 50 | 15 partial |
+| vercel/swr | 4 no-match, 6 unsupported | identical | 0 → 0 | 6 partial |
+
+**Zero additional matches; zero regressions.** Classified: the FastAPI
+template's 63 refusals are **safe refusals**, not bugs. Its generated SDK builds
+every URL from a base supplied at client-construction time
+(`import.meta.env.VITE_API_URL ?? ""`), so the prefix is genuinely not
+statically determined. Resolving it would require assuming the environment
+variable is unset — a deployment assumption, not an observation. The remaining
+partial resolutions are the same pattern.
+
+The capability is proven by fixtures (an imported constant resolves
+`` `${API_BASE}/orders` `` to `/api/v1/orders` and produces an exact-match
+edge); its real-world reach is limited by a construction pattern M05 cannot
+resolve. Stated plainly rather than presented as a win.
+
+**Differential check:** every corpus produced byte-identical decision counts to
+M04. Since a literal URL is declined by the evaluator and takes the unchanged
+M04 path, previously-correct behaviour cannot shift — asserted by
+`literal_urls_behave_exactly_as_they_did_before_m05`.
+
+**Adversarial testing.** Ten refusal cases assert `NO EDGE IS PRODUCED`, not
+merely an empty vector: unexported constant, package import, environment
+prefix, unsupported expression, wrong resource, wrong method, catch-all,
+two-equal-routes, empty URL, and cyclic constants. The environment-leak test
+uses `PATH` so a leak would be visible.
+
+**Output inspected by hand** across all five case classes — fully known, known
+prefix with unknown suffix, wholly unknown, environment-backed, unsupported —
+plus the CLI's rendering of each.
+
+**Other defects fixed during implementation:** six clippy findings, and an
+`unsafe` env-var test rewritten to respect the workspace's `unsafe_code` ban.
+
+### Known limitations
+
+Runtime-configured SDK clients unresolvable (the dominant real-world pattern);
+object/config-field bases unknown; no tsconfig aliases or `node_modules`
+resolution; locals and parameters never bound; conditional expressions
+unsupported rather than explored.
+
+### Rollback point
+
+`cartograph-m05-rc1`; previous accepted checkpoint `cartograph-m04`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown

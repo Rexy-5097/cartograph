@@ -70,7 +70,7 @@ await fetch(`${BASE}/orders`);"#,
 
 #[test]
 fn a_template_with_an_unknown_substitution_stays_partly_unresolved() {
-    let value = url_of("web/src/api.ts", r#"await fetch(`/orders/${id}`);"#);
+    let value = url_of("web/src/api.ts", r"await fetch(`/orders/${id}`);");
     assert_eq!(value.as_literal(), None, "`id` is not statically known");
     assert_eq!(value.to_string(), "/orders/{unknown}");
 }
@@ -159,7 +159,7 @@ fn python_environment_reads_are_recognised() {
 fn an_environment_backed_url_reconstructs_the_known_part_only() {
     let value = url_of(
         "web/src/api.ts",
-        r#"await fetch(`${process.env.API_URL}/orders/${id}`);"#,
+        r"await fetch(`${process.env.API_URL}/orders/${id}`);",
     );
     assert_eq!(value.to_string(), "{env:API_URL}/orders/{unknown}");
     assert_eq!(value.as_literal(), None);
@@ -252,7 +252,7 @@ fn an_empty_expression_is_unsupported() {
 
 #[test]
 fn a_constant_bound_to_a_call_result_does_not_resolve() {
-    let scope = scope_of("web/src/api.ts", r#"const BASE = buildBase();"#);
+    let scope = scope_of("web/src/api.ts", r"const BASE = buildBase();");
     let value = evaluate_expression("BASE", &scope);
     assert_eq!(
         value.as_literal(),

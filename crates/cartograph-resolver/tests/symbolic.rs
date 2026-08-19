@@ -106,7 +106,7 @@ fn an_environment_variable_records_only_its_name() {
     // The name is evidence; the value is never read.
     let rendered = env("DATABASE_PASSWORD").to_string();
     assert_eq!(rendered, "{env:DATABASE_PASSWORD}");
-    assert!(!rendered.contains("="), "no value is ever attached");
+    assert!(!rendered.contains('='), "no value is ever attached");
 }
 
 // ── Normalisation ───────────────────────────────────────────────────
