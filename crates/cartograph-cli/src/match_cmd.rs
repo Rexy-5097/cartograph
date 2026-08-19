@@ -14,6 +14,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use cartograph_core::{EdgeKind, NodeKind, Provenance};
 use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
@@ -88,10 +89,53 @@ struct JsonOrm {
     accessed_by: Vec<String>,
 }
 
+/// One graph node, in the shape `--json` promises.
+///
+/// Exported so a reader — or the M07 benchmark — can verify **node identity**
+/// rather than infer it. Two edges that name the same handler are only part of
+/// one chain if they share a node id, and no summary can show that.
+#[derive(Debug, Serialize)]
+struct JsonNode {
+    id: u64,
+    kind: NodeKind,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+}
+
+/// One graph edge, with the four attributes the domain model requires.
+#[derive(Debug, Serialize)]
+struct JsonEdge {
+    id: u64,
+    source: u64,
+    target: u64,
+    kind: EdgeKind,
+    confidence: f32,
+    provenance: Provenance,
+    evidence: String,
+    file: String,
+    line: u32,
+}
+
+/// The graph a run produced, as built — not a re-derivation.
+#[derive(Debug, Serialize)]
+struct JsonGraph {
+    node_count: usize,
+    edge_count: usize,
+    nodes: Vec<JsonNode>,
+    edges: Vec<JsonEdge>,
+}
+
 #[derive(Debug, Serialize)]
 struct JsonReport {
     root: String,
+    /// Wall-clock time for extraction, resolution and graph construction.
+    elapsed_ms: u128,
     totals: Totals,
+    /// The graph itself, so traversal can be checked rather than assumed.
+    graph: JsonGraph,
     matches: Vec<JsonMatch>,
     orm: Vec<JsonOrm>,
     /// Model names claimed by more than one class, which resolve to nothing.
@@ -109,6 +153,9 @@ struct Outcome {
     totals: Totals,
     results: Vec<MatchResult>,
     orm: OrmAnalysis,
+    /// Kept rather than dropped: the graph is the deliverable, and the
+    /// decisions above are only the reasoning that produced it.
+    graph: ArchitectureGraph,
     elapsed: std::time::Duration,
 }
 
@@ -207,6 +254,7 @@ fn analyse(path: &Path) -> Result<Outcome> {
         totals,
         results,
         orm,
+        graph,
         elapsed,
     })
 }
@@ -216,6 +264,7 @@ fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
         totals,
         results,
         orm,
+        graph,
         elapsed,
     } = outcome;
 
@@ -250,7 +299,9 @@ fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
 
         let report = JsonReport {
             root: path.display().to_string(),
+            elapsed_ms: elapsed.as_millis(),
             totals,
+            graph: json_graph(&graph),
             matches: results.iter().map(json_match).collect(),
             orm: orm_rows,
             orm_ambiguous: orm.ambiguous.clone(),
@@ -294,6 +345,48 @@ fn json_match(result: &MatchResult) -> JsonMatch {
                 reasons: c.reasons.iter().map(|r| format!("{r:?}")).collect(),
             })
             .collect(),
+    }
+}
+
+/// Serialises the graph exactly as it was built.
+///
+/// Nodes and edges are emitted in id order so two runs over the same tree
+/// produce byte-identical output, which is what makes a benchmark result
+/// comparable between passes.
+fn json_graph(graph: &ArchitectureGraph) -> JsonGraph {
+    let mut nodes: Vec<JsonNode> = graph
+        .nodes()
+        .map(|n| JsonNode {
+            id: n.id().as_u64(),
+            kind: n.kind(),
+            name: n.name().to_owned(),
+            file: n.location().map(|l| l.file().to_owned()),
+            line: n.location().map(cartograph_core::SourceLocation::line),
+        })
+        .collect();
+    nodes.sort_by_key(|n| n.id);
+
+    let mut edges: Vec<JsonEdge> = graph
+        .edges()
+        .map(|e| JsonEdge {
+            id: e.id().as_u64(),
+            source: e.source().as_u64(),
+            target: e.target().as_u64(),
+            kind: e.kind(),
+            confidence: e.confidence().get(),
+            provenance: e.provenance(),
+            evidence: e.evidence().as_str().to_owned(),
+            file: e.location().file().to_owned(),
+            line: e.location().line(),
+        })
+        .collect();
+    edges.sort_by_key(|e| e.id);
+
+    JsonGraph {
+        node_count: graph.node_count(),
+        edge_count: graph.edge_count(),
+        nodes,
+        edges,
     }
 }
 
