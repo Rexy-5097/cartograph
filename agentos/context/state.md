@@ -7,11 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M06 — ORM resolution** (unlocked, not started) |
-| Status | M00–M05 **ACCEPTED**; M06 complete and gate-clean, pending human review (PR #8) |
-| Branch | `feature/m06-orm-resolution` |
-| Next permitted milestone | M07 — **locked** until M06 is accepted |
-| Last accepted checkpoint | `cartograph-m05` (immutable, merge commit `5770b59`) |
+| Active milestone | **M07 — Verified full-stack chain** (unlocked, not started) |
+| Status | M00–M06 **ACCEPTED**; M07 unlocked, no code written |
+| Branch | `main` |
+| Next permitted milestone | M07 — **unlocked**; M08 locked until M07 is accepted |
+| Last accepted checkpoint | `cartograph-m06` (immutable, commit `ef26ae2`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists

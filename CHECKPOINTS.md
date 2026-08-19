@@ -457,11 +457,17 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m06-orm-resolution` (from `main`) |
-| Provisional checkpoint | `cartograph-m06-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m06` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m06-orm-resolution` · PR [#8](https://github.com/Rexy-5097/cartograph/pull/8) (merged `88d2fda`) |
+| Verification PR | [#9](https://github.com/Rexy-5097/cartograph/pull/9) (merged `ef26ae2`) — tests and ledgers only, no product source |
+| Provisional checkpoint | `cartograph-m06-rc1` at `81fd32e` (the PR #8 head; retained) |
+| **Accepted checkpoint** | **`cartograph-m06`** — commit `ef26ae2`, immutable |
+
+> The accepted commit is the PR #9 merge, not the PR #8 merge: the independent
+> verification pass added four regression tests and corrected the ledgers, and
+> the accepted state must include them. PR #9 touched no product source, so
+> M06's behaviour at `ef26ae2` is exactly what PR #8 delivered.
 
 ### Scope delivered
 
@@ -572,7 +578,8 @@ file-wide rather than flow-sensitive.
 
 ### Rollback point
 
-`cartograph-m06-rc1`; previous accepted checkpoint `cartograph-m05`.
+`cartograph-m06` (accepted). Previous accepted checkpoint: `cartograph-m05`.
+Provisional predecessor `cartograph-m06-rc1` remains available.
 
 ---
 

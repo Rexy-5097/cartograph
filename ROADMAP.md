@@ -30,7 +30,7 @@ real-repository validation.
 | **M03** | Path normalisation to canonical form | Day 6 | **Accepted** (`cartograph-m03`) |
 | **M04** | Cross-language resolver — TS call to Python handler | Day 8 | **Accepted** (`cartograph-m04`) |
 | **M05** | Template evaluator for dynamic URLs | Day 11 | **Accepted** (`cartograph-m05`) |
-| M06 | ORM resolution — handler to model to table | Day 13 | **Unlocked, not started** |
+| **M06** | ORM resolution — handler to model to table | Day 13 | **Accepted** (`cartograph-m06`) |
 | M07 | Full verified chain on a real repository | Day 14 | Not started |
 | M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | Not started |
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | Not started |

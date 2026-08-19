@@ -4,10 +4,10 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M06
-status: PENDING_HUMAN_REVIEW
-current_branch: feature/m06-orm-resolution
-next_allowed_milestone: M07    # LOCKED until M06 is accepted by the human owner
+current_milestone: M07
+status: NOT_STARTED
+current_branch: main
+next_allowed_milestone: M07    # UNLOCKED - M06 accepted; M08 locked until M07 is accepted
 
 milestones:
   M00:
@@ -53,17 +53,24 @@ milestones:
     accepted_tag: cartograph-m05          # immutable
     merge_commit: 5770b592c7e8196451969e3f8d36c58590645c0c
   M06:
-    status: PENDING_HUMAN_REVIEW
-    pull_request: 8
-    base: main
-    provisional_tag: cartograph-m06-rc1
-    accepted_tag: null                    # becomes cartograph-m06 at merge (ADR-0010)
+    status: ACCEPTED
+    accepted: 2026-08-19
+    pull_request: 8                       # implementation, merged 88d2fda
+    verification_pr: 9                    # tests and ledgers only, no product source
+    provisional_tag: cartograph-m06-rc1   # at 81fd32e, the PR #8 head; retained
+    accepted_tag: cartograph-m06          # immutable
+    merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
+  M07:
+    status: NOT_STARTED                   # unlocked; no code written
+    pull_request: null
+    provisional_tag: null
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M05
+  milestone: M06
   class: accepted
-  tag: cartograph-m05
-  merge_commit: 5770b592c7e8196451969e3f8d36c58590645c0c
+  tag: cartograph-m06
+  merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
 
 gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..009)
   repository: PASS               # QG-001
@@ -75,7 +82,7 @@ gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..0
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PENDING                    # recorded when PR #8 CI completes
+  ci: PASS                       # PR #8 and PR #9 green from base main
 
 tests:
   total: 335
