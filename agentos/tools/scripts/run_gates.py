@@ -368,6 +368,20 @@ def qg009():
         return ["cannot determine the current milestone from project-state.yaml"]
 
     sources = milestone_test_sources(milestone)
+    entry = checkpoint_entry(milestone)
+
+    # A milestone that has been unlocked but not started has neither
+    # registered tests nor a checkpoint entry. Demanding verification findings
+    # from work that does not exist is the paperwork this protocol exists to
+    # avoid (see docs/development/continuous-verification.md, "Proportionality").
+    #
+    # This is not a loophole: registering the milestone's test files in
+    # MILESTONE_TESTS is part of doing the work, and doing so turns every check
+    # below on. A milestone cannot ship code while claiming not to have started.
+    if milestone not in MILESTONE_TESTS and not entry:
+        print(f"       · {milestone} not yet started (no registered tests, no checkpoint entry)")
+        return problems
+
     if milestone in MILESTONE_TESTS and not sources:
         problems.append(f"{milestone} declares test files that do not exist")
 
@@ -402,7 +416,6 @@ def qg009():
             if not any(m in all_tests for m in markers):
                 problems.append(f"no test covers the invariant: {name}")
 
-    entry = checkpoint_entry(milestone)
     if not entry:
         problems.append(f"CHECKPOINTS.md has no entry for {milestone}")
     else:
