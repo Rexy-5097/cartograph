@@ -177,6 +177,51 @@ async def list_invoices():
 }
 
 #[test]
+fn the_handler_is_exactly_one_node_across_both_analyses() {
+    // The ADR-0011 defect, reproduced through the real pipeline rather than a
+    // synthetic graph: M04 creates a Function node for the route's handler and
+    // M06 creates one for the handler that touches the model. If they diverge,
+    // the count is two and the chain silently breaks.
+    let graph = build(&[
+        ("web/src/CheckoutButton.tsx", CHECKOUT_TSX),
+        (
+            "api/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = \"orders\"\n",
+        ),
+        (
+            "api/orders.py",
+            "from fastapi import FastAPI\napp = FastAPI()\n\n@app.post(\"/api/orders\")\nasync def create_order(payload: dict):\n    return Order(**payload)\n",
+        ),
+    ]);
+
+    let handlers: Vec<_> = graph
+        .nodes()
+        .filter(|n| n.name() == "create_order")
+        .collect();
+    assert_eq!(
+        handlers.len(),
+        1,
+        "two analyses described one handler; it must be one node, found {}",
+        handlers.len()
+    );
+
+    let handler = handlers[0];
+    assert_eq!(
+        graph.edges_to(handler.id()).count(),
+        1,
+        "the route matcher's edge arrives here"
+    );
+    assert_eq!(
+        graph.edges_from(handler.id()).count(),
+        1,
+        "and the ORM edge leaves from the same node"
+    );
+
+    // One node per artefact throughout: client file, handler, model, table.
+    assert_eq!(graph.node_count(), 4, "no duplicated artefacts");
+}
+
+#[test]
 fn every_edge_in_the_chain_explains_itself() {
     let graph = build(&[
         ("web/src/CheckoutButton.tsx", CHECKOUT_TSX),

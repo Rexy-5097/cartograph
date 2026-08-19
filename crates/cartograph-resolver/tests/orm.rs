@@ -125,6 +125,60 @@ fn a_django_model_without_db_table_is_unresolved_because_the_app_label_is_unknow
 }
 
 #[test]
+fn the_meta_collision_never_regresses() {
+    // The exact construction that exposed the defect. Every Django model nests
+    // a class called `Meta`, so matching the attribute by its owner's *name*
+    // gave model B model A's table. The assertion is not merely that B has no
+    // name — it is that B produces NO EDGE.
+    let files = [(
+        "api/models.py",
+        r#"
+from django.db import models
+
+class ModelA(models.Model):
+    class Meta:
+        db_table = "invoice_records"
+
+class ModelB(models.Model):
+    class Meta:
+        db_table = settings.TABLE
+"#,
+    )];
+    let a = orm(&files);
+    assert_eq!(a.models["ModelA"].table.name(), Some("invoice_records"));
+    assert_eq!(
+        a.models["ModelB"].table.name(),
+        None,
+        "ModelB must not inherit ModelA's table"
+    );
+    assert!(
+        matches!(a.models["ModelB"].table, TableName::Unresolved { ref reason }
+                 if reason.contains("not a string literal")),
+        "the refusal must be classified, not merely empty: {:?}",
+        a.models["ModelB"].table
+    );
+
+    let (_, graph) = graph_of(&files);
+    let tables: Vec<&str> = graph
+        .nodes()
+        .filter(|n| n.kind() == NodeKind::Table)
+        .map(cartograph_core::Node::name)
+        .collect();
+    assert_eq!(
+        tables,
+        ["invoice_records"],
+        "exactly one table node; ModelB produced NO EDGE"
+    );
+    assert_eq!(
+        graph
+            .edges()
+            .filter(|e| e.kind() == EdgeKind::Queries)
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn a_dynamic_db_table_expression_is_refused() {
     // The defect this test was written for: `Meta` is a universal Django class
     // name, so matching the attribute by name alone attributed the first
@@ -166,6 +220,54 @@ class Broken(models.Model):
     assert_eq!(a.models["Broken"].table.name(), None);
 }
 
+#[test]
+fn a_conditionally_declared_table_name_is_not_read() {
+    // `if DEBUG: __tablename__ = "..."` is not statically determined — the
+    // attribute only exists on one branch. The parser records class-body
+    // assignments, not assignments nested inside control flow, so this
+    // resolves to Unresolved rather than picking a branch.
+    let a = orm(&[(
+        "api/models.py",
+        r#"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Conditional(Base):
+    if DEBUG:
+        __tablename__ = "orders_debug"
+    else:
+        __tablename__ = "orders"
+"#,
+    )]);
+    assert_eq!(
+        a.models["Conditional"].table.name(),
+        None,
+        "choosing a branch would be a guess about configuration"
+    );
+}
+
+#[test]
+fn a_non_model_carrying_a_tablename_is_still_not_a_model() {
+    // The attribute is extracted — it genuinely is a class attribute — but the
+    // class has no recognised ORM base, so it is not a model and declares no
+    // table.
+    let a = orm(&[(
+        "api/models.py",
+        r#"
+class NotAModel:
+    name = "orders"
+    __tablename__ = "orders"
+"#,
+    )]);
+    assert!(
+        !a.models.contains_key("NotAModel"),
+        "a __tablename__ on an unrelated class is not a table declaration"
+    );
+    assert!(a.models.is_empty());
+}
+
 // ── NEGATIVE: what is not a model ───────────────────────────────────
 
 #[test]
@@ -199,7 +301,10 @@ class Order(OrderBase):
     __tablename__ = "orders"
 "#,
     )]);
-    assert!(a.models.is_empty(), "`OrderBase` is not `Base`");
+    assert!(
+        a.models.is_empty(),
+        "`OrderBase` is not `Base`; a __tablename__ on it declares nothing"
+    );
 }
 
 #[test]
@@ -311,6 +416,9 @@ fn an_unrecognised_manager_method_produces_no_access() {
             "def weird():\n    return Invoice.objects.nonstandard()\n",
         ),
     ]);
+    // Positive control: the model itself resolved, so the refusal is about the
+    // method rather than a failure to find the model.
+    assert!(a.models.contains_key("Invoice"), "the model was discovered");
     assert!(
         a.accesses.is_empty(),
         "the supported subset is deliberate; an unknown method is not evidence"
@@ -343,6 +451,9 @@ def create():
 ",
         ),
     ]);
+    // Positive control: the model resolved and the call exists; only the
+    // shadowing disqualifies the access.
+    assert!(a.models.contains_key("Order"), "the model was discovered");
     assert!(
         a.accesses.is_empty(),
         "the analysis cannot tell which binding the call site sees"
@@ -506,6 +617,9 @@ def raw():
 "#,
         ),
     ]);
+    // Positive control: `Order` is a discovered model, so the refusal is about
+    // the SQL string rather than a missing model.
+    assert!(a.models.contains_key("Order"), "the model was discovered");
     assert!(
         a.accesses.is_empty(),
         "a table name inside SQL text is not evidence of an ORM relationship"

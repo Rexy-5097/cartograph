@@ -45,7 +45,7 @@
   sites, string/template/concatenation structure, HTTP observations,
   error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
   (35 files) and swr (194 files).
-- 331 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+- 335 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
   criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
