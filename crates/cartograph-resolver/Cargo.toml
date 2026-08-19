@@ -30,6 +30,10 @@ name = "matching"
 harness = false
 
 [[bench]]
+name = "evaluation"
+harness = false
+
+[[bench]]
 name = "canonicalization"
 harness = false
 
