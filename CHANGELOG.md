@@ -30,7 +30,7 @@ confidence, provenance and evidence.
   distinct, provenance `orm-resolution`, deduplicated so one fact stated three
   times is one edge.
 - **Raw SQL is not linked to models.** A table name in SQL text is not evidence.
-- **Tests** — 54 new (25 ORM, 4 full-stack chain, 5 graph identity); 331
+- **Tests** — 58 new (28 ORM, 5 full-stack chain, 5 graph identity); 335
   workspace tests. **Benchmarks** — `orm` criterion group.
 
 **Two parser facts added** because M06 needed them and guessing would have been
