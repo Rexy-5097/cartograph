@@ -81,6 +81,30 @@ See [SECURITY.md](SECURITY.md) and [docs/security/](docs/security/).
 | **023** | Every milestone pull request requires automated validation. |
 | **024** | Claude Code may self-review. Self-review is not the final authority. |
 | **025** | Stop after each milestone and report status to the human project owner. |
+| **026** | Every non-trivial implementation step passes a local verification loop before the next dependent step begins. |
+
+RULE 026 is the [Continuous Verification Protocol](docs/development/continuous-verification.md),
+enforced by [QG-009](agentos/gates/QG-009-continuous-verification.md). In short:
+
+- Implement the **smallest slice**, then compile, test, inspect the output, run
+  negative tests and check for regressions — before starting the next slice.
+  Never accumulate a large unverified change set.
+- **State the invariants first** and test them: an ambiguous match never
+  creates an edge, an unknown method never becomes GET, an unknown value never
+  becomes a concrete one, confidence is never presented as calibrated while it
+  is not.
+- **Inspect real output by hand** — a positive, a boundary, an ambiguous, a
+  negative and a malformed case. Passing tests do not prove the output is right.
+- **Validate against real repositories** for resolver and static-analysis work,
+  and stop to classify anything unexpected rather than ignoring it.
+- **Record before/after counts** when a defect is found, and add a regression
+  test naming its origin.
+- If verification finds a defect, **stop**: reproduce, isolate, root-cause,
+  regression-test, fix, rerun, inspect. Do not patch around it.
+
+The protocol exists because M04's fixtures were green while the matcher was
+producing 138 false edges on a real repository. Optimise for finishing a
+milestone with evidence that it is correct, not for finishing it quickly.
 
 ---
 

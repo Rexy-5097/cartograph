@@ -1,7 +1,9 @@
 # Cartograph CI.
 #
 # Runs exactly what `make check` and `make gates` run locally, so a green local
-# run and a green CI run cannot disagree. Linux is the primary target for speed;
+# run and a green CI run cannot disagree. Both use the toolchain pinned in
+# rust-toolchain.toml, which is what makes that guarantee real rather than
+# aspirational. Linux is the primary target for speed;
 # macOS is added at M09 when platform binaries ship.
 name: ci
 
@@ -24,10 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy
-          rustup default stable
+      # `rustup show` installs and selects exactly the toolchain pinned in
+      # rust-toolchain.toml. Installing `stable` here instead is what let CI
+      # and local machines drift apart by eight minor versions.
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      - name: Record toolchain
+        run: rustc --version && cargo clippy --version && cargo fmt --version
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -52,15 +58,19 @@ jobs:
         run: cargo bench --workspace --no-run
 
   gates:
-    name: quality gates QG-001…008
+    name: quality gates QG-001…009
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy
-          rustup default stable
+      # `rustup show` installs and selects exactly the toolchain pinned in
+      # rust-toolchain.toml. Installing `stable` here instead is what let CI
+      # and local machines drift apart by eight minor versions.
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      - name: Record toolchain
+        run: rustc --version && cargo clippy --version && cargo fmt --version
 
       - name: Cache cargo
         uses: actions/cache@v4

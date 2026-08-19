@@ -51,8 +51,8 @@ the framework's history is worth keeping rather than deleting.
 
 ## Quality gates
 
-AgentOS ships eight generic checklist gates. Cartograph defines eight
-**project-specific** gates with the same numbering, in
+AgentOS ships eight generic checklist gates. Cartograph defines nine
+**project-specific** gates, in
 [`agentos/gates/`](agentos/gates/), because a Rust static-analysis engine needs
 `cargo clippy -D warnings` rather than a generic "code reviewed" checkbox.
 
@@ -66,6 +66,7 @@ AgentOS ships eight generic checklist gates. Cartograph defines eight
 | QG-006 | Architecture compliance | `run_gates.py` |
 | QG-007 | Documentation and change tracking | `run_gates.py` |
 | QG-008 | Milestone acceptance criteria | `run_gates.py` |
+| QG-009 | Continuous verification — negative-test ratio, standing invariants, real-repository validation, verification findings | `run_gates.py` |
 
 The framework's own checklist mapping is preserved in `agentos/AGENTOS.md` and
 still applies to framework validation. Where the two disagree for Cartograph's
@@ -79,7 +80,7 @@ correctness, privacy verification, release verification.
 
 ```bash
 make validate      # AgentOS framework health
-make gates         # Cartograph quality gates QG-001 … QG-008
+make gates         # Cartograph quality gates QG-001 … QG-009
 make check         # fmt + clippy + test + validate
 ```
 

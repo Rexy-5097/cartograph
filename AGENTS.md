@@ -31,6 +31,37 @@ is permission to add it *at the milestone that needs it*.
 **Do not publish an unmeasured number.** No accuracy or performance claim
 without a benchmark run on this codebase.
 
+## Verify continuously, not at the end
+
+[RULE 026](PROJECT_RULES.md) — the full protocol is
+[docs/development/continuous-verification.md](docs/development/continuous-verification.md).
+
+**Do not implement a large feature and verify only at the end.** Work in slices:
+
+```
+smallest slice → compile → targeted tests → inspect the output
+              → negative tests → no regression → only then continue
+```
+
+Before implementing a subsystem, write down what it must never do, and test
+those statements. Then inspect real output by hand — a positive, a boundary, an
+ambiguous, a negative and a malformed case — because passing tests do not prove
+the output is right.
+
+For resolver and static-analysis work, **run it against real repositories
+during development**, not after. When something unexpected appears, stop and
+classify it: true match, false positive, false negative, unsupported syntax, or
+unresolved ambiguity. Fix it or represent the uncertainty. Never leave it
+unexplained.
+
+When you find a defect, record before/after counts and add a regression test
+that names where it came from. Then stop and root-cause it rather than patching
+around the failing case.
+
+Every milestone report needs a **Verification Findings** section. If nothing was
+found, say exactly what you ran to establish that — "none" alone is not a
+finding.
+
 ## Working agreement
 
 - Work on `feature/mNN-slug`, branched from the latest `main`. Never commit to

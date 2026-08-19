@@ -11,6 +11,13 @@ Every milestone has: scope, acceptance criteria, tests, a quality gate, a pull
 request, a checkpoint tag, a rollback state and a report. A milestone is
 complete when its **gate passes**, not when its code exists (RULE 017).
 
+Every milestone is also built under the
+[Continuous Verification Protocol](docs/development/continuous-verification.md)
+(RULE 026, gate QG-009): verified slices rather than one late check, real
+repositories for resolver work, and a Verification Findings section in the
+report. The high-risk milestones — M04–M08, M10, M12, M13 — require adversarial
+real-repository validation.
+
 ---
 
 ## Status

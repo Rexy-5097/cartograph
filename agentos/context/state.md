@@ -42,7 +42,7 @@
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
   SECURITY, CONTRIBUTING, AGENTS, AGENTOS docs; CI; PR/issue templates;
-  CODEOWNERS; quality gates QG-001…008; milestone definitions M00…M17;
+  CODEOWNERS; quality gates QG-001…009; milestone definitions M00…M17;
   9 Cartograph ADRs.
 
 ## What does NOT exist (deliberately)
