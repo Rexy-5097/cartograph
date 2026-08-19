@@ -10,6 +10,41 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M06, ORM and database resolution
+
+**The chain is complete.** `CheckoutButton.tsx → POST /api/orders →
+create_order() → Order → orders` now resolves end to end, every hop carrying
+confidence, provenance and evidence.
+
+- **Model discovery** — SQLAlchemy (`Base`, `DeclarativeBase`, `db.Model`) and
+  Django (`models.Model`), module scope only. A class is a model only when it
+  inherits a recognised base; `OrderBase` is not `Base`.
+- **Table resolution** — `__tablename__` and `Meta.db_table` read exactly. **No
+  table name is ever derived from a class name**: Django's default needs an app
+  label that is not in the model file, so those refuse. Ownership is decided by
+  span containment, because every Django model nests a class called `Meta`.
+- **Handler → model access** — a deliberate subset of Django manager methods
+  and model construction. Unrecognised methods, non-models, module-scope
+  accesses and shadowed names all produce nothing.
+- **Edges** — `OrmAccess` (handler→model) and `Queries` (model→table) kept
+  distinct, provenance `orm-resolution`, deduplicated so one fact stated three
+  times is one edge.
+- **Raw SQL is not linked to models.** A table name in SQL text is not evidence.
+- **Tests** — 54 new (25 ORM, 4 full-stack chain, 5 graph identity); 331
+  workspace tests. **Benchmarks** — `orm` criterion group.
+
+**Two parser facts added** because M06 needed them and guessing would have been
+worse: class-body attribute assignments (so `__tablename__` is read rather than
+inferred from whichever string appears in the class), and class base names.
+
+**Graph identity fixed ([ADR-0011](docs/adr/ADR-0011-node-identity-within-a-graph.md)).**
+M04 and M06 each created a `Function` node for the same handler, so every edge
+was correct and the chain was still unwalkable. `ArchitectureGraph::node_for`
+now returns one node per (kind, name, file).
+
+**Real repositories:** SQLAlchemy 37 models/35 tables/228 edges · Django 869
+models/34 tables/1957 edges · zero regressions in M04/M05 decisions.
+
 ### Added — M05, dynamic URL and endpoint resolution
 
 **Resolving constructed URLs without guessing.** M04 refused any client URL it

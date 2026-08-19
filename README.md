@@ -7,7 +7,7 @@ symbol-level, cross-language graph of a software system from source code,
 language semantics, HTTP boundaries, database schemas and Git history — and
 shows the evidence behind every edge it draws.
 
-> **Status: pre-alpha, milestone M05 of 17.** The cross-stack chain now
+> **Status: pre-alpha, milestone M06 of 17.** The cross-stack chain now
 > resolves: a TypeScript call site is matched to a Python handler and becomes
 > an evidenced graph edge. ORM resolution, the desktop app and MCP do not
 > exist. `cartograph
@@ -89,7 +89,7 @@ M00 delivered the foundation, M01–M02 extraction, M03 canonicalisation, M04 th
 | `cartograph-graph` — architecture graph over `petgraph` | Implemented, tested |
 | `cartograph-parser` — tree-sitter TypeScript/TSX **and Python** extraction | Implemented, tested |
 | `cartograph-cli` — `version`, `parse`, `normalize`, `match` | Implemented |
-| `cartograph-resolver` — canonical routes, matching, dynamic URL evaluation | Implemented, tested (ORM is M06) |
+| `cartograph-resolver` — canonical routes, matching, dynamic URLs, ORM resolution | Implemented, tested |
 | `cartograph-testkit` — fixtures | Implemented |
 
 ```console

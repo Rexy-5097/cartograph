@@ -8,9 +8,9 @@
 | Field | Value |
 |---|---|
 | Active milestone | **M06 — ORM resolution** (unlocked, not started) |
-| Status | M00–M05 **ACCEPTED**; M06 unlocked, no code written |
-| Branch | `main` |
-| Next permitted milestone | M06 — **unlocked**; M07 locked until M06 is accepted |
+| Status | M00–M05 **ACCEPTED**; M06 complete and gate-clean, pending human review (PR #8) |
+| Branch | `feature/m06-orm-resolution` |
+| Next permitted milestone | M07 — **locked** until M06 is accepted |
 | Last accepted checkpoint | `cartograph-m05` (immutable, merge commit `5770b59`) |
 | Spec | Frozen V3, August 2026 |
 
@@ -19,6 +19,10 @@
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
   enforced by construction), architecture graph over petgraph, testkit with
   the spec's worked cross-stack chain as fixtures.
+- **M06: ORM and database resolution** — SQLAlchemy and Django models to
+  tables, handler-to-model access, and the complete cross-stack chain walkable
+  end to end. Two defects found by output inspection: a Django `Meta` name
+  collision, and a graph identity split (ADR-0011).
 - **M05: dynamic URL resolution** — symbolic value model, restricted expression
   evaluation, cross-file constants, partial reconstruction into the unchanged
   M04 matcher. Real repositories: zero additional matches, zero regressions;
@@ -41,7 +45,7 @@
   sites, string/template/concatenation structure, HTTP observations,
   error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
   (35 files) and swr (194 files).
-- 297 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+- 331 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
   criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
