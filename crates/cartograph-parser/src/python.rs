@@ -333,12 +333,33 @@ impl Walker<'_> {
             return;
         };
         let name = self.text(name_node);
-        self.push_symbol(SymbolKind::Class, &name, false, decorators, node);
+        let bases = self.class_bases(node);
+        self.push_symbol_with_bases(SymbolKind::Class, &name, false, decorators, bases, node);
         self.scope.push(name);
         if let Some(body) = node.child_by_field_name("body") {
             self.walk_children(body);
         }
         self.scope.pop();
+    }
+
+    /// Is this assignment a class-body attribute?
+    ///
+    /// An assignment nests one level deeper than a definition — through an
+    /// `expression_statement` — so it needs its own check rather than reusing
+    /// [`Self::in_class_body`].
+    fn is_class_attribute(node: Node<'_>) -> bool {
+        let mut current = node;
+        // Walk out of the statement wrapper, then the block, to the owner.
+        for _ in 0..3 {
+            let Some(parent) = current.parent() else {
+                return false;
+            };
+            if parent.kind() == "class_definition" {
+                return true;
+            }
+            current = parent;
+        }
+        false
     }
 
     /// Is this definition's immediate parent a class body?
@@ -357,8 +378,14 @@ impl Walker<'_> {
     }
 
     fn extract_assignment(&mut self, node: Node<'_>) {
-        // Module scope only, matching the TypeScript extractor.
-        if !self.scope.is_empty() {
+        // Module scope, or a class body. A class-body assignment is
+        // declarative metadata — `__tablename__ = "orders"`, Django's
+        // `db_table` — and reading it is the difference between resolving a
+        // table and guessing which string in a class happens to be one.
+        //
+        // Assignments inside a function are still skipped: a local's value
+        // depends on control flow this analysis does not model.
+        if !self.scope.is_empty() && !Self::is_class_attribute(node) {
             return;
         }
         let Some(left) = node.child_by_field_name("left") else {
@@ -392,12 +419,37 @@ impl Walker<'_> {
         }
     }
 
+    /// The base classes named in a class declaration's argument list.
+    fn class_bases(&self, node: Node<'_>) -> Vec<String> {
+        let Some(args) = node.child_by_field_name("superclasses") else {
+            return Vec::new();
+        };
+        let mut cursor = args.walk();
+        args.named_children(&mut cursor)
+            .filter(|c| matches!(c.kind(), "identifier" | "attribute"))
+            .map(|c| self.text(c))
+            .collect()
+    }
+
     fn push_symbol(
         &mut self,
         kind: SymbolKind,
         name: &str,
         is_async: bool,
         decorators: Vec<String>,
+        node: Node<'_>,
+    ) {
+        self.push_symbol_with_bases(kind, name, is_async, decorators, Vec::new(), node);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn push_symbol_with_bases(
+        &mut self,
+        kind: SymbolKind,
+        name: &str,
+        is_async: bool,
+        decorators: Vec<String>,
+        bases: Vec<String>,
         node: Node<'_>,
     ) {
         self.analysis.symbols.push(Symbol {
@@ -408,6 +460,7 @@ impl Walker<'_> {
             // Python has no export statement; `__all__` upgrades this later.
             export: ExportStatus::NotApplicable,
             decorators,
+            bases,
             span: span_of(node),
         });
     }
