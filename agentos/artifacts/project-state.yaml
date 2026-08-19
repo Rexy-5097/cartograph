@@ -69,7 +69,7 @@ gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..0
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 331 passed, 0 failed
+  tests: PASS                    # QG-004 - 335 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
@@ -78,7 +78,7 @@ gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..0
   ci: PENDING                    # recorded when PR #8 CI completes
 
 tests:
-  total: 331
+  total: 335
   failed: 0
 
 benchmarks:

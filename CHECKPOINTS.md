@@ -476,7 +476,7 @@ identity; the complete cross-stack chain walkable end to end.
 |---|---|
 | `cargo fmt --all -- --check` | PASS |
 | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
-| `cargo test --workspace` | PASS — 331 tests |
+| `cargo test --workspace` | PASS — 335 tests |
 | `cargo bench --workspace --no-run` | PASS |
 | QG-001 … QG-009 | PASS — 9/9 |
 | AgentOS validator | PASS — 99/100 |
@@ -533,7 +533,32 @@ refusal working at scale, not a failure.
 on every previously-tested corpus (DRF 0/50/271/95/22 with 50 edges; FastAPI 63
 unsupported with 0 edges). Every new edge is an ORM edge; no HTTP decision moved.
 
-**Negative coverage:** 15 refusal cases assert no edge - non-model classes,
+**Independent verification pass.** Every slice was re-verified after
+implementation rather than trusted from its own build: focused test runs per
+slice, parser output inspected directly against all four mandated cases,
+ground-truth checks against corpus source, and a before/after comparison.
+Four gaps were found and closed:
+
+1. A **conditionally declared** `__tablename__` (`if DEBUG:`) was correctly
+   refused but untested — the parser records class-body assignments, not ones
+   nested in control flow, so choosing a branch is impossible by construction.
+   Regression test added.
+2. A **non-model class carrying `__tablename__`** was correctly refused but
+   untested. Added.
+3. The **Meta-collision regression** asserted only that the table name was
+   absent, not that **no edge** was produced. Rewritten to the exact
+   construction and to assert one table node and one `Queries` edge.
+4. Four refusal tests asserted an empty collection **without proving why**.
+   Each now carries a positive control — the model resolved, the call exists —
+   so the test proves the refusal is for the intended reason rather than a
+   failure to find anything.
+
+A fifth check was added at pipeline level: `the_handler_is_exactly_one_node_across_both_analyses`
+reproduces the ADR-0011 defect through the real analyzers rather than a
+synthetic graph, asserting one handler node with one inbound and one outbound
+edge and four nodes total.
+
+**Negative coverage:** 17 refusal cases assert no edge - non-model classes,
 similar base names, dynamic `db_table`, malformed `Meta`, unrecognised manager
 methods, shadowed names, module-scope access, ambiguous model names, raw SQL,
 and unresolved tables.
