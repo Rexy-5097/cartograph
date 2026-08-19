@@ -54,6 +54,7 @@
 
 pub mod canonical;
 pub mod edge;
+pub mod evaluator;
 pub mod matching;
 pub mod normalize;
 pub mod symbolic;
@@ -63,6 +64,7 @@ pub use canonical::{
     ObservationKind, RouteProvenance, Segment,
 };
 pub use edge::add_edge_for_match;
+pub use evaluator::{Scope, evaluate_expression, evaluate_string_fact};
 pub use matching::{
     Candidate, MatchReason, MatchResult, MatchStatus, MethodCompatibility, PathCompatibility,
     RouteIndex, UnsupportedReason, match_client, priors,
