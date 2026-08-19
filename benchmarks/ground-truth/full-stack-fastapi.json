@@ -1,0 +1,802 @@
+{
+ "chains": [],
+ "commit": "162344da111e833b30892728372ab95331f06873",
+ "independence": "Authored from repository source by benchmarks/draft_ground_truth.py, which is given a filesystem path and has no access to Cartograph output. Reviewed against source before use.",
+ "must_not_produce": [
+  {
+   "assertion": "no table may be claimed for UserBase (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 14,
+   "model": "UserBase",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for UserRegister (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 26,
+   "model": "UserRegister",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for UserUpdate (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 33,
+   "model": "UserUpdate",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for UserUpdateMe (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 41,
+   "model": "UserUpdateMe",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for UpdatePassword (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 46,
+   "model": "UpdatePassword",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for UsersPublic (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 68,
+   "model": "UsersPublic",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for ItemBase (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 74,
+   "model": "ItemBase",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for ItemUpdate (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 85,
+   "model": "ItemUpdate",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for ItemsPublic (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 110,
+   "model": "ItemsPublic",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for Message (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 116,
+   "model": "Message",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for Token (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 121,
+   "model": "Token",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for TokenPayload (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 127,
+   "model": "TokenPayload",
+   "rule": "OUT-1"
+  },
+  {
+   "assertion": "no table may be claimed for NewPassword (sqlmodel)",
+   "check": "no Queries edge whose source node is named this model",
+   "file": "backend/app/models.py",
+   "line": 131,
+   "model": "NewPassword",
+   "rule": "OUT-1"
+  }
+ ],
+ "orm_declarations": [
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:14",
+   "line": 14,
+   "model": "UserBase",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:26",
+   "line": 26,
+   "model": "UserRegister",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:33",
+   "line": 33,
+   "model": "UserUpdate",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:41",
+   "line": 41,
+   "model": "UserUpdateMe",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:46",
+   "line": 46,
+   "model": "UpdatePassword",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:68",
+   "line": 68,
+   "model": "UsersPublic",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:74",
+   "line": 74,
+   "model": "ItemBase",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:85",
+   "line": 85,
+   "model": "ItemUpdate",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:110",
+   "line": 110,
+   "model": "ItemsPublic",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:116",
+   "line": 116,
+   "model": "Message",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:121",
+   "line": 121,
+   "model": "Token",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:127",
+   "line": 127,
+   "model": "TokenPayload",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "SQLModel"
+   ],
+   "classification": "UNSUPPORTED",
+   "file": "backend/app/models.py",
+   "flavour": "sqlmodel",
+   "id": "backend/app/models.py:131",
+   "line": 131,
+   "model": "NewPassword",
+   "reason": "ORM flavour outside the two M06 declared",
+   "relationship": "QUERIES",
+   "rule": "OUT-1",
+   "table": null,
+   "table_source": null
+  }
+ ],
+ "orm_population": 13,
+ "orm_rule_counts": {
+  "OUT-1": 13
+ },
+ "relationships": [],
+ "repository": "full-stack-fastapi",
+ "route_declarations": [
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/items.py",
+   "handler": "read_items",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/items.py:13",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 13,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/",
+   "receiver": "router",
+   "registration_prefix": "/items",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/\", response_model=ItemsPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/items.py",
+   "handler": "read_item",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/items.py:48",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 48,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{id}",
+   "receiver": "router",
+   "registration_prefix": "/items",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/{id}\", response_model=ItemPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/items.py",
+   "handler": "create_item",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/items.py:61",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 61,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/",
+   "receiver": "router",
+   "registration_prefix": "/items",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/\", response_model=ItemPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/items.py",
+   "handler": "update_item",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/items.py:75",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 75,
+   "methods_as_written": [
+    "PUT"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{id}",
+   "receiver": "router",
+   "registration_prefix": "/items",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.put(\"/{id}\", response_model=ItemPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/items.py",
+   "handler": "delete_item",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/items.py:99",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 99,
+   "methods_as_written": [
+    "DELETE"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{id}",
+   "receiver": "router",
+   "registration_prefix": "/items",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.delete(\"/{id}\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/login.py",
+   "handler": "login_access_token",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/login.py:23",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 23,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/login/access-token",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/login/access-token\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/login.py",
+   "handler": "test_token",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/login.py:45",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 45,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/login/test-token",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/login/test-token\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/login.py",
+   "handler": "recover_password",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/login.py:53",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 53,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/password-recovery/{email}",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/password-recovery/{email}\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/login.py",
+   "handler": "reset_password",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/login.py:77",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 77,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/reset-password/",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/reset-password/\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/login.py",
+   "handler": "recover_password_html_content",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/login.py:100",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 100,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/password-recovery-html-content/{email}",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/private.py",
+   "handler": "create_user",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/private.py:23",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 23,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/users/",
+   "receiver": "router",
+   "registration_prefix": "/private",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/users/\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "read_users",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:32",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 32,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "create_user",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:54",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 54,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "update_user_me",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:81",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 81,
+   "methods_as_written": [
+    "PATCH"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/me",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.patch(\"/me\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "update_password_me",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:103",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 103,
+   "methods_as_written": [
+    "PATCH"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/me/password",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.patch(\"/me/password\", response_model=Message)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "read_user_me",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:124",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 124,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/me",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/me\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "delete_user_me",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:132",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 132,
+   "methods_as_written": [
+    "DELETE"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/me",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.delete(\"/me\", response_model=Message)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "register_user",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:146",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 146,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/signup",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/signup\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "read_user_by_id",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:162",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 162,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{user_id}",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/{user_id}\", response_model=UserPublic)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "update_user",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:182",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 182,
+   "methods_as_written": [
+    "PATCH"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{user_id}",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.patch("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/users.py",
+   "handler": "delete_user",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/users.py:214",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 214,
+   "methods_as_written": [
+    "DELETE"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/{user_id}",
+   "receiver": "router",
+   "registration_prefix": "/users",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.delete(\"/{user_id}\", dependencies=[Depends(get_current_active_superuser)])"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/utils.py",
+   "handler": "test_email",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/utils.py:11",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 11,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/test-email/",
+   "receiver": "router",
+   "registration_prefix": "/utils",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/app/api/routes/utils.py",
+   "handler": "health_check",
+   "handler_resolvable": true,
+   "id": "backend/app/api/routes/utils.py:29",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 29,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/health-check/",
+   "receiver": "router",
+   "registration_prefix": "/utils",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/health-check/\")"
+  }
+ ],
+ "rule_counts": {
+  "IN-BE-1": 23
+ },
+ "sampling": {
+  "per_form_target": "all",
+  "population": 23,
+  "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
+  "selected": 23
+ },
+ "schema": "cartograph.ground-truth/1",
+ "verification": {
+  "cartograph_output_consulted": false,
+  "notes": [
+   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
+   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
+   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+  ],
+  "reviewed": true,
+  "reviewed_against": "repository source at the pinned commit"
+ }
+}

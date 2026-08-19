@@ -1,0 +1,740 @@
+{
+ "chains": [],
+ "commit": "8ee706ebaa32804ae7d674bfb779f1b43609b1e4",
+ "independence": "Authored from repository source by benchmarks/draft_ground_truth.py, which is given a filesystem path and has no access to Cartograph output. Reviewed against source before use.",
+ "must_not_produce": [],
+ "orm_declarations": [
+  {
+   "bases": [
+    "DeclarativeBase"
+   ],
+   "classification": "SAFE_REFUSAL",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:148",
+   "line": 148,
+   "model": "Base",
+   "note": "a declarative base, not a mapped model; it maps to no table and must not produce a Queries edge",
+   "reason": "no table declared in this class",
+   "relationship": "QUERIES",
+   "rule": "SR-2",
+   "table": null,
+   "table_source": null
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:685",
+   "line": 685,
+   "model": "Persona__User",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "persona__user",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:865",
+   "line": 865,
+   "model": "ChatMessage__StandardAnswer",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "chat_message__standard_answer",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:1711",
+   "line": 1711,
+   "model": "KGRelationship",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "kg_relationship",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:2233",
+   "line": 2233,
+   "model": "SearchSettings",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "search_settings",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:3099",
+   "line": 3099,
+   "model": "DocumentByConnectorCredentialPair",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "document_by_connector_credential_pair",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:3750",
+   "line": 3750,
+   "model": "ImageGenerationConfig",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "image_generation_config",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:4156",
+   "line": 4156,
+   "model": "Persona",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "persona",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:4607",
+   "line": 4607,
+   "model": "Milestone",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "milestone",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:5043",
+   "line": 5043,
+   "model": "UserGroup__ConnectorCredentialPair",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "user_group__connector_credential_pair",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:5289",
+   "line": 5289,
+   "model": "StandardAnswer",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "standard_answer",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:5782",
+   "line": 5782,
+   "model": "MCPServer",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "mcp_server",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:6370",
+   "line": 6370,
+   "model": "Sandbox",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "sandbox",
+   "table_source": "__tablename__"
+  },
+  {
+   "bases": [
+    "Base"
+   ],
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/models.py",
+   "flavour": "sqlalchemy",
+   "id": "backend/onyx/db/models.py:6907",
+   "line": 6907,
+   "model": "CodeInterpreterServer",
+   "reason": "__tablename__ declares the table",
+   "relationship": "QUERIES",
+   "rule": "IN-ORM-1",
+   "table": "code_interpreter_server",
+   "table_source": "__tablename__"
+  }
+ ],
+ "orm_population": 153,
+ "orm_rule_counts": {
+  "IN-ORM-1": 13,
+  "SR-2": 1
+ },
+ "relationships": [],
+ "repository": "onyx",
+ "route_declarations": [
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/ee/onyx/db/scim.py",
+   "handler": "create_token",
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/db/scim.py:11",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 11,
+   "methods_as_written": [
+    "POST"
+   ],
+   "path_as_written": "/tokens",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/tokens\")"
+  },
+  {
+   "classification": "INSTRUMENT_NO_PATH",
+   "file": "backend/ee/onyx/server/gateway/anthropic_passthrough.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/server/gateway/anthropic_passthrough.py:4",
+   "in_test_code": false,
+   "kind": "urlconf",
+   "line": 4,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "N/A",
+   "source": "path (api.py) cannot carry server-side tools, thinking-block signatures,"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/ee/onyx/server/manage/standard_answer.py",
+   "handler": "list_standard_answers",
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/server/manage/standard_answer.py:46",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 46,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/admin/standard-answer",
+   "receiver": "router",
+   "registration_prefix": "/manage",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/admin/standard-answer\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/ee/onyx/server/metrics/license_metrics.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/server/metrics/license_metrics.py:96",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 96,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(_license_collector)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/ee/onyx/server/tenants/billing_api.py",
+   "handler": "update_seats",
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/server/tenants/billing_api.py:155",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 155,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/seats/update",
+   "receiver": "router",
+   "registration_prefix": "/tenants",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/seats/update\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/background/celery/apps/monitoring.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/background/celery/apps/monitoring.py:110",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 110,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(ShardCapacityCollector())"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/background/celery/configs/base.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/background/celery/configs/base.py:181",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 181,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "# serialization.register('pickle-bzip2', pickle_bz2_encoder, pickle_bz2_decoder, 'application/x-pickle-bz2', 'binary')"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/db/dal.py",
+   "handler": "list_users",
+   "handler_resolvable": true,
+   "id": "backend/onyx/db/dal.py:20",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 20,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/users",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/users\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/onyxbot/slack/formatting.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/onyxbot/slack/formatting.py:276",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 276,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "md.inline.register(\"slack_url_link\", _URL_LINK_PATTERN, _parse_url_link)"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/onyxbot/slack/formatting.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/onyxbot/slack/formatting.py:277",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 277,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "md.inline.register(\"slack_email_link\", _EMAIL_LINK_PATTERN, _parse_email_link)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/documents/credential.py",
+   "handler": "create_credential_with_private_key",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/documents/credential.py:194",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 194,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/credential/private-key",
+   "receiver": "router",
+   "registration_prefix": "/manage",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/credential/private-key\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/features/notifications/api.py",
+   "handler": "get_notifications_summary_api",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/features/notifications/api.py:195",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 195,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/summary",
+   "receiver": "router",
+   "registration_prefix": "/notifications",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/summary\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/features/skill/api.py",
+   "handler": "fetch_skill_for_current_user",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/features/skill/api.py:209",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 209,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/{skill_id}",
+   "receiver": "user_router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@user_router.get(\"/{skill_id}\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/manage/administrative.py",
+   "handler": "document_boost_update",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/manage/administrative.py:87",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 87,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/admin/doc-boosts",
+   "receiver": "router",
+   "registration_prefix": "/manage",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/admin/doc-boosts\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/manage/llm/api.py",
+   "handler": "list_llm_providers_for_persona",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/manage/llm/api.py:997",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 997,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/persona/{persona_id}/providers",
+   "receiver": "basic_router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@basic_router.get(\"/persona/{persona_id}/providers\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/manage/tracing/api.py",
+   "handler": "test_tracing_provider",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/manage/tracing/api.py:150",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 150,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/providers/test",
+   "receiver": "admin_router",
+   "registration_prefix": "/admin/tracing",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@admin_router.post(\"/providers/test\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/manage/web_search/api.py",
+   "handler": "list_search_providers",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/manage/web_search/api.py:69",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 69,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/search-providers",
+   "receiver": "admin_router",
+   "registration_prefix": "/admin/web-search",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@admin_router.get(\"/search-providers\", response_model=list[WebSearchProviderView])"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/server/metrics/connector_state_metrics.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/metrics/connector_state_metrics.py:302",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 302,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(_CONNECTOR_STATE_COLLECTOR)"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/server/metrics/indexing_pipeline_setup.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/metrics/indexing_pipeline_setup.py:57",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 57,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(collector)"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/onyx/server/metrics/postgres_connection_pool.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/metrics/postgres_connection_pool.py:250",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 250,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(collector)"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/saml_multi.py",
+   "handler": "saml_login_callback_get",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/saml_multi.py:268",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 268,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/callback",
+   "receiver": "router",
+   "registration_prefix": "/auth/saml",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/callback\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:94",
+   "in_test_code": true,
+   "kind": "urlconf_helper",
+   "line": 94,
+   "methods_as_written": null,
+   "path_as_written": "/drives/abc/root:/Engineering/API",
+   "receiver": "_build_item_relative_path",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-9",
+   "source": "_build_item_relative_path("
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:102",
+   "in_test_code": true,
+   "kind": "urlconf_helper",
+   "line": 102,
+   "methods_as_written": null,
+   "path_as_written": "/drives/abc/root:",
+   "receiver": "_build_item_relative_path",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-9",
+   "source": "_build_item_relative_path(\"/drives/abc/root:\", \"report.docx\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:111",
+   "in_test_code": true,
+   "kind": "urlconf_helper",
+   "line": 111,
+   "methods_as_written": null,
+   "path_as_written": "/drives/abc/root:/My%20Documents",
+   "receiver": "_build_item_relative_path",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-9",
+   "source": "_build_item_relative_path(\"/drives/abc/root:/My%20Documents\", \"report.docx\")"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/tests/unit/onyx/server/features/craft/sandbox/sandbox_daemon/test_sandbox_daemon.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/tests/unit/onyx/server/features/craft/sandbox/sandbox_daemon/test_sandbox_daemon.py:1490",
+   "in_test_code": true,
+   "kind": "urlconf_helper",
+   "line": 1490,
+   "methods_as_written": null,
+   "path_as_written": "00000000-0000-0000-0000-000000000003",
+   "receiver": "sidecar_snapshot_restore_path",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-9",
+   "source": "sidecar_snapshot_restore_path(\"00000000-0000-0000-0000-000000000003\"),"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "backend/tests/unit/onyx/server/manage/llm/test_fetch_models_api.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "backend/tests/unit/onyx/server/manage/llm/test_fetch_models_api.py:1782",
+   "in_test_code": true,
+   "kind": "imperative",
+   "line": 1782,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "client.meta.events.register("
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "file": "loadtest/prometheus_exporter.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "loadtest/prometheus_exporter.py:35",
+   "in_test_code": false,
+   "kind": "imperative",
+   "line": 35,
+   "methods_as_written": null,
+   "path_as_written": null,
+   "receiver": null,
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-3",
+   "source": "REGISTRY.register(LocustCollector(environment))"
+  }
+ ],
+ "rule_counts": {
+  "IN-BE-1": 12,
+  "N/A": 1,
+  "OUT-3": 10,
+  "OUT-9": 4
+ },
+ "sampling": {
+  "per_form_target": 12,
+  "population": 600,
+  "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
+  "selected": 27
+ },
+ "schema": "cartograph.ground-truth/1",
+ "verification": {
+  "cartograph_output_consulted": false,
+  "notes": [
+   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
+   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
+   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+  ],
+  "reviewed": true,
+  "reviewed_against": "repository source at the pinned commit"
+ }
+}
