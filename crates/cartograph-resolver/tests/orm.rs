@@ -1,0 +1,513 @@
+//! ORM and database resolution: what resolves, and what must refuse.
+//!
+//! Fifteen mandated refusal cases assert **no edge is produced**, not merely an
+//! empty collection. A resolver that maps every class to a table is worse than
+//! useless, because a wrong table poisons everything downstream.
+
+use cartograph_core::{EdgeKind, NodeKind, Provenance};
+use cartograph_graph::ArchitectureGraph;
+use cartograph_parser::Analyzer;
+use cartograph_parser::model::FileAnalysis;
+use cartograph_resolver::{AccessKind, OrmAnalysis, OrmFlavor, TableName, add_orm_edges};
+
+fn analyze(files: &[(&str, &str)]) -> Vec<FileAnalysis> {
+    let mut a = Analyzer::new().expect("grammars load");
+    files
+        .iter()
+        .map(|(p, s)| a.analyze_source(p, s).expect("fixture parses"))
+        .collect()
+}
+
+fn orm(files: &[(&str, &str)]) -> OrmAnalysis {
+    OrmAnalysis::build(&analyze(files))
+}
+
+/// Builds the graph and returns (edge count, graph).
+fn graph_of(files: &[(&str, &str)]) -> (usize, ArchitectureGraph) {
+    let analysis = orm(files);
+    let mut g = ArchitectureGraph::new();
+    let n = add_orm_edges(&mut g, &analysis, None).expect("graph accepts its own nodes");
+    (n, g)
+}
+
+const SQLALCHEMY_MODELS: &str = r#"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Order(Base):
+    __tablename__ = "orders"
+
+class LineItem(Base):
+    __tablename__ = "order_records"
+"#;
+
+const DJANGO_MODELS: &str = r#"
+from django.db import models
+
+class Invoice(models.Model):
+    class Meta:
+        db_table = "invoices"
+
+class Receipt(models.Model):
+    pass
+"#;
+
+// ── Slices 1–2: SQLAlchemy ──────────────────────────────────────────
+
+#[test]
+fn sqlalchemy_models_are_discovered_by_their_base() {
+    let a = orm(&[("api/models.py", SQLALCHEMY_MODELS)]);
+    let order = a.models.get("Order").expect("Order discovered");
+    assert_eq!(order.flavor, OrmFlavor::SqlAlchemy);
+    assert_eq!(order.base, "Base");
+}
+
+#[test]
+fn an_explicit_tablename_is_read_exactly() {
+    let a = orm(&[("api/models.py", SQLALCHEMY_MODELS)]);
+    assert_eq!(a.models["Order"].table.name(), Some("orders"));
+    assert_eq!(
+        a.models["LineItem"].table.name(),
+        Some("order_records"),
+        "the declared name wins; it is not derived from the class name"
+    );
+    assert!(matches!(
+        a.models["Order"].table,
+        TableName::Declared { ref attribute, .. } if attribute == "__tablename__"
+    ));
+}
+
+#[test]
+fn a_sqlalchemy_model_without_a_tablename_is_unresolved_not_guessed() {
+    let a = orm(&[(
+        "api/models.py",
+        r"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Order(Base):
+    pass
+",
+    )]);
+    assert_eq!(
+        a.models["Order"].table.name(),
+        None,
+        "deriving \"orders\" from the class name would be a guess"
+    );
+    assert!(matches!(
+        a.models["Order"].table,
+        TableName::Unresolved { .. }
+    ));
+}
+
+// ── Slices 3–4: Django ──────────────────────────────────────────────
+
+#[test]
+fn django_models_are_discovered_and_meta_db_table_is_read() {
+    let a = orm(&[("api/models.py", DJANGO_MODELS)]);
+    let invoice = a.models.get("Invoice").expect("Invoice discovered");
+    assert_eq!(invoice.flavor, OrmFlavor::Django);
+    assert_eq!(invoice.table.name(), Some("invoices"));
+}
+
+#[test]
+fn a_django_model_without_db_table_is_unresolved_because_the_app_label_is_unknown() {
+    let a = orm(&[("api/models.py", DJANGO_MODELS)]);
+    assert_eq!(
+        a.models["Receipt"].table.name(),
+        None,
+        "Django's default is app_model; the app label is not in this file"
+    );
+}
+
+#[test]
+fn a_dynamic_db_table_expression_is_refused() {
+    // The defect this test was written for: `Meta` is a universal Django class
+    // name, so matching the attribute by name alone attributed the first
+    // db_table in the file to every model.
+    let a = orm(&[(
+        "api/models.py",
+        r#"
+from django.db import models
+
+class Invoice(models.Model):
+    class Meta:
+        db_table = "invoices"
+
+class Dynamic(models.Model):
+    class Meta:
+        db_table = settings.TABLE_NAME
+"#,
+    )]);
+    assert_eq!(a.models["Invoice"].table.name(), Some("invoices"));
+    assert_eq!(
+        a.models["Dynamic"].table.name(),
+        None,
+        "a dynamic db_table must not inherit another model's table"
+    );
+}
+
+#[test]
+fn a_malformed_meta_produces_no_table() {
+    let a = orm(&[(
+        "api/models.py",
+        r"
+from django.db import models
+
+class Broken(models.Model):
+    class Meta:
+        pass
+",
+    )]);
+    assert_eq!(a.models["Broken"].table.name(), None);
+}
+
+// ── NEGATIVE: what is not a model ───────────────────────────────────
+
+#[test]
+fn an_ordinary_class_is_not_a_model() {
+    let a = orm(&[(
+        "api/models.py",
+        r#"
+class Plain:
+    label = "orders"
+
+class Helper(object):
+    __tablename__ = "orders"
+"#,
+    )]);
+    assert!(
+        a.models.is_empty(),
+        "a class is a model only when it inherits a recognised ORM base: {:?}",
+        a.models.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_similarly_named_base_does_not_make_a_model() {
+    let a = orm(&[(
+        "api/models.py",
+        r#"
+class OrderBase:
+    pass
+
+class Order(OrderBase):
+    __tablename__ = "orders"
+"#,
+    )]);
+    assert!(a.models.is_empty(), "`OrderBase` is not `Base`");
+}
+
+#[test]
+fn a_string_containing_a_model_name_creates_nothing() {
+    let a = orm(&[(
+        "api/handlers.py",
+        r#"
+def log():
+    message = "Order was created in orders"
+    return message
+"#,
+    )]);
+    assert!(a.models.is_empty() && a.accesses.is_empty());
+}
+
+#[test]
+fn two_classes_claiming_one_name_are_ambiguous_and_produce_no_edge() {
+    let (edges, graph) = graph_of(&[
+        (
+            "billing/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = \"billing_orders\"\n",
+        ),
+        (
+            "shipping/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = \"shipping_orders\"\n",
+        ),
+    ]);
+    let a = orm(&[
+        (
+            "billing/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = \"billing_orders\"\n",
+        ),
+        (
+            "shipping/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = \"shipping_orders\"\n",
+        ),
+    ]);
+
+    assert!(a.ambiguous.contains(&"Order".to_string()));
+    assert!(
+        !a.models.contains_key("Order"),
+        "an ambiguous name resolves to nothing"
+    );
+    assert_eq!(
+        graph
+            .edges()
+            .filter(|e| e.target() != e.source())
+            .filter(|e| {
+                graph.node(e.target()).map(cartograph_core::Node::name) == Some("billing_orders")
+            })
+            .count(),
+        0
+    );
+    let _ = edges;
+}
+
+// ── Slice 5: handler → model access ─────────────────────────────────
+
+#[test]
+fn a_django_queryset_call_is_an_access_from_its_handler() {
+    let a = orm(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            r"
+def list_invoices():
+    return Invoice.objects.filter(paid=True)
+",
+        ),
+    ]);
+    let access = a.accesses.first().expect("one access");
+    assert_eq!(access.model, "Invoice");
+    assert_eq!(access.handler.as_deref(), Some("list_invoices"));
+    assert_eq!(access.kind, AccessKind::Query);
+    assert_eq!(access.expression, "Invoice.objects.filter");
+}
+
+#[test]
+fn a_write_method_is_recorded_as_persistence() {
+    let a = orm(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            "def make():\n    return Invoice.objects.create(x=1)\n",
+        ),
+    ]);
+    assert_eq!(a.accesses[0].kind, AccessKind::Persist);
+}
+
+#[test]
+fn model_construction_is_an_access() {
+    let a = orm(&[
+        ("api/models.py", SQLALCHEMY_MODELS),
+        (
+            "api/handlers.py",
+            "def create_order(p):\n    return Order(**p)\n",
+        ),
+    ]);
+    assert_eq!(a.accesses[0].model, "Order");
+    assert_eq!(a.accesses[0].kind, AccessKind::Persist);
+}
+
+#[test]
+fn an_unrecognised_manager_method_produces_no_access() {
+    let a = orm(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            "def weird():\n    return Invoice.objects.nonstandard()\n",
+        ),
+    ]);
+    assert!(
+        a.accesses.is_empty(),
+        "the supported subset is deliberate; an unknown method is not evidence"
+    );
+}
+
+#[test]
+fn an_access_on_a_non_model_produces_nothing() {
+    let a = orm(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            "def f():\n    return Plain.objects.get(1)\n",
+        ),
+    ]);
+    assert!(a.accesses.is_empty());
+}
+
+#[test]
+fn a_local_binding_shadowing_a_model_disqualifies_the_access() {
+    let a = orm(&[
+        ("api/models.py", SQLALCHEMY_MODELS),
+        (
+            "api/handlers.py",
+            r"
+Order = make_fake()
+
+def create():
+    return Order(x=1)
+",
+        ),
+    ]);
+    assert!(
+        a.accesses.is_empty(),
+        "the analysis cannot tell which binding the call site sees"
+    );
+}
+
+#[test]
+fn a_module_scope_access_names_no_handler_and_creates_no_edge() {
+    let files = [
+        ("api/models.py", DJANGO_MODELS),
+        ("api/handlers.py", "rows = Invoice.objects.all()\n"),
+    ];
+    let a = orm(&files);
+    assert_eq!(a.accesses[0].handler, None);
+
+    let (_, graph) = graph_of(&files);
+    assert_eq!(
+        graph
+            .edges()
+            .filter(|e| e.kind() == EdgeKind::OrmAccess)
+            .count(),
+        0,
+        "attributing a module-level access to a handler would be a guess"
+    );
+}
+
+// ── Slices 6–7: edges ───────────────────────────────────────────────
+
+#[test]
+fn a_resolved_model_produces_a_queries_edge_to_its_table() {
+    let (_, graph) = graph_of(&[("api/models.py", SQLALCHEMY_MODELS)]);
+    let edge = graph
+        .edges()
+        .find(|e| e.kind() == EdgeKind::Queries)
+        .expect("a model→table edge");
+
+    assert_eq!(edge.provenance(), Provenance::OrmResolution);
+    assert_eq!(graph.node(edge.target()).unwrap().kind(), NodeKind::Table);
+    assert!(edge.evidence().as_str().contains("__tablename__"));
+}
+
+#[test]
+fn an_unresolved_table_produces_no_table_edge() {
+    let (_, graph) = graph_of(&[(
+        "api/models.py",
+        "from django.db import models\nclass Receipt(models.Model):\n    pass\n",
+    )]);
+    assert_eq!(
+        graph
+            .edges()
+            .filter(|e| e.kind() == EdgeKind::Queries)
+            .count(),
+        0,
+        "NO EDGE IS PRODUCED when the table is unknown"
+    );
+}
+
+#[test]
+fn repeated_accesses_from_one_handler_produce_one_edge() {
+    let (_, graph) = graph_of(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            r"
+def report():
+    a = Invoice.objects.filter(x=1)
+    b = Invoice.objects.filter(x=2)
+    c = Invoice.objects.all()
+    return a, b, c
+",
+        ),
+    ]);
+    assert_eq!(
+        graph
+            .edges()
+            .filter(|e| e.kind() == EdgeKind::OrmAccess)
+            .count(),
+        1,
+        "the same fact stated three times is one fact"
+    );
+}
+
+#[test]
+fn access_and_table_relationships_stay_distinct() {
+    let (_, graph) = graph_of(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            "def f():\n    return Invoice.objects.all()\n",
+        ),
+    ]);
+    let access = graph
+        .edges()
+        .filter(|e| e.kind() == EdgeKind::OrmAccess)
+        .count();
+    let queries = graph
+        .edges()
+        .filter(|e| e.kind() == EdgeKind::Queries)
+        .count();
+    assert_eq!(
+        (access, queries),
+        (1, 1),
+        "two relationships, not one merged claim"
+    );
+}
+
+#[test]
+fn every_orm_edge_carries_evidence_and_a_location() {
+    let (_, graph) = graph_of(&[
+        ("api/models.py", DJANGO_MODELS),
+        (
+            "api/handlers.py",
+            "def f():\n    return Invoice.objects.all()\n",
+        ),
+    ]);
+    for edge in graph.edges() {
+        assert!(!edge.evidence().as_str().is_empty());
+        assert_eq!(edge.provenance(), Provenance::OrmResolution);
+        assert!(!edge.location().file().is_empty());
+    }
+}
+
+#[test]
+fn the_handler_to_table_chain_is_walkable() {
+    let (_, graph) = graph_of(&[
+        ("api/models.py", SQLALCHEMY_MODELS),
+        (
+            "api/handlers.py",
+            "def create_order(p):\n    return Order(**p)\n",
+        ),
+    ]);
+
+    let handler = graph
+        .nodes()
+        .find(|n| n.name() == "create_order")
+        .expect("handler node");
+    let to_model = graph
+        .edges_from(handler.id())
+        .next()
+        .expect("handler→model");
+    let model = graph.node(to_model.target()).unwrap();
+    assert_eq!(model.name(), "Order");
+
+    let to_table = graph.edges_from(model.id()).next().expect("model→table");
+    let table = graph.node(to_table.target()).unwrap();
+    assert_eq!(table.name(), "orders");
+    assert_eq!(table.kind(), NodeKind::Table);
+}
+
+// ── Raw SQL ─────────────────────────────────────────────────────────
+
+#[test]
+fn raw_sql_is_not_linked_to_a_model() {
+    let a = orm(&[
+        ("api/models.py", SQLALCHEMY_MODELS),
+        (
+            "api/handlers.py",
+            r#"
+def raw():
+    return execute("INSERT INTO orders (id) VALUES (1)")
+"#,
+        ),
+    ]);
+    assert!(
+        a.accesses.is_empty(),
+        "a table name inside SQL text is not evidence of an ORM relationship"
+    );
+}
