@@ -73,6 +73,8 @@ pub struct EdgeSpec {
 pub struct ArchitectureGraph {
     inner: StableDiGraph<Node, Edge>,
     indices: HashMap<NodeId, NodeIndex>,
+    /// Domain identity → node, so two analyses describing one artefact agree.
+    identities: HashMap<(NodeKind, String, Option<String>), NodeId>,
     next_node_id: u64,
     next_edge_id: u64,
     clock: fn() -> OffsetDateTime,
@@ -85,6 +87,7 @@ impl ArchitectureGraph {
         Self {
             inner: StableDiGraph::new(),
             indices: HashMap::new(),
+            identities: HashMap::new(),
             next_node_id: 0,
             next_edge_id: 0,
             clock: OffsetDateTime::now_utc,
@@ -121,6 +124,43 @@ impl ArchitectureGraph {
         let index = self.inner.add_node(node);
         self.indices.insert(id, index);
         self.next_node_id += 1;
+        Ok(id)
+    }
+
+    /// Returns the handle for an artefact, creating it only if absent.
+    ///
+    /// Two analyses describing the same artefact must reach the same node, or
+    /// the graph silently splits into disconnected fragments. M06 exposed
+    /// this: the route matcher created a `Function` node for `create_order`,
+    /// the ORM resolver created a second one, and the cross-stack chain broke
+    /// between them — every edge correct, the path unwalkable.
+    ///
+    /// Identity is the triple **(kind, name, file)**. The file distinguishes
+    /// same-named artefacts in different modules; the line does not
+    /// participate, because two analyses legitimately observe one artefact at
+    /// different lines — a decorator and a `def`, a declaration and a call
+    /// site — and treating those as different nodes is the bug this prevents.
+    ///
+    /// This is deduplication *within* one graph. Stable content-addressed
+    /// identity across graphs remains M10's problem; see
+    /// `docs/adr/ADR-0011-node-identity-within-a-graph.md`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`cartograph_core::CoreError`] if the node is invalid.
+    pub fn node_for(
+        &mut self,
+        kind: NodeKind,
+        name: impl Into<String>,
+        location: Option<SourceLocation>,
+    ) -> Result<NodeId, cartograph_core::CoreError> {
+        let name = name.into();
+        let file = location.as_ref().map(|l| l.file().to_owned());
+        if let Some(existing) = self.identities.get(&(kind, name.clone(), file.clone())) {
+            return Ok(*existing);
+        }
+        let id = self.add_node(kind, name.clone(), location)?;
+        self.identities.insert((kind, name, file), id);
         Ok(id)
     }
 
