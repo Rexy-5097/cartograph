@@ -348,11 +348,16 @@ Provisional predecessor `cartograph-m04-rc1` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m05-dynamic-url-resolution` (from `main`) |
-| Provisional checkpoint | `cartograph-m05-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m05` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m05-dynamic-url-resolution` · PR [#7](https://github.com/Rexy-5097/cartograph/pull/7) (merged) |
+| Provisional checkpoint | `cartograph-m05-rc1` (retained for traceability) |
+| **Accepted checkpoint** | **`cartograph-m05`** — merge commit `5770b59`, immutable |
+
+> Verified at acceptance: the milestone's own criterion still holds on the
+> accepted commit — `` `${API_BASE}/orders` `` resolves to `/api/v1/orders`
+> and reaches `create_order` at 0.98, while the environment-backed URL is still
+> refused. No crate file changed between `cartograph-m05-rc1` and `main`.
 
 ### Scope delivered
 
@@ -443,7 +448,8 @@ unsupported rather than explored.
 
 ### Rollback point
 
-`cartograph-m05-rc1`; previous accepted checkpoint `cartograph-m04`.
+`cartograph-m05` (accepted). Previous accepted checkpoint: `cartograph-m04`.
+Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 

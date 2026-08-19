@@ -7,11 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M05 — Dynamic URL resolution** |
-| Status | M00–M04 **ACCEPTED**; M05 complete and gate-clean, pending human review (PR #7) |
-| Branch | `feature/m05-dynamic-url-resolution` |
-| Next permitted milestone | M06 — **locked** until M05 is accepted |
-| Last accepted checkpoint | `cartograph-m04` (immutable, merge commit `1082f9a`) |
+| Active milestone | **M06 — ORM resolution** (unlocked, not started) |
+| Status | M00–M05 **ACCEPTED**; M06 unlocked, no code written |
+| Branch | `main` |
+| Next permitted milestone | M06 — **unlocked**; M07 locked until M06 is accepted |
+| Last accepted checkpoint | `cartograph-m05` (immutable, merge commit `5770b59`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists

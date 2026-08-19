@@ -29,8 +29,8 @@ real-repository validation.
 | **M02** | Python extraction — FastAPI, Flask, Django routes | Day 5 | **Accepted** (`cartograph-m02`) |
 | **M03** | Path normalisation to canonical form | Day 6 | **Accepted** (`cartograph-m03`) |
 | **M04** | Cross-language resolver — TS call to Python handler | Day 8 | **Accepted** (`cartograph-m04`) |
-| **M05** | Template evaluator for dynamic URLs | Day 11 | **In progress** |
-| M06 | ORM resolution — handler to model to table | Day 13 | Not started |
+| **M05** | Template evaluator for dynamic URLs | Day 11 | **Accepted** (`cartograph-m05`) |
+| M06 | ORM resolution — handler to model to table | Day 13 | **Unlocked, not started** |
 | M07 | Full verified chain on a real repository | Day 14 | Not started |
 | M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | Not started |
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | Not started |
