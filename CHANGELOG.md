@@ -10,6 +10,40 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M05, dynamic URL and endpoint resolution
+
+**Resolving constructed URLs without guessing.** M04 refused any client URL it
+could not read literally; M05 resolves as much of one as the source determines.
+
+- **Symbolic value model** — `Literal`, `Unknown`, `EnvVar`, `Unsupported`,
+  `Concat`, with no way to flatten an unresolved value into text. Unresolved
+  values render as `{unknown}`, `{env:NAME}`, `{unsupported}`, and a test
+  proves none can render as `undefined`, `null` or an empty string.
+- **Expression evaluation** — template literals and f-strings, `+` chains,
+  module constants resolved transitively with a depth limit so cycles
+  terminate, and environment reads across `process.env`, `import.meta.env` and
+  `os.environ`. Calls, indexing and operators are `Unsupported`, never
+  approximated.
+- **Cross-file constants** — only *exported* constants are visible to
+  importers, resolved through a restricted relative-path join.
+- **Environment variables are never read.** Only the name is recorded; a test
+  uses `PATH` to prove no value leaks into the graph.
+- **Integration** — a resolved URL becomes an ordinary `UrlObservation` and
+  flows through M03 and the M04 matcher unchanged, so every M04 rule applies
+  automatically. A test pins that a resolved URL still cannot be swallowed by
+  a bare catch-all.
+- **CLI** — `cartograph match` resolves dynamic URLs and reports how many were
+  fully or partially determined.
+- **Tests** — 54 new (18 symbolic, 21 evaluator, 15 end-to-end); 297 workspace
+  tests total. **Benchmarks** — `evaluation` criterion group.
+
+**Real-repository result, stated plainly:** M05 resolved **zero additional
+matches** across the four corpora tested, and changed **no decision**. The
+evaluator runs (63/12/15/6 URLs partially resolved) but those projects build
+URLs from runtime-configured SDK clients rather than module constants, so the
+prefix is genuinely unknown and refusing is correct. The capability is proven
+by fixtures; its real-world reach is limited by a pattern M05 cannot resolve.
+
 ### Added — M04, cross-language route resolution
 
 **The first semantic join, and the first `HttpCall` edges.** A TypeScript or

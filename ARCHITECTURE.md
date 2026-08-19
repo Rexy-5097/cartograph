@@ -41,7 +41,7 @@ adding it three times.
 | `cartograph-core` | Domain model: nodes, edges, evidence, provenance, confidence | Implemented |
 | `cartograph-graph` | The architecture graph, traversal | Implemented |
 | `cartograph-parser` | tree-sitter extraction, per language | TypeScript/TSX (M01) and Python (M02) implemented |
-| `cartograph-resolver` | Canonical routes, cross-language matching, edge construction | M03–M04 implemented; ORM at M06 |
+| `cartograph-resolver` | Canonical routes, matching, edge construction, symbolic URL evaluation | M03–M05 implemented; ORM at M06 |
 | `cartograph-cli` | The `cartograph` binary | `version`, `parse` |
 | `cartograph-testkit` | Fixtures and builders. Never a runtime dependency | Implemented |
 

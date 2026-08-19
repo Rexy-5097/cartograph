@@ -5,7 +5,7 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M05
-status: IN_PROGRESS
+status: PENDING_HUMAN_REVIEW
 current_branch: feature/m05-dynamic-url-resolution
 next_allowed_milestone: M06    # LOCKED until M05 is accepted by the human owner
 
@@ -46,10 +46,11 @@ milestones:
     accepted_tag: cartograph-m04          # immutable
     merge_commit: 1082f9ac441f39992a3558534275f9eaaa944070
   M05:
-    status: IN_PROGRESS
-    pull_request: null
-    provisional_tag: null                 # cartograph-m05-rc1 once gates pass
-    accepted_tag: null
+    status: PENDING_HUMAN_REVIEW
+    pull_request: 7
+    base: main
+    provisional_tag: cartograph-m05-rc1
+    accepted_tag: null                    # becomes cartograph-m05 at merge (ADR-0010)
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M04
@@ -61,20 +62,20 @@ gates:                           # main after PR #6, 2026-08-19 (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 241 passed, 0 failed
+  tests: PASS                    # QG-004 - 297 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PASS                       # PR #5 green from base main
+  ci: PENDING                    # recorded when PR #7 CI completes
 
 tests:
-  total: 241
+  total: 297
   failed: 0
 
 benchmarks:
-  harness: ts_extraction, py_extraction, canonicalization and matching groups run (criterion)
+  harness: ts_extraction, py_extraction, canonicalization, matching and evaluation groups run
   published_numbers: none        # internal only until methodology is documented (M08+)
 
 smoke_tests:                     # robustness only - no accuracy claim

@@ -17,8 +17,9 @@ use anyhow::{Context, Result};
 use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
-    MatchResult, MatchStatus, RouteIndex, add_edge_for_match, match_client, normalize_client_call,
-    normalize_route_declaration,
+    MatchResult, MatchStatus, RouteIndex, add_edge_for_match, collect_exported_constants,
+    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
+    with_resolved_url,
 };
 use serde::Serialize;
 
@@ -36,6 +37,10 @@ struct Totals {
     no_match: usize,
     unsupported: usize,
     edges: usize,
+    /// Dynamic URLs the evaluator fully determined (M05).
+    dynamic_resolved: usize,
+    /// Dynamic URLs partly determined, with the gaps kept explicit.
+    dynamic_partial: usize,
 }
 
 /// One decision, in the shape `--json` promises.
@@ -80,11 +85,22 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
     let mut clients = Vec::new();
 
     let started = std::time::Instant::now();
+
+    // Every file is analysed before any URL is resolved: dynamic resolution
+    // (M05) needs the whole project's exported constants to follow an import.
+    let mut analyses = Vec::with_capacity(files.len());
     for rel in &files {
-        let analysis = analyzer
-            .analyze_file(&root, rel)
-            .with_context(|| format!("analysing {rel}"))?;
+        analyses.push(
+            analyzer
+                .analyze_file(&root, rel)
+                .with_context(|| format!("analysing {rel}"))?,
+        );
+    }
+    let exported = collect_exported_constants(&analyses);
+
+    for analysis in &analyses {
         totals.files += 1;
+        let scope = scope_for_file(analysis, &exported);
 
         for route in &analysis.routes {
             backend.push(normalize_route_declaration(
@@ -94,8 +110,22 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
             ));
         }
         for call in &analysis.http_calls {
+            // M05 resolves a dynamic URL as far as the source determines it.
+            // A literal URL is declined and takes the unchanged M04 path, so
+            // previously-correct behaviour cannot shift.
+            let resolved = resolve_url(call, analysis, &scope);
+            if let Some(r) = &resolved {
+                if r.is_fully_known() {
+                    totals.dynamic_resolved += 1;
+                } else {
+                    totals.dynamic_partial += 1;
+                }
+            }
+            let effective = resolved
+                .as_ref()
+                .map_or_else(|| call.clone(), |r| with_resolved_url(call, r));
             clients.push(normalize_client_call(
-                call,
+                &effective,
                 &analysis.path,
                 analysis.language,
             ));
@@ -235,6 +265,10 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
     println!(
         "Decisions          {} exact, {} strong, {} ambiguous, {} no-match, {} unsupported",
         totals.exact, totals.strong, totals.ambiguous, totals.no_match, totals.unsupported
+    );
+    println!(
+        "Dynamic URLs       {} fully resolved, {} partially",
+        totals.dynamic_resolved, totals.dynamic_partial
     );
     println!("HttpCall edges     {}", totals.edges);
     println!("Completed in       {elapsed:.2?}");

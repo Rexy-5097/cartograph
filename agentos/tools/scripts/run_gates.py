@@ -219,7 +219,7 @@ def qg007():
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M04)")
+@gate("QG-008", "Milestone acceptance (M05)")
 def qg008():
     problems = []
     resolver_src = os.path.join(ROOT, "crates/cartograph-resolver/src")
@@ -230,6 +230,10 @@ def qg008():
         "crates/cartograph-resolver/tests/cross_stack.rs",
         "crates/cartograph-resolver/benches/matching.rs",
         "docs/resolver/matching.md",
+        "crates/cartograph-resolver/src/symbolic.rs",
+        "crates/cartograph-resolver/src/evaluator.rs",
+        "crates/cartograph-resolver/src/dynamic.rs",
+        "docs/resolver/dynamic-urls.md",
     ):
         if not os.path.exists(os.path.join(ROOT, required)):
             problems.append(f"M04 deliverable missing: {required}")
@@ -252,6 +256,16 @@ def qg008():
             code = line.split("//")[0]
             if any(sym in code for sym in forbidden):
                 problems.append(f"M05/M06 capability in {os.path.basename(path)}:{i}")
+
+    # M05 must never read the analysed project's environment.
+    for path in source_files(resolver_src, ".rs"):
+        for i, line in enumerate(read_text(path).splitlines(), 1):
+            code = line.split("//")[0]
+            if "env::var" in code or "std::env::" in code:
+                problems.append(
+                    f"resolver reads the environment in {os.path.basename(path)}:{i}; "
+                    "environment values must stay symbolic"
+                )
 
     # Edges may be produced only through the accepted-match gate.
     edge_src = read_text(os.path.join(resolver_src, "edge.rs"))
@@ -296,6 +310,11 @@ MILESTONE_TESTS = {
     "M04": [
         "crates/cartograph-resolver/tests/matching.rs",
         "crates/cartograph-resolver/tests/cross_stack.rs",
+    ],
+    "M05": [
+        "crates/cartograph-resolver/tests/symbolic.rs",
+        "crates/cartograph-resolver/tests/evaluator.rs",
+        "crates/cartograph-resolver/tests/dynamic_resolution.rs",
     ],
 }
 

@@ -227,3 +227,73 @@ fn parse_walks_a_mixed_typescript_and_python_tree_in_one_pass() {
     assert!(languages.contains("tsx"), "{languages:?}");
     assert!(languages.contains("python"), "{languages:?}");
 }
+
+// ── Dynamic URL resolution reaches the CLI (M05) ────────────────────
+//
+// A regression test for a real defect: the resolver was wired into `match`,
+// compiled, and every resolver unit test passed — while the command itself
+// still ran the M04-only path, because one edit silently failed to apply.
+// Only running the binary against a project caught it, so the guard belongs
+// here rather than in the resolver's own tests.
+
+fn dynamic_project() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("cartograph-resolver/tests/fixtures/dynamic-project")
+}
+
+#[test]
+fn match_resolves_an_imported_constant_end_to_end() {
+    let output = cartograph()
+        .args(["match", "--json"])
+        .arg(dynamic_project())
+        .output()
+        .expect("binary runs");
+    assert!(output.status.success(), "exit: {}", output.status);
+
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is pure JSON");
+
+    assert!(
+        value["totals"]["dynamic_resolved"].as_u64().unwrap() >= 1,
+        "the CLI must actually run the evaluator: {}",
+        value["totals"]
+    );
+    assert!(
+        value["totals"]["edges"].as_u64().unwrap() >= 1,
+        "a resolved URL must reach an edge: {}",
+        value["totals"]
+    );
+
+    let routes: Vec<&str> = value["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["client_route"].as_str())
+        .collect();
+    assert!(
+        routes.iter().any(|r| r.contains("/api/v1/orders")),
+        "the imported constant must be substituted: {routes:?}"
+    );
+}
+
+#[test]
+fn match_still_refuses_an_environment_backed_url() {
+    let output = cartograph()
+        .args(["match", "--json"])
+        .arg(dynamic_project())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let refused = value["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["unsupported_reason"].as_str() == Some("ClientPrefixUnresolved"));
+    assert!(
+        refused,
+        "an environment-backed prefix must still be refused after M05"
+    );
+}

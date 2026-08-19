@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Active milestone | **M05 — Dynamic URL resolution** |
-| Status | M00–M04 **ACCEPTED**; M05 in progress |
+| Status | M00–M04 **ACCEPTED**; M05 complete and gate-clean, pending human review (PR #7) |
 | Branch | `feature/m05-dynamic-url-resolution` |
 | Next permitted milestone | M06 — **locked** until M05 is accepted |
 | Last accepted checkpoint | `cartograph-m04` (immutable, merge commit `1082f9a`) |
@@ -19,6 +19,10 @@
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
   enforced by construction), architecture graph over petgraph, testkit with
   the spec's worked cross-stack chain as fixtures.
+- **M05: dynamic URL resolution** — symbolic value model, restricted expression
+  evaluation, cross-file constants, partial reconstruction into the unchanged
+  M04 matcher. Real repositories: zero additional matches, zero regressions;
+  those corpora use runtime-configured SDK clients M05 correctly refuses.
 - **M04: cross-language route matching** — the first semantic join and the
   first `HttpCall` edges, with candidate indexing, deterministic compatibility
   rules, a discriminating-evidence requirement, and ambiguity that produces no
@@ -37,7 +41,7 @@
   sites, string/template/concatenation structure, HTTP observations,
   error-tolerant diagnostics. CLI `parse` command. Smoke-tested on zustand
   (35 files) and swr (194 files).
-- 241 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
+- 297 tests passing; fmt/clippy(-D warnings)/check clean; ts_extraction
   criterion group (numbers internal).
 - AgentOS v1.0.0 vendored under `agentos/`, validator PASS 99/100.
 - Governance: PROJECT_RULES (25 rules), ARCHITECTURE, ROADMAP, CHECKPOINTS,
