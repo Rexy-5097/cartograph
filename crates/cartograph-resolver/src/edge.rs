@@ -91,7 +91,7 @@ fn client_node(graph: &mut ArchitectureGraph, result: &MatchResult) -> Result<No
     let file = &result.client.provenance.file;
     let location = SourceLocation::new(file.clone(), 1).ok();
     graph
-        .add_node(NodeKind::File, file.clone(), location)
+        .node_for(NodeKind::File, file.clone(), location)
         .map_err(|_| GraphError::UnknownNode {
             id: NodeId::from_raw(u64::MAX),
         })
@@ -112,7 +112,7 @@ fn backend_node(
         None => (NodeKind::Route, candidate.route.to_string()),
     };
     graph
-        .add_node(kind, name, location)
+        .node_for(kind, name, location)
         .map_err(|_| GraphError::UnknownNode {
             id: NodeId::from_raw(u64::MAX),
         })
