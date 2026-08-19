@@ -17,9 +17,9 @@ use anyhow::{Context, Result};
 use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
-    MatchResult, MatchStatus, RouteIndex, add_edge_for_match, collect_exported_constants,
-    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
-    with_resolved_url,
+    MatchResult, MatchStatus, OrmAnalysis, RouteIndex, add_edge_for_match, add_orm_edges,
+    collect_exported_constants, match_client, normalize_client_call, normalize_route_declaration,
+    resolve_url, scope_for_file, with_resolved_url,
 };
 use serde::Serialize;
 
@@ -37,6 +37,11 @@ struct Totals {
     no_match: usize,
     unsupported: usize,
     edges: usize,
+    /// ORM models discovered, and how many resolved a table (M06).
+    orm_models: usize,
+    orm_tables: usize,
+    orm_edges: usize,
+    orm_ambiguous: usize,
     /// Dynamic URLs the evaluator fully determined (M05).
     dynamic_resolved: usize,
     /// Dynamic URLs partly determined, with the gaps kept explicit.
@@ -68,15 +73,46 @@ struct JsonCandidate {
     reasons: Vec<String>,
 }
 
+/// One ORM relationship, in the shape `--json` promises.
+#[derive(Debug, Serialize)]
+struct JsonOrm {
+    model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    table: Option<String>,
+    table_evidence: String,
+    flavor: String,
+    base: String,
+    file: String,
+    line: u32,
+    /// Handlers that access this model, with the call that evidenced it.
+    accessed_by: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct JsonReport {
     root: String,
     totals: Totals,
     matches: Vec<JsonMatch>,
+    orm: Vec<JsonOrm>,
+    /// Model names claimed by more than one class, which resolve to nothing.
+    orm_ambiguous: Vec<String>,
 }
 
 /// Matches every client observation under `path` against the routes found there.
 pub fn run(path: &Path, json: bool) -> Result<()> {
+    let outcome = analyse(path)?;
+    report(path, outcome, json)
+}
+
+/// Everything one run produced.
+struct Outcome {
+    totals: Totals,
+    results: Vec<MatchResult>,
+    orm: OrmAnalysis,
+    elapsed: std::time::Duration,
+}
+
+fn analyse(path: &Path) -> Result<Outcome> {
     let (root, files) = discovery::discover(path)?;
     let mut analyzer = Analyzer::new().context("loading grammars")?;
 
@@ -153,13 +189,71 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
             totals.edges += 1;
         }
     }
+    // M06: handler → model → table, over the same graph so the cross-stack
+    // chain stays connected (ADR-0011).
+    let orm = OrmAnalysis::build(&analyses);
+    totals.orm_models = orm.models.len();
+    totals.orm_tables = orm
+        .models
+        .values()
+        .filter(|m| m.table.name().is_some())
+        .count();
+    totals.orm_ambiguous = orm.ambiguous.len();
+    totals.orm_edges = add_orm_edges(&mut graph, &orm, None)?;
+
     let elapsed = started.elapsed();
 
+    Ok(Outcome {
+        totals,
+        results,
+        orm,
+        elapsed,
+    })
+}
+
+fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
+    let Outcome {
+        totals,
+        results,
+        orm,
+        elapsed,
+    } = outcome;
+
     if json {
+        let mut orm_rows: Vec<JsonOrm> = orm
+            .models
+            .values()
+            .map(|m| JsonOrm {
+                model: m.name.clone(),
+                table: m.table.name().map(ToOwned::to_owned),
+                table_evidence: m.table.explain(),
+                flavor: format!("{:?}", m.flavor),
+                base: m.base.clone(),
+                file: m.file.clone(),
+                line: m.span.start_line,
+                accessed_by: orm
+                    .accesses
+                    .iter()
+                    .filter(|a| a.model == m.name)
+                    .filter_map(|a| {
+                        a.handler.as_ref().map(|h| {
+                            format!(
+                                "{h} via {}() at {}:{}",
+                                a.expression, a.file, a.span.start_line
+                            )
+                        })
+                    })
+                    .collect(),
+            })
+            .collect();
+        orm_rows.sort_by(|a, b| a.model.cmp(&b.model));
+
         let report = JsonReport {
             root: path.display().to_string(),
             totals,
             matches: results.iter().map(json_match).collect(),
+            orm: orm_rows,
+            orm_ambiguous: orm.ambiguous.clone(),
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -271,6 +365,16 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
         totals.dynamic_resolved, totals.dynamic_partial
     );
     println!("HttpCall edges     {}", totals.edges);
+    println!(
+        "ORM                {} models ({} with a resolved table), {} edges",
+        totals.orm_models, totals.orm_tables, totals.orm_edges
+    );
+    if totals.orm_ambiguous > 0 {
+        println!(
+            "                   {} model name(s) claimed by more than one class — no edge",
+            totals.orm_ambiguous
+        );
+    }
     println!("Completed in       {elapsed:.2?}");
     println!();
     println!("Edges are produced only for exact and strong matches. Ambiguous results");
