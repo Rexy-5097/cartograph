@@ -488,6 +488,9 @@ impl Walker<'_> {
             // TypeScript decorator extraction is not part of M02; the field is
             // shared, and TS fills it when a milestone needs it.
             decorators: Vec::new(),
+            // TypeScript class heritage is not extracted yet; the field is
+            // shared and TS fills it when a milestone needs it.
+            bases: Vec::new(),
             span: span_of(node),
         });
     }

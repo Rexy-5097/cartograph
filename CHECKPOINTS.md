@@ -453,6 +453,104 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M06 — ORM and database resolution
+
+| Field | Value |
+|---|---|
+| Status | **PENDING HUMAN REVIEW** — not accepted |
+| Date | 2026-08-19 |
+| Branch | `feature/m06-orm-resolution` (from `main`) |
+| Provisional checkpoint | `cartograph-m06-rc1` (annotated; the tag is the SHA authority) |
+| Accepted checkpoint | *none yet* — `cartograph-m06` is created at acceptance |
+
+### Scope delivered
+
+SQLAlchemy and Django model discovery; `__tablename__` and `Meta.db_table`
+resolution with no name ever derived from a class name; handler-to-model access
+over a deliberate subset; `OrmAccess` and `Queries` edges; ADR-0011 node
+identity; the complete cross-stack chain walkable end to end.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 331 tests |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 99/100 |
+
+### Benchmark state
+
+`orm`: 1 model 473 ns; 500 models 639 us; 100 models x 100 handlers 67.5 us;
+graph build 143 us; full-stack chain 1.92 us. Internal only.
+
+### Verification findings
+
+**Two real defects, both found by inspecting output rather than by tests.**
+
+1. **`Meta` name collision.** Django nests a class called `Meta` in every model,
+   and matching the `db_table` attribute by its owner's *name* attributed the
+   first `db_table` in a file to every model in it. A model with a dynamic
+   `db_table = settings.TABLE` inherited an unrelated model's table. Root cause:
+   identity by name where names are universal. Fixed by span containment;
+   regression test `a_dynamic_db_table_expression_is_refused`.
+2. **Graph identity — the chain was unwalkable.** M04 created a `Function` node
+   for a route's handler and M06 created a second for the same handler. Every
+   edge was individually correct and the path was still broken. Found only by a
+   full-stack traversal test. Fixed by `ArchitectureGraph::node_for`
+   (ADR-0011); five graph regression tests added, one reproducing the
+   two-analyses case directly.
+
+**A third issue caught during slice 0**, before any ORM code existed: M02
+skipped class-body assignments, so `__tablename__` was invisible. Without
+fixing the parser, M06 would have had to guess which string in a class was a
+table name. Two parser facts were added instead: class attributes and class
+bases.
+
+**Real-repository validation**
+
+| Corpus | Ref | Models | With table | Ambiguous | ORM edges |
+|---|---|---|---|---|---|
+| sqlalchemy/sqlalchemy | `16d00ec` | 37 | 35 | 25 | 228 |
+| django/django | `d992705` | 869 | 34 | 158 | 1957 |
+| encode/django-rest-framework | `751a19f` | 73 | 0 | - | 119 |
+| tiangolo/full-stack-fastapi-template | `162344d` | 0 | 0 | - | 0 |
+
+**Ground truth checked by hand.** SQLAlchemy's `AddressAssociation` resolves to
+`address_association`, matching its source exactly. Django's `A02 -> a01` looked
+like a false positive and was investigated: `tests/unmanaged_models/models.py`
+genuinely declares `db_table = "a01"` on `A02`. Reading the declaration gave the
+right answer where deriving from the class name would have given `a02` - the
+clearest evidence that refusing to derive is correct.
+
+The FastAPI template yields zero models, correctly: it uses SQLModel, outside
+the supported set. Django's 869 models yielding only 34 tables is the app-label
+refusal working at scale, not a failure.
+
+**Before/after - zero regressions.** M04 and M05 decision counts are identical
+on every previously-tested corpus (DRF 0/50/271/95/22 with 50 edges; FastAPI 63
+unsupported with 0 edges). Every new edge is an ORM edge; no HTTP decision moved.
+
+**Negative coverage:** 15 refusal cases assert no edge - non-model classes,
+similar base names, dynamic `db_table`, malformed `Meta`, unrecognised manager
+methods, shadowed names, module-scope access, ambiguous model names, raw SQL,
+and unresolved tables.
+
+### Known limitations
+
+`session.query(Order)` unsupported (the model is a call argument and M02 records
+argument counts, not identities); only SQLAlchemy and Django; Django default
+table names never derived; model inheritance not followed; shadow detection is
+file-wide rather than flow-sensitive.
+
+### Rollback point
+
+`cartograph-m06-rc1`; previous accepted checkpoint `cartograph-m05`.
+
+---
+
 ## Template for subsequent entries
 
 ```markdown

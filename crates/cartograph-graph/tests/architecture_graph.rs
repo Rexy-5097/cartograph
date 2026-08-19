@@ -224,3 +224,131 @@ fn the_cross_stack_chain_survives_a_round_trip_through_the_graph() {
         "the chain ends at a database table"
     );
 }
+
+// ── Node identity (ADR-0011) ────────────────────────────────────────
+
+#[test]
+fn node_for_returns_the_same_node_for_the_same_artefact() {
+    let mut graph = ArchitectureGraph::new();
+    let first = graph
+        .node_for(
+            NodeKind::Function,
+            "create_order",
+            Some(location("api/orders.py", 12)),
+        )
+        .expect("valid node");
+    let second = graph
+        .node_for(
+            NodeKind::Function,
+            "create_order",
+            Some(location("api/orders.py", 30)),
+        )
+        .expect("valid node");
+
+    assert_eq!(
+        first, second,
+        "one artefact observed at two lines is one node; a decorator and its \
+         `def` are the same handler"
+    );
+    assert_eq!(graph.node_count(), 1);
+}
+
+#[test]
+fn node_for_keeps_same_named_artefacts_in_different_files_distinct() {
+    let mut graph = ArchitectureGraph::new();
+    let billing = graph
+        .node_for(
+            NodeKind::Class,
+            "Order",
+            Some(location("billing/models.py", 1)),
+        )
+        .unwrap();
+    let shipping = graph
+        .node_for(
+            NodeKind::Class,
+            "Order",
+            Some(location("shipping/models.py", 1)),
+        )
+        .unwrap();
+
+    assert_ne!(billing, shipping, "different modules, different artefacts");
+    assert_eq!(graph.node_count(), 2);
+}
+
+#[test]
+fn node_for_distinguishes_kinds() {
+    let mut graph = ArchitectureGraph::new();
+    let class = graph.node_for(NodeKind::Class, "Order", None).unwrap();
+    let table = graph.node_for(NodeKind::Table, "Order", None).unwrap();
+    assert_ne!(
+        class, table,
+        "a model and a table are not the same artefact"
+    );
+}
+
+#[test]
+fn add_node_still_creates_unconditionally() {
+    // Callers that genuinely want a fresh node keep the old behaviour.
+    let mut graph = ArchitectureGraph::new();
+    let a = graph.add_node(NodeKind::File, "app.ts", None).unwrap();
+    let b = graph.add_node(NodeKind::File, "app.ts", None).unwrap();
+    assert_ne!(a, b);
+    assert_eq!(graph.node_count(), 2);
+}
+
+#[test]
+fn two_analyses_populating_one_graph_produce_a_connected_chain() {
+    // The M06 defect, reduced: two builders describing one handler.
+    let mut graph = ArchitectureGraph::with_clock(fixed_clock);
+    let client = graph.node_for(NodeKind::File, "web/app.tsx", None).unwrap();
+    let handler_from_router = graph
+        .node_for(
+            NodeKind::Function,
+            "create_order",
+            Some(location("api/orders.py", 8)),
+        )
+        .unwrap();
+    let handler_from_orm = graph
+        .node_for(
+            NodeKind::Function,
+            "create_order",
+            Some(location("api/orders.py", 12)),
+        )
+        .unwrap();
+    let model = graph.node_for(NodeKind::Class, "Order", None).unwrap();
+
+    graph
+        .add_edge(EdgeSpec {
+            source: client,
+            target: handler_from_router,
+            kind: EdgeKind::HttpCall,
+            confidence: Confidence::ROUTE_METHOD_EXACT,
+            provenance: Provenance::RouteMatcher,
+            evidence: evidence("POST /api/orders"),
+            location: location("web/app.tsx", 3),
+            commit: None,
+        })
+        .unwrap();
+    graph
+        .add_edge(EdgeSpec {
+            source: handler_from_orm,
+            target: model,
+            kind: EdgeKind::OrmAccess,
+            confidence: Confidence::CONSTANT_PROPAGATION,
+            provenance: Provenance::OrmResolution,
+            evidence: evidence("Order(...)"),
+            location: location("api/orders.py", 12),
+            commit: None,
+        })
+        .unwrap();
+
+    // Walk it: the chain must not break at the handler.
+    let mut current = client;
+    let mut hops = 0;
+    while let Some(edge) = graph.edges_from(current).next() {
+        hops += 1;
+        current = edge.target();
+    }
+    assert_eq!(hops, 2, "the chain is connected across both analyses");
+    assert_eq!(graph.node(current).unwrap().name(), "Order");
+}

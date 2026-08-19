@@ -34,6 +34,10 @@ name = "evaluation"
 harness = false
 
 [[bench]]
+name = "orm"
+harness = false
+
+[[bench]]
 name = "canonicalization"
 harness = false
 

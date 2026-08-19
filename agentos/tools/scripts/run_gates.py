@@ -219,7 +219,7 @@ def qg007():
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M05)")
+@gate("QG-008", "Milestone acceptance (M06)")
 def qg008():
     problems = []
     resolver_src = os.path.join(ROOT, "crates/cartograph-resolver/src")
@@ -234,28 +234,30 @@ def qg008():
         "crates/cartograph-resolver/src/evaluator.rs",
         "crates/cartograph-resolver/src/dynamic.rs",
         "docs/resolver/dynamic-urls.md",
+        "crates/cartograph-resolver/src/orm.rs",
+        "crates/cartograph-resolver/tests/orm.rs",
+        "crates/cartograph-resolver/tests/full_stack.rs",
+        "docs/resolver/orm.md",
     ):
         if not os.path.exists(os.path.join(ROOT, required)):
             problems.append(f"M04 deliverable missing: {required}")
 
-    # M05/M06 capability must be absent. These names would each mean the
-    # resolver had started evaluating constants or resolving ORM models.
+    # M07+ capability must be absent. These names would each mean a later
+    # milestone had started: Git co-change, incremental invalidation, blast
+    # radius, structural diff, MCP.
     forbidden = (
-        "evaluate_template",
-        "propagate_constant",
-        "constant_propagation",
-        "resolve_orm",
-        "OrmResolver",
-        "sqlalchemy",
-        "__tablename__",
-        "resolve_table",
-        "parse_sql",
+        "co_change",
+        "git_history",
+        "blast_radius",
+        "structural_diff",
+        "McpServer",
+        "invalidate_subgraph",
     )
     for path in source_files(resolver_src, ".rs"):
         for i, line in enumerate(read_text(path).splitlines(), 1):
             code = line.split("//")[0]
             if any(sym in code for sym in forbidden):
-                problems.append(f"M05/M06 capability in {os.path.basename(path)}:{i}")
+                problems.append(f"M07+ capability in {os.path.basename(path)}:{i}")
 
     # M05 must never read the analysed project's environment.
     for path in source_files(resolver_src, ".rs"):
@@ -281,7 +283,7 @@ def qg008():
         for m in [re.match(r'\s*"?([A-Za-z0-9_-]+)"?\s*=', line)]
         if m
     }
-    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp", "regex", "url", "tokio"):
+    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp", "regex", "url", "tokio", "salsa"):
         if premature in dep_names:
             problems.append(f"future-milestone dependency `{premature}` introduced at M04")
 
@@ -310,6 +312,10 @@ MILESTONE_TESTS = {
     "M04": [
         "crates/cartograph-resolver/tests/matching.rs",
         "crates/cartograph-resolver/tests/cross_stack.rs",
+    ],
+    "M06": [
+        "crates/cartograph-resolver/tests/orm.rs",
+        "crates/cartograph-resolver/tests/full_stack.rs",
     ],
     "M05": [
         "crates/cartograph-resolver/tests/symbolic.rs",

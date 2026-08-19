@@ -15,3 +15,4 @@
 | [0008](../../docs/adr/ADR-0008-external-ssd-workspace.md) | Repository and build artifacts on external SSD | Accepted |
 | [0009](../../docs/adr/ADR-0009-vendored-agentos.md) | AgentOS vendored under `agentos/` with minimal modification | Accepted |
 | [0010](../../docs/adr/ADR-0010-checkpoint-tag-policy.md) | Provisional vs accepted checkpoint tags | Accepted |
+| [0011](../../docs/adr/ADR-0011-node-identity-within-a-graph.md) | Node identity within a graph: (kind, name, file) | Accepted |

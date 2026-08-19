@@ -229,6 +229,14 @@ pub struct Symbol {
     pub enclosing: Option<String>,
     /// Whether and how the symbol is exported.
     pub export: ExportStatus,
+    /// Base classes of a class declaration, as written.
+    ///
+    /// Empty for anything that is not a class. Recorded because inheritance is
+    /// how a framework marks a class as special — a `SQLAlchemy` declarative
+    /// model or a `Django` model is identified by its base, and reading it is
+    /// the difference between resolving a table and guessing at one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bases: Vec<String>,
     /// Decorators applied to the declaration, as written, without the `@`.
     ///
     /// A dotted decorator keeps its path (`app.get`); a call keeps only the

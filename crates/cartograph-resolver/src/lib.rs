@@ -58,6 +58,7 @@ pub mod edge;
 pub mod evaluator;
 pub mod matching;
 pub mod normalize;
+pub mod orm;
 pub mod symbolic;
 
 pub use canonical::{
@@ -75,4 +76,7 @@ pub use matching::{
     RouteIndex, UnsupportedReason, match_client, priors,
 };
 pub use normalize::{normalize_client_call, normalize_method, normalize_route_declaration};
+pub use orm::{
+    AccessKind, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel, TableName, add_orm_edges,
+};
 pub use symbolic::SymbolicValue;

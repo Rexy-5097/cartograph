@@ -5,9 +5,9 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M06
-status: NOT_STARTED
-current_branch: main
-next_allowed_milestone: M06    # UNLOCKED - M05 accepted; M07 locked until M06 is accepted
+status: PENDING_HUMAN_REVIEW
+current_branch: feature/m06-orm-resolution
+next_allowed_milestone: M07    # LOCKED until M06 is accepted by the human owner
 
 milestones:
   M00:
@@ -53,10 +53,11 @@ milestones:
     accepted_tag: cartograph-m05          # immutable
     merge_commit: 5770b592c7e8196451969e3f8d36c58590645c0c
   M06:
-    status: NOT_STARTED                   # unlocked; no code written
-    pull_request: null
-    provisional_tag: null
-    accepted_tag: null
+    status: PENDING_HUMAN_REVIEW
+    pull_request: 8
+    base: main
+    provisional_tag: cartograph-m06-rc1
+    accepted_tag: null                    # becomes cartograph-m06 at merge (ADR-0010)
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M05
@@ -68,20 +69,20 @@ gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..0
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 297 passed, 0 failed
+  tests: PASS                    # QG-004 - 331 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PASS                       # PR #7 green from base main
+  ci: PENDING                    # recorded when PR #8 CI completes
 
 tests:
-  total: 297
+  total: 331
   failed: 0
 
 benchmarks:
-  harness: ts_extraction, py_extraction, canonicalization, matching and evaluation groups run
+  harness: ts_extraction, py_extraction, canonicalization, matching, evaluation and orm groups run
   published_numbers: none        # internal only until methodology is documented (M08+)
 
 smoke_tests:                     # robustness only - no accuracy claim
