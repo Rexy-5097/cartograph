@@ -7,11 +7,11 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M04 — Cross-language resolution** |
-| Status | M00–M03 **ACCEPTED**; M04 complete and gate-clean, pending human review (PR #5) |
-| Branch | `feature/m04-cross-language-resolution` |
-| Next permitted milestone | M05 — **locked** until M04 is accepted |
-| Last accepted checkpoint | `cartograph-m03` (immutable, merge commit `ca0d206`) |
+| Active milestone | **M05 — Dynamic URL resolution** |
+| Status | M00–M04 **ACCEPTED**; M05 in progress |
+| Branch | `feature/m05-dynamic-url-resolution` |
+| Next permitted milestone | M06 — **locked** until M05 is accepted |
+| Last accepted checkpoint | `cartograph-m04` (immutable, merge commit `1082f9a`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists

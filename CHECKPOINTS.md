@@ -249,11 +249,15 @@ Provisional predecessor `cartograph-m03-rc1` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **PENDING HUMAN REVIEW** — not accepted |
-| Date | 2026-08-19 |
-| Branch | `feature/m04-cross-language-resolution` (from `main`) |
-| Provisional checkpoint | `cartograph-m04-rc1` (annotated; the tag is the SHA authority) |
-| Accepted checkpoint | *none yet* — `cartograph-m04` is created at acceptance |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-19 by the project owner |
+| Branch | `feature/m04-cross-language-resolution` · PR [#5](https://github.com/Rexy-5097/cartograph/pull/5) (merged) |
+| Provisional checkpoint | `cartograph-m04-rc1` (retained for traceability) |
+| **Accepted checkpoint** | **`cartograph-m04`** — merge commit `1082f9a`, immutable |
+
+> Gates were re-run on `main` after PR #6, which added QG-009 and the pinned
+> toolchain. No crate file changed between `1082f9a` and that run, so the
+> product code validated is exactly the code accepted.
 
 ### Scope delivered
 
@@ -335,7 +339,8 @@ clients never matched; OpenAPI confirmation deferred.
 
 ### Rollback point
 
-`cartograph-m04-rc1`; previous accepted checkpoint `cartograph-m03`.
+`cartograph-m04` (accepted). Previous accepted checkpoint: `cartograph-m03`.
+Provisional predecessor `cartograph-m04-rc1` remains available.
 
 ---
 

@@ -4,10 +4,10 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M04
-status: PENDING_HUMAN_REVIEW
-current_branch: feature/m04-cross-language-resolution
-next_allowed_milestone: M05    # LOCKED until M04 is accepted by the human owner
+current_milestone: M05
+status: IN_PROGRESS
+current_branch: feature/m05-dynamic-url-resolution
+next_allowed_milestone: M06    # LOCKED until M05 is accepted by the human owner
 
 milestones:
   M00:
@@ -39,19 +39,25 @@ milestones:
     accepted_tag: cartograph-m03          # immutable
     merge_commit: ca0d2067e0e83ea8c6dbb42bf970102777e1899a
   M04:
-    status: PENDING_HUMAN_REVIEW
+    status: ACCEPTED
+    accepted: 2026-08-19
     pull_request: 5
-    base: main
-    provisional_tag: cartograph-m04-rc1
-    accepted_tag: null                    # becomes cartograph-m04 at merge (ADR-0010)
+    provisional_tag: cartograph-m04-rc1   # retained for traceability
+    accepted_tag: cartograph-m04          # immutable
+    merge_commit: 1082f9ac441f39992a3558534275f9eaaa944070
+  M05:
+    status: IN_PROGRESS
+    pull_request: null
+    provisional_tag: null                 # cartograph-m05-rc1 once gates pass
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M03
+  milestone: M04
   class: accepted
-  tag: cartograph-m03
-  merge_commit: ca0d2067e0e83ea8c6dbb42bf970102777e1899a
+  tag: cartograph-m04
+  merge_commit: 1082f9ac441f39992a3558534275f9eaaa944070
 
-gates:                           # M04 branch, 2026-08-19
+gates:                           # main after PR #6, 2026-08-19 (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
@@ -61,7 +67,7 @@ gates:                           # M04 branch, 2026-08-19
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
   agentos_validator: PASS        # 99/100
-  ci: PENDING                    # recorded when PR #5 CI completes
+  ci: PASS                       # PR #5 green from base main
 
 tests:
   total: 241
