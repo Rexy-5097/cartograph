@@ -215,8 +215,9 @@ is the direction that deserves the most scrutiny.
   docstring. Cartograph, which parses, ignored all three; the instrument
   charged it three false negatives for correctly declining to extract
   documentation.
-- `resolve_sandbox_path("/home/other/file.txt")` was read as a URL-conf entry
-  because its name ends in `_path`.
+- An AutoGPT test calling `resolve_sandbox_path(...)` was read as a URL-conf
+  entry, because the callee's name ends in `_path` and its argument begins with
+  a slash. URL-conf helpers are now matched by name, not by suffix.
 
 ---
 
