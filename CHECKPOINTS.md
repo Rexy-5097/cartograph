@@ -453,6 +453,115 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M07 — Full-stack verification on real repositories
+
+| Field | Value |
+|---|---|
+| Status | **AWAITING REVIEW** — not accepted, no checkpoint tag created |
+| Branch | `feature/m07-real-validation` |
+| Base | `cartograph-m06` — commit `ef26ae2` |
+| Checkpoint | none. ADR-0010: the accepted tag belongs to the accepted merge commit, and no provisional tag was created because none was needed |
+
+### Scope delivered
+
+A pinned seven-repository corpus (Superset, full-stack-fastapi, Onyx, PostHog,
+Zulip, Airflow, AutoGPT) covering React/TS + FastAPI, Flask and Django, Next.js
++ Python, SQLAlchemy, Django ORM, and three repositories chosen for patterns
+known to be out of scope. A supported-subset definition committed before the
+first measurement. Ground truth authored from source by an instrument with no
+access to analyser output. Two evaluation passes over the whole corpus, with
+metrics, explicit denominators and ten adversarial checks on the benchmark
+machinery itself. `cartograph match --json` now exports the graph it built, so
+chains are verified by traversal rather than inferred from names.
+
+No product capability was added. The five source changes are defect fixes the
+corpus exposed.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 354 tests |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS |
+
+### Benchmark state
+
+Seven repositories, 58,225 files, 68.4 s total, peak RSS 825 MB (PostHog).
+Route declarations: precision 1.000, recall 1.000 over 101 in-scope records.
+Model-to-table: precision 1.000, recall 1.000 over 48 in-scope records, and 290
+of 290 produced edges confirmed against source. Full report:
+[docs/benchmarks/m07-report.md](docs/benchmarks/m07-report.md). INTERNAL — the
+methodology is first-generation and these numbers are not for publication.
+
+### Verification findings
+
+**The headline is a negative result, and it is the point of the milestone.**
+Across seven real repositories Cartograph produced **six** fully verified
+frontend-to-table chains, and **none begins at a frontend file**. Of 1,458
+`HttpCall` edges, 12 have a TypeScript client and 8 are in non-test TypeScript;
+the rest are Python test suites calling their own API. Three documented causes:
+real frontends call through generated client wrappers so no URL appears at the
+call site; `APIRouter(prefix=…)` composes the served path at registration; and
+Django's chain breaks because the route's handler node and the view's handler
+node differ by file under ADR-0011. Ten future-work items are recorded; none
+was built.
+
+**Five defects were found by reading output, each fixed with a fixture.**
+
+1. **`Model` read as Django.** Django, Flask-SQLAlchemy and Flask-AppBuilder
+   all use a base named `Model`; testing Django first sent table resolution
+   looking for a `Meta.db_table` that is not there while `__tablename__` sat a
+   line below. Superset resolved 3 tables out of 33. Flavour is now read from
+   what the class declares. Superset 3 → 32; `Queries` recall 0.729 → 1.000.
+2. **ORM discovery ran over TypeScript.** `new Theme({config})` in a `.tsx`
+   file produced an `OrmAccess` edge to a Python model of the same name — 33
+   across the corpus, now 0.
+3. **Model names resolved without imports.** Airflow's architecture diagrams
+   call `User("DAG Author")` having imported `User` from the `diagrams`
+   package; 218 were attributed to the Flask-AppBuilder model.
+4. **Route decorators required a listed receiver.** Superset's four
+   `@health_blueprint.route(...)` declarations were invisible — the only route
+   misses left in the corpus.
+5. **TypeScript route declarations read as client calls.** `app.get('/_health',
+   (c) => …)` is Express and Hono declaring a route; three in PostHog's Node
+   services were matched to a Python endpoint in a different service.
+
+**Six defects were found in the benchmark instrument, not in Cartograph**, and
+three of them corrected numbers in Cartograph's favour — which is why they are
+listed rather than quietly applied. A multi-line `class SqlaTable(` did not
+close the previous class's scope, so its `__tablename__` was recorded against
+`SqlMetric`; route declarations inside docstrings were counted as routes, so
+Cartograph was charged three false negatives for correctly declining to extract
+documentation; and ORM flavour was read from the base name, mislabelling all 32
+Superset and all 61 Airflow models as Django.
+
+**The first scope definition was circular and was rewritten before any
+measurement.** Version 1 defined "supported" as the set of patterns
+`cartograph-parser` recognises, which makes recall 1.0 by construction. Version
+2 declares scope by framework capability family and predicts seven specific
+implementation gaps in advance, so a miss found later cannot be reclassified as
+out of scope.
+
+**Refusals were validated at scale on real input.** 1,886 client calls resolved
+to `Ambiguous` and produced no edge. `full-stack-fastapi` produced zero edges
+from 23 routes and 63 client calls, and its 13 SQLModel classes produced no
+table, satisfying all 13 `must_not_produce` assertions. Zulip declares 74
+Django models and one literal `db_table`; exactly one table was resolved, the
+other 73 correctly unresolved because Django's default name needs an app label
+that is not in the model file.
+
+**What the metrics do not cover.** `HttpCall` recall, `OrmAccess` recall and
+chain recall are unmeasured. Four of the seven predicted gaps would surface in
+`OrmAccess` recall; their absence from the tables is a gap in the evaluation,
+not evidence of their absence from the engine. 286 `OrmAccess` edges (2.4%)
+remain unconfirmable without Python import resolution and are reported rather
+than suppressed.
+
 ## M06 — ORM and database resolution
 
 | Field | Value |

@@ -318,13 +318,13 @@ fn match_json_exports_the_graph_it_built() {
     let edges = graph["edges"].as_array().expect("edges array");
 
     assert_eq!(
-        graph["node_count"].as_u64().unwrap() as usize,
-        nodes.len(),
+        graph["node_count"].as_u64().unwrap(),
+        nodes.len() as u64,
         "the exported node list must be the whole graph"
     );
     assert_eq!(
-        graph["edge_count"].as_u64().unwrap() as usize,
-        edges.len(),
+        graph["edge_count"].as_u64().unwrap(),
+        edges.len() as u64,
         "the exported edge list must be the whole graph"
     );
     assert_eq!(

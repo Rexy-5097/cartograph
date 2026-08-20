@@ -205,8 +205,13 @@ def build(root, sample):
             "in_test_code": any(
                 part in item["file"].split("/") for part in ("tests", "test", "testing")
             )
-            or os.path.basename(item["file"]).startswith("test_"),
-            "source": item["text"],
+            or os.path.basename(item["file"]).startswith("test_")
+            or os.path.basename(item["file"]).endswith(("_test.py", "_tests.py")),
+            # Deliberately not the source line. RULE 015 keeps source text out
+            # of this repository's records, and a ground-truth file has no more
+            # right to carry a third party's code than an edge's evidence does.
+            # The structural fields above already say what the declaration is.
+            "declaration_form": item["kind"],
             "classification": scope,
             "rule": rule,
         }

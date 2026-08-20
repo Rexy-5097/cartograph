@@ -5,13 +5,13 @@
       "description": "ground-truth or scope edited after measurement",
       "detail": {
         "ground_truth_sha256": {
-          "airflow": "50eab141f4d5e6562ec07636f6be40994f15e00a3ca1399fa0a27b7e4c002baa",
-          "autogpt": "b057a14beb2e9c3b1c28e0531297c233c9ae91224fa74e3880fc036248795357",
-          "full-stack-fastapi": "34e45b97f57f507ccedb1f19e40f97d68f78cc478414f4383d9107117e320a41",
-          "onyx": "56aceaf74fd3e243a213c5e0baa4e3b15a6191ffad7f4b5d7843c309fc42a749",
-          "posthog": "4dacde7128c25c7a59345482ebd6997d6affae647671224af16d8b821ec87269",
-          "superset": "8c274385e8b25404b8b5948296bc03b65164dcd72179be5eb389d329ecb208d5",
-          "zulip": "5cb7eb4578769bf32548eee8b1ee2f585aa8ce9efef17fae010336d9e36f308b"
+          "airflow": "b7625468cb8ad25165b33aaefc0139cdd4218277c2f4046a549a6e6354b79b44",
+          "autogpt": "80bfdcac2095f777acc0c7f16a64694ce0b706028057fc06638ace7a129cdff2",
+          "full-stack-fastapi": "f54941c7445beb8dd537827e00dbd3bab5fefaeea3f7260eb80c232146931e08",
+          "onyx": "fcd455d0c7db44e0a881fba36d847d77d285d011d30f85ccae3c8f55a124bb5e",
+          "posthog": "970f91ee920cf90ef3523987280ef43647abbc70e997f4749d6fc34f841e018e",
+          "superset": "644bfd4add12bc0130b5507845a717df9065316f33b2c0df3949305e854e51f7",
+          "zulip": "3162a1eeaf05386ab2b30ef7ce24ca45a1d0eef6ab45c784073d37b1e3a4499d"
         },
         "note": "the digests are recorded with the results; an edit changes them, and git shows whether the files still match the commit that predates the first pass",
         "supported_subset_sha256": "1410a01ffc729421b41da16daf36a91005cece987b9716eefb476f42385db2f9",
@@ -134,13 +134,13 @@
     "recall": "TP / (TP + FN), over in_scope ground-truth relationships only. UNSUPPORTED, SAFE_REFUSAL and AMBIGUOUS records are excluded from the denominator and their counts are reported alongside, so the exclusion is visible and can be checked."
   },
   "ground_truth_sha256": {
-    "airflow": "50eab141f4d5e6562ec07636f6be40994f15e00a3ca1399fa0a27b7e4c002baa",
-    "autogpt": "b057a14beb2e9c3b1c28e0531297c233c9ae91224fa74e3880fc036248795357",
-    "full-stack-fastapi": "34e45b97f57f507ccedb1f19e40f97d68f78cc478414f4383d9107117e320a41",
-    "onyx": "56aceaf74fd3e243a213c5e0baa4e3b15a6191ffad7f4b5d7843c309fc42a749",
-    "posthog": "4dacde7128c25c7a59345482ebd6997d6affae647671224af16d8b821ec87269",
-    "superset": "8c274385e8b25404b8b5948296bc03b65164dcd72179be5eb389d329ecb208d5",
-    "zulip": "5cb7eb4578769bf32548eee8b1ee2f585aa8ce9efef17fae010336d9e36f308b"
+    "airflow": "b7625468cb8ad25165b33aaefc0139cdd4218277c2f4046a549a6e6354b79b44",
+    "autogpt": "80bfdcac2095f777acc0c7f16a64694ce0b706028057fc06638ace7a129cdff2",
+    "full-stack-fastapi": "f54941c7445beb8dd537827e00dbd3bab5fefaeea3f7260eb80c232146931e08",
+    "onyx": "fcd455d0c7db44e0a881fba36d847d77d285d011d30f85ccae3c8f55a124bb5e",
+    "posthog": "970f91ee920cf90ef3523987280ef43647abbc70e997f4749d6fc34f841e018e",
+    "superset": "644bfd4add12bc0130b5507845a717df9065316f33b2c0df3949305e854e51f7",
+    "zulip": "3162a1eeaf05386ab2b30ef7ce24ca45a1d0eef6ab45c784073d37b1e3a4499d"
   },
   "milestone": "M07",
   "pass": 2,
@@ -1608,7 +1608,7 @@
         "false_negatives": [],
         "labels": {
           "TRUE_POSITIVE": 13,
-          "UNSUPPORTED": 22
+          "UNSUPPORTED": 20
         },
         "metrics": {
           "f1": 1.0,
@@ -1737,7 +1737,7 @@
         "false_negatives": [],
         "labels": {
           "TRUE_POSITIVE": 12,
-          "UNSUPPORTED": 24
+          "UNSUPPORTED": 12
         },
         "metrics": {
           "f1": 1.0,
@@ -2128,7 +2128,7 @@
         "false_negatives": [],
         "labels": {
           "TRUE_POSITIVE": 12,
-          "UNSUPPORTED": 13
+          "UNSUPPORTED": 9
         },
         "metrics": {
           "f1": 1.0,
@@ -8315,7 +8315,7 @@
         "false_negatives": [],
         "labels": {
           "TRUE_POSITIVE": 19,
-          "UNSUPPORTED": 36,
+          "UNSUPPORTED": 24,
           "UNSUPPORTED_BUT_PRODUCED": 5
         },
         "metrics": {
@@ -8454,7 +8454,7 @@
         "false_negatives": [],
         "labels": {
           "TRUE_POSITIVE": 10,
-          "UNSUPPORTED": 24
+          "UNSUPPORTED": 23
         },
         "metrics": {
           "f1": 1.0,

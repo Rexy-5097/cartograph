@@ -257,6 +257,7 @@
  "route_declarations": [
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/advanced_data_type/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -268,11 +269,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/convert\", methods=(\"GET\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/charts/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -284,27 +285,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/<pk>/screenshot/<digest>/\", methods=(\"GET\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "superset/commands/report/execute.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "superset/commands/report/execute.py:670",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 670,
-   "methods_as_written": null,
-   "path_as_written": "Superset.dashboard",
-   "receiver": "get_url_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "get_url_path("
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/dashboards/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -316,11 +301,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/<pk>\", methods=(\"DELETE\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/dashboards/filter_state/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -332,11 +317,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/filter_state/<string:key>\", methods=(\"DELETE\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/databases/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -348,11 +333,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/function_names/\", methods=(\"GET\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/datasets/metrics/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -364,11 +349,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/metric/<int:metric_id>\", methods=(\"DELETE\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "superset/db_engine_specs/ascend.py",
    "handler": null,
    "handler_resolvable": true,
@@ -380,11 +365,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "registry.register(\"ascend\", \"impala.sqlalchemy\", \"ImpalaDialect\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "superset/db_engine_specs/spark.py",
    "handler": null,
    "handler_resolvable": true,
@@ -396,11 +381,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "registry.register(\"spark\", \"pyhive.sqlalchemy_hive\", \"HiveDialect\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/importexport/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -412,11 +397,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/export/\", methods=(\"GET\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/security/manager.py",
    "handler": null,
    "handler_resolvable": true,
@@ -428,11 +413,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/\", methods=[\"POST\"])"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/sqllab/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -444,11 +429,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/results/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "superset/tasks/decorators.py",
    "handler": null,
    "handler_resolvable": true,
@@ -460,11 +445,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "TaskRegistry.register(task_name, f)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/themes/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -476,11 +461,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/unset_system_default\", methods=(\"DELETE\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "superset/utils/webdriver.py",
    "handler": null,
    "handler_resolvable": true,
@@ -492,11 +477,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "atexit.register(_browser_manager._cleanup)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/views/core.py",
    "handler": null,
    "handler_resolvable": true,
@@ -508,11 +493,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/fetch_datasource_metadata\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "superset/views/health.py",
    "handler": "health",
    "handler_resolvable": true,
@@ -525,11 +510,11 @@
    "predicted_gap": "GAP-1",
    "receiver": "health_blueprint",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@health_blueprint.route(\"/health\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "superset/views/health.py",
    "handler": "health",
    "handler_resolvable": true,
@@ -542,11 +527,11 @@
    "predicted_gap": "GAP-1",
    "receiver": "health_blueprint",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@health_blueprint.route(\"/healthcheck\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "superset/views/health.py",
    "handler": "health",
    "handler_resolvable": true,
@@ -559,11 +544,11 @@
    "predicted_gap": "GAP-1",
    "receiver": "health_blueprint",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@health_blueprint.route(\"/ping\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "superset/views/health.py",
    "handler": "version",
    "handler_resolvable": true,
@@ -576,11 +561,11 @@
    "predicted_gap": "GAP-1",
    "receiver": "health_blueprint",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@health_blueprint.route(\"/version\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "superset/views/sql_lab/views.py",
    "handler": null,
    "handler_resolvable": true,
@@ -592,11 +577,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/list/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/integration_tests/tasks/test_event_handlers.py",
    "handler": null,
    "handler_resolvable": true,
@@ -608,11 +593,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "TaskRegistry.register(name, func)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/integration_tests/tasks/test_throttling.py",
    "handler": null,
    "handler_resolvable": true,
@@ -624,11 +609,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "TaskRegistry.register(\"test_throttle_combined\", task_with_throttled_updates)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/integration_tests/tasks/test_timeout.py",
    "handler": null,
    "handler_resolvable": true,
@@ -640,11 +625,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "TaskRegistry.register(name, func)"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/async_events/async_query_manager_tests.py",
    "handler": "test_view",
    "handler_resolvable": true,
@@ -656,11 +641,11 @@
    "path_as_written": "/test",
    "receiver": "app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@app.route(\"/test\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/security/test_password_change.py",
    "handler": "index",
    "handler_resolvable": true,
@@ -672,11 +657,11 @@
    "path_as_written": "/",
    "receiver": "app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@app.route(\"/\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/views/test_error_handling.py",
    "handler": "ssh_tunnel_error_view",
    "handler_resolvable": true,
@@ -688,11 +673,11 @@
    "path_as_written": "/ssh-tunnel-error",
    "receiver": "test_app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@test_app.route(\"/ssh-tunnel-error\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/views/test_error_handling.py",
    "handler": "generic_error_view",
    "handler_resolvable": true,
@@ -704,11 +689,11 @@
    "path_as_written": "/generic-error",
    "receiver": "test_app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@test_app.route(\"/generic-error\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/views/test_error_handling.py",
    "handler": "query_validation_error_view",
    "handler_resolvable": true,
@@ -720,11 +705,11 @@
    "path_as_written": "/query-validation-error",
    "receiver": "test_app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@test_app.route(\"/query-validation-error\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "tests/unit_tests/views/test_error_handling.py",
    "handler": "generic_superset_exception_view",
    "handler_resolvable": true,
@@ -736,11 +721,11 @@
    "path_as_written": "/generic-superset-exception",
    "receiver": "test_app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@test_app.route(\"/generic-superset-exception\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/unit_tests/views/test_pwa_manifest.py",
    "handler": null,
    "handler_resolvable": true,
@@ -752,11 +737,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "app.add_url_rule("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/unit_tests/views/test_redirect_view_subdirectory.py",
    "handler": null,
    "handler_resolvable": true,
@@ -768,11 +753,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "app.add_url_rule("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/unit_tests/views/test_spa_service_worker.py",
    "handler": null,
    "handler_resolvable": true,
@@ -784,11 +769,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "assert match is not None, ("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "tests/unit_tests/views/test_spa_service_worker.py",
    "handler": null,
    "handler_resolvable": true,
@@ -800,21 +785,19 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "\"spa.html no longer contains a `navigator.serviceWorker.register(...)` \""
+   "rule": "OUT-3"
   }
  ],
  "rule_counts": {
   "IN-BE-2": 10,
   "OUT-2": 12,
-  "OUT-3": 11,
-  "OUT-9": 1
+  "OUT-3": 11
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 329,
+  "population": 328,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 34
+  "selected": 33
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {

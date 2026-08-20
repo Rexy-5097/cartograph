@@ -327,6 +327,7 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/items.py",
    "handler": "read_items",
    "handler_resolvable": true,
@@ -342,11 +343,11 @@
    "receiver": "router",
    "registration_prefix": "/items",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/\", response_model=ItemsPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/items.py",
    "handler": "read_item",
    "handler_resolvable": true,
@@ -362,11 +363,11 @@
    "receiver": "router",
    "registration_prefix": "/items",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/{id}\", response_model=ItemPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/items.py",
    "handler": "create_item",
    "handler_resolvable": true,
@@ -382,11 +383,11 @@
    "receiver": "router",
    "registration_prefix": "/items",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/\", response_model=ItemPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/items.py",
    "handler": "update_item",
    "handler_resolvable": true,
@@ -402,11 +403,11 @@
    "receiver": "router",
    "registration_prefix": "/items",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.put(\"/{id}\", response_model=ItemPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/items.py",
    "handler": "delete_item",
    "handler_resolvable": true,
@@ -422,11 +423,11 @@
    "receiver": "router",
    "registration_prefix": "/items",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.delete(\"/{id}\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/login.py",
    "handler": "login_access_token",
    "handler_resolvable": true,
@@ -440,11 +441,11 @@
    "path_as_written": "/login/access-token",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/login/access-token\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/login.py",
    "handler": "test_token",
    "handler_resolvable": true,
@@ -458,11 +459,11 @@
    "path_as_written": "/login/test-token",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/login/test-token\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/login.py",
    "handler": "recover_password",
    "handler_resolvable": true,
@@ -476,11 +477,11 @@
    "path_as_written": "/password-recovery/{email}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/password-recovery/{email}\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/login.py",
    "handler": "reset_password",
    "handler_resolvable": true,
@@ -494,11 +495,11 @@
    "path_as_written": "/reset-password/",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/reset-password/\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/login.py",
    "handler": "recover_password_html_content",
    "handler_resolvable": true,
@@ -512,11 +513,11 @@
    "path_as_written": "/password-recovery-html-content/{email}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/private.py",
    "handler": "create_user",
    "handler_resolvable": true,
@@ -532,11 +533,11 @@
    "receiver": "router",
    "registration_prefix": "/private",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/users/\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "read_users",
    "handler_resolvable": true,
@@ -552,11 +553,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "create_user",
    "handler_resolvable": true,
@@ -572,11 +573,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "update_user_me",
    "handler_resolvable": true,
@@ -592,11 +593,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch(\"/me\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "update_password_me",
    "handler_resolvable": true,
@@ -612,11 +613,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch(\"/me/password\", response_model=Message)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "read_user_me",
    "handler_resolvable": true,
@@ -632,11 +633,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/me\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "delete_user_me",
    "handler_resolvable": true,
@@ -652,11 +653,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.delete(\"/me\", response_model=Message)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "register_user",
    "handler_resolvable": true,
@@ -672,11 +673,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/signup\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "read_user_by_id",
    "handler_resolvable": true,
@@ -692,11 +693,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/{user_id}\", response_model=UserPublic)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "update_user",
    "handler_resolvable": true,
@@ -712,11 +713,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/users.py",
    "handler": "delete_user",
    "handler_resolvable": true,
@@ -732,11 +733,11 @@
    "receiver": "router",
    "registration_prefix": "/users",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.delete(\"/{user_id}\", dependencies=[Depends(get_current_active_superuser)])"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/utils.py",
    "handler": "test_email",
    "handler_resolvable": true,
@@ -752,11 +753,11 @@
    "receiver": "router",
    "registration_prefix": "/utils",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/app/api/routes/utils.py",
    "handler": "health_check",
    "handler_resolvable": true,
@@ -772,8 +773,7 @@
    "receiver": "router",
    "registration_prefix": "/utils",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/health-check/\")"
+   "rule": "IN-BE-1"
   }
  ],
  "rule_counts": {

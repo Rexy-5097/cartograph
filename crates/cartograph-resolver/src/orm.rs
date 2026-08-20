@@ -296,7 +296,7 @@ fn model_base(class: &Symbol) -> Option<(BaseEvidence, String)> {
 
 /// Decides a shared-base class's ORM from what it declares.
 ///
-/// `__tablename__` is SQLAlchemy's and `Meta.db_table` is Django's, so either
+/// `__tablename__` is `SQLAlchemy`'s and `Meta.db_table` is Django's, so either
 /// one settles the question the base name left open. When the class declares
 /// neither, the flavour stays [`OrmFlavor::Unspecified`] rather than being
 /// guessed, and the table is unresolved either way.

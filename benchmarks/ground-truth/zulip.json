@@ -238,6 +238,7 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "analytics/urls.py",
    "handler": "stats_for_realm",
    "handler_resolvable": true,
@@ -249,11 +250,11 @@
    "path_as_written": "stats/realm/<realm_str>/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"stats/realm/<realm_str>/\", stats_for_realm),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "analytics/urls.py",
    "handler": null,
    "handler_resolvable": true,
@@ -265,11 +266,11 @@
    "path_as_written": "analytics/chart_data",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"analytics/chart_data\", GET=get_chart_data),"
+   "rule": "OUT-9"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "corporate/urls.py",
    "handler": "get_integrations_activity",
    "handler_resolvable": true,
@@ -281,11 +282,11 @@
    "path_as_written": "activity/integrations",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"activity/integrations\", get_integrations_activity),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "corporate/urls.py",
    "handler": "landing_view",
    "handler_resolvable": true,
@@ -297,11 +298,11 @@
    "path_as_written": "partners/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"partners/\", landing_view, {\"template_name\": \"corporate/partners.html\"}),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "corporate/urls.py",
    "handler": "landing_view",
    "handler_resolvable": true,
@@ -313,11 +314,11 @@
    "path_as_written": "case-studies/university-of-cordoba/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "corporate/urls.py",
    "handler": "remote_realm_sponsorship_page",
    "handler_resolvable": true,
@@ -329,11 +330,11 @@
    "path_as_written": "realm/<realm_uuid>/sponsorship/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "corporate/urls.py",
    "handler": "remote_server_event_status",
    "handler_resolvable": true,
@@ -345,11 +346,11 @@
    "path_as_written": "json/server/<server_uuid>/billing/event/status",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"json/server/<server_uuid>/billing/event/status\", remote_server_event_status),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -361,11 +362,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "new_r.register(r[k], k, r.get_index_for_name(k))"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -377,11 +378,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "parser.blockprocessors.register(ListIndentProcessor(parser), \"indent\", 90)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -393,11 +394,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "parser.blockprocessors.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -409,11 +410,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "89,"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -425,11 +426,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "reg.register(ImageInlineProcessor(markdown.inlinepatterns.IMAGE_LINK_RE, self), \"image\", 57)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -441,11 +442,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "reg.register(markdown.inlinepatterns.SimpleTagPattern(DEL_RE, \"del\"), \"del\", 25)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -457,11 +458,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "treeprocessors.register(markdown.treeprocessors.InlineProcessor(self), \"inline\", 25)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/__init__.py",
    "handler": null,
    "handler_resolvable": true,
@@ -473,11 +474,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "postprocessors.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/lib/markdown/nested_code_blocks.py",
    "handler": null,
    "handler_resolvable": true,
@@ -489,27 +490,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "md.treeprocessors.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "zerver/lib/tex.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "zerver/lib/tex.py:69",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 69,
-   "methods_as_written": null,
-   "path_as_written": "webpack-bundles/katex-cli.js",
-   "receiver": "static_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "static_path(\"webpack-bundles/katex-cli.js\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/openapi/markdown_extension.py",
    "handler": null,
    "handler_resolvable": true,
@@ -521,11 +506,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "md.preprocessors.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/tests/test_events.py",
    "handler": null,
    "handler_resolvable": true,
@@ -537,11 +522,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.register(\"test1@zulip.com\", \"test1\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "zerver/tests/test_new_users.py",
    "handler": null,
    "handler_resolvable": true,
@@ -553,11 +538,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.register(\"test@zulip.com\", \"test\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/dev_urls.py",
    "handler": "TemplateView.as_view",
    "handler_resolvable": false,
@@ -569,11 +554,11 @@
    "path_as_written": "devtools/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"devtools/\", TemplateView.as_view(template_name=\"zerver/development/dev_tools.html\")),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/dev_urls.py",
    "handler": "api_dev_fetch_api_key",
    "handler_resolvable": true,
@@ -585,11 +570,11 @@
    "path_as_written": "dev_fetch_api_key",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"dev_fetch_api_key\", api_dev_fetch_api_key),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/tornado_urls.py",
    "handler": null,
    "handler_resolvable": true,
@@ -601,155 +586,171 @@
    "path_as_written": "events",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path("
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:337",
+   "id": "zproject/urls.py:336",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 337,
+   "line": 336,
    "methods_as_written": null,
-   "path_as_written": "realm/playgrounds/<int:playground_id>",
+   "path_as_written": "realm/playgrounds",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"realm/playgrounds/<int:playground_id>\", DELETE=delete_realm_playground),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:371",
+   "id": "zproject/urls.py:368",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 371,
+   "line": 368,
    "methods_as_written": null,
-   "path_as_written": "bots/<int:bot_id>/api_key/regenerate",
+   "path_as_written": "users/<email>",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"bots/<int:bot_id>/api_key/regenerate\", POST=regenerate_bot_api_key),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:390",
+   "id": "zproject/urls.py:385",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 390,
+   "line": 385,
    "methods_as_written": null,
-   "path_as_written": "navigation_views",
+   "path_as_written": "zcommand",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"navigation_views\", GET=get_navigation_views, POST=add_navigation_view),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:440",
+   "id": "zproject/urls.py:423",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 440,
+   "line": 423,
    "methods_as_written": null,
-   "path_as_written": "messages/<int:message_id>/history",
+   "path_as_written": "messages/<int:message_id>",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"messages/<int:message_id>/history\", GET=get_message_edit_history),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:468",
+   "id": "zproject/urls.py:453",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 468,
+   "line": 453,
    "methods_as_written": null,
-   "path_as_written": "user_uploads",
+   "path_as_written": "messages/<int:message_id>/report",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"user_uploads\", POST=upload_file_backend),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:497",
+   "id": "zproject/urls.py:482",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 497,
+   "line": 482,
    "methods_as_written": null,
-   "path_as_written": "user_groups/create",
+   "path_as_written": "mobile_push/e2ee/test_notification",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"user_groups/create\", POST=add_user_group),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:547",
+   "id": "zproject/urls.py:512",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 547,
+   "line": 512,
    "methods_as_written": null,
-   "path_as_written": "users/me/<int:stream_id>/topics",
+   "path_as_written": "user_groups/<int:user_group_id>/deactivate",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path("
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:586",
+   "id": "zproject/urls.py:557",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 586,
+   "line": 557,
    "methods_as_written": null,
-   "path_as_written": "channel_folders",
+   "path_as_written": "streams/<int:stream_id>/members",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"channel_folders\", GET=get_channel_folders, PATCH=reorder_realm_channel_folders),"
+   "rule": "OUT-9"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
    "file": "zproject/urls.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "zproject/urls.py:609",
+   "id": "zproject/urls.py:590",
    "in_test_code": false,
    "kind": "urlconf_helper",
-   "line": 609,
+   "line": 590,
    "methods_as_written": null,
-   "path_as_written": "export/realm/consents",
+   "path_as_written": "users/me/subscriptions/muted_topics",
    "receiver": "rest_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "rest_path(\"export/realm/consents\", GET=get_users_export_consents),"
+   "rule": "OUT-9"
+  },
+  {
+   "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf_helper",
+   "file": "zproject/urls.py",
+   "handler": null,
+   "handler_resolvable": true,
+   "id": "zproject/urls.py:610",
+   "in_test_code": false,
+   "kind": "urlconf_helper",
+   "line": 610,
+   "methods_as_written": null,
+   "path_as_written": "register_client_device",
+   "receiver": "rest_path",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "OUT-9"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/urls.py",
    "handler": "start_social_login",
    "handler_resolvable": true,
@@ -761,11 +762,11 @@
    "path_as_written": "accounts/login/social/<backend>/<extra_arg>",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"accounts/login/social/<backend>/<extra_arg>\", start_social_login, name=\"login-social\"),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/urls.py",
    "handler": "import_realm_from_slack",
    "handler_resolvable": true,
@@ -777,11 +778,11 @@
    "path_as_written": "new/import/slack/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"new/import/slack/\", import_realm_from_slack, name=\"import_realm_from_slack\"),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/urls.py",
    "handler": "complete_zoom_user",
    "handler_resolvable": true,
@@ -793,11 +794,11 @@
    "path_as_written": "calls/zoom/complete",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"calls/zoom/complete\", complete_zoom_user),"
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "zproject/urls.py",
    "handler": "jwt_fetch_api_key",
    "handler_resolvable": true,
@@ -809,8 +810,7 @@
    "path_as_written": "jwt/fetch_api_key",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path(\"jwt/fetch_api_key\", jwt_fetch_api_key),"
+   "rule": "IN-BE-3"
   }
  ],
  "rule_counts": {
@@ -820,7 +820,7 @@
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 470,
+  "population": 455,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
   "selected": 36
  },

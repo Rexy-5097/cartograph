@@ -240,6 +240,7 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/ee/onyx/server/analytics/api.py",
    "handler": "get_query_analytics",
    "handler_resolvable": true,
@@ -255,11 +256,11 @@
    "receiver": "router",
    "registration_prefix": "/analytics",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/admin/query\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/ee/onyx/server/manage/standard_answer.py",
    "handler": "patch_standard_answer",
    "handler_resolvable": true,
@@ -275,11 +276,11 @@
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch(\"/admin/standard-answer/{standard_answer_id}\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/ee/onyx/server/metrics/license_metrics.py",
    "handler": null,
    "handler_resolvable": true,
@@ -291,11 +292,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(_license_collector)"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/ee/onyx/server/tenants/billing_api.py",
    "handler": "create_customer_portal_session",
    "handler_resolvable": true,
@@ -311,11 +312,11 @@
    "receiver": "router",
    "registration_prefix": "/tenants",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/create-customer-portal-session\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/background/celery/apps/monitoring.py",
    "handler": null,
    "handler_resolvable": true,
@@ -327,11 +328,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(ShardCapacityCollector())"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/onyxbot/slack/formatting.py",
    "handler": null,
    "handler_resolvable": true,
@@ -343,11 +344,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "md.inline.register(\"slack_url_link\", _URL_LINK_PATTERN, _parse_url_link)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/onyxbot/slack/formatting.py",
    "handler": null,
    "handler_resolvable": true,
@@ -359,11 +360,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "md.inline.register(\"slack_email_link\", _EMAIL_LINK_PATTERN, _parse_email_link)"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/api_key/api.py",
    "handler": "regenerate_existing_api_key",
    "handler_resolvable": true,
@@ -379,11 +380,11 @@
    "receiver": "router",
    "registration_prefix": "/admin/api-key",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/{api_key_id}/regenerate\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/documents/credential.py",
    "handler": "list_credentials",
    "handler_resolvable": true,
@@ -399,11 +400,11 @@
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/credential\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/features/notifications/api.py",
    "handler": "dismiss_all_notifications_endpoint",
    "handler_resolvable": true,
@@ -419,11 +420,11 @@
    "receiver": "router",
    "registration_prefix": "/notifications",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/dismiss-all\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/features/skill/api.py",
    "handler": "preview_skill_for_current_user",
    "handler_resolvable": true,
@@ -437,11 +438,11 @@
    "path_as_written": "/{skill_id}/preview",
    "receiver": "user_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@user_router.get(\"/{skill_id}/preview\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/manage/administrative.py",
    "handler": "document_hidden_update",
    "handler_resolvable": true,
@@ -457,11 +458,11 @@
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/admin/doc-hidden\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/manage/llm/api.py",
    "handler": "list_llm_providers_for_persona",
    "handler_resolvable": true,
@@ -475,11 +476,11 @@
    "path_as_written": "/persona/{persona_id}/providers",
    "receiver": "basic_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@basic_router.get(\"/persona/{persona_id}/providers\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/manage/tracing/api.py",
    "handler": "adopt_env_tracing_provider",
    "handler_resolvable": true,
@@ -495,11 +496,11 @@
    "receiver": "admin_router",
    "registration_prefix": "/admin/tracing",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@admin_router.post(\"/providers/{provider_type}/adopt-env\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/manage/web_search/api.py",
    "handler": "list_search_providers",
    "handler_resolvable": true,
@@ -515,11 +516,11 @@
    "receiver": "admin_router",
    "registration_prefix": "/admin/web-search",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@admin_router.get(\"/search-providers\", response_model=list[WebSearchProviderView])"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/server/metrics/connector_state_metrics.py",
    "handler": null,
    "handler_resolvable": true,
@@ -531,11 +532,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(_CONNECTOR_STATE_COLLECTOR)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/server/metrics/indexing_pipeline_setup.py",
    "handler": null,
    "handler_resolvable": true,
@@ -547,11 +548,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(collector)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/onyx/server/metrics/postgres_connection_pool.py",
    "handler": null,
    "handler_resolvable": true,
@@ -563,11 +564,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(collector)"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "backend/onyx/server/saml_multi.py",
    "handler": "saml_login_callback_get",
    "handler_resolvable": true,
@@ -583,75 +584,11 @@
    "receiver": "router",
    "registration_prefix": "/auth/saml",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/callback\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:94",
-   "in_test_code": true,
-   "kind": "urlconf_helper",
-   "line": 94,
-   "methods_as_written": null,
-   "path_as_written": "/drives/abc/root:/Engineering/API",
-   "receiver": "_build_item_relative_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_build_item_relative_path("
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:102",
-   "in_test_code": true,
-   "kind": "urlconf_helper",
-   "line": 102,
-   "methods_as_written": null,
-   "path_as_written": "/drives/abc/root:",
-   "receiver": "_build_item_relative_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_build_item_relative_path(\"/drives/abc/root:\", \"report.docx\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/tests/unit/onyx/connectors/sharepoint/test_denylist.py:111",
-   "in_test_code": true,
-   "kind": "urlconf_helper",
-   "line": 111,
-   "methods_as_written": null,
-   "path_as_written": "/drives/abc/root:/My%20Documents",
-   "receiver": "_build_item_relative_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_build_item_relative_path(\"/drives/abc/root:/My%20Documents\", \"report.docx\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "backend/tests/unit/onyx/server/features/craft/sandbox/sandbox_daemon/test_sandbox_daemon.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/tests/unit/onyx/server/features/craft/sandbox/sandbox_daemon/test_sandbox_daemon.py:1490",
-   "in_test_code": true,
-   "kind": "urlconf_helper",
-   "line": 1490,
-   "methods_as_written": null,
-   "path_as_written": "00000000-0000-0000-0000-000000000003",
-   "receiver": "sidecar_snapshot_restore_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "sidecar_snapshot_restore_path(\"00000000-0000-0000-0000-000000000003\"),"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "backend/tests/unit/onyx/server/manage/llm/test_fetch_models_api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -663,11 +600,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "client.meta.events.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "loadtest/prometheus_exporter.py",
    "handler": null,
    "handler_resolvable": true,
@@ -679,20 +616,18 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "REGISTRY.register(LocustCollector(environment))"
+   "rule": "OUT-3"
   }
  ],
  "rule_counts": {
   "IN-BE-1": 12,
-  "OUT-3": 9,
-  "OUT-9": 4
+  "OUT-3": 9
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 596,
+  "population": 592,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 25
+  "selected": 21
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {

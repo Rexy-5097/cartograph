@@ -241,6 +241,7 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "ee/api/agentic_provisioning/urls.py",
    "handler": "csrf_exempt",
    "handler_resolvable": false,
@@ -252,11 +253,11 @@
    "path_as_written": "api/agentic/provisioning/client_registration",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "ee/api/agentic_provisioning/views/account_requests.py",
    "handler": null,
    "handler_resolvable": true,
@@ -268,11 +269,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class AccountRequestsView(ProvisioningAPIView):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "ee/clickhouse/views/groups.py",
    "handler": null,
    "handler_resolvable": true,
@@ -284,11 +285,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class GroupsTypesViewSet(TeamAndOrgViewSetMixin, viewsets.GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "ee/hogai/eval/conftest.py",
    "handler": null,
    "handler_resolvable": true,
@@ -300,11 +301,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "config.pluginmanager.register(braintrust_url_reporter, \"terminalreporter\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "ee/partners/stripe/api/provisioning/urls.py",
    "handler": "csrf_exempt",
    "handler_resolvable": false,
@@ -316,11 +317,11 @@
    "path_as_written": "oauth/token",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "ee/urls.py",
    "handler": "admin.site.admin_view",
    "handler_resolvable": false,
@@ -332,11 +333,11 @@
    "path_as_written": "admin/resave-cohorts/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf",
    "file": "ee/urls.py",
    "handler": "vercel_connect.VercelConnectCallbackViewSet.as_view",
    "handler_resolvable": false,
@@ -348,11 +349,11 @@
    "path_as_written": "^connect/vercel/callback/?$",
    "receiver": "re_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-4",
-   "source": "re_path("
+   "rule": "OUT-4"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "posthog/admin/admins/data_deletion_request_admin.py",
    "handler": "self.admin_site.admin_view",
    "handler_resolvable": false,
@@ -364,11 +365,11 @@
    "path_as_written": "<path:object_id>/verify/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "posthog/admin/admins/team_admin.py",
    "handler": "self.admin_site.admin_view",
    "handler_resolvable": false,
@@ -380,11 +381,11 @@
    "path_as_written": "<path:object_id>/ai-gateway-wallet/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "posthog/api/dead_letter_queue.py",
    "handler": null,
    "handler_resolvable": true,
@@ -396,11 +397,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class DeadLetterQueueViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "posthog/api/personal_api_key.py",
    "handler": null,
    "handler_resolvable": true,
@@ -412,11 +413,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class PersonalAPIKeyViewSet(viewsets.ModelViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "posthog/api/rest_router.py",
    "handler": null,
    "handler_resolvable": true,
@@ -428,11 +429,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "projects_router.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "posthog/api/rest_router.py",
    "handler": null,
    "handler_resolvable": true,
@@ -444,11 +445,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "router.register(r\"login/dev\", authentication.DevLoginViewSet, \"login_dev\")"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "posthog/api/rest_router.py",
    "handler": null,
    "handler_resolvable": true,
@@ -460,11 +461,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "projects_router.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "posthog/api/user_push_token.py",
    "handler": null,
    "handler_resolvable": true,
@@ -476,11 +477,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class UserPushTokenViewSet(viewsets.GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "posthog/models/test/test_product_intent.py",
    "handler": null,
    "handler_resolvable": true,
@@ -492,59 +493,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "ProductIntent.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "posthog/oauth2_urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/oauth2_urls.py:21",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 21,
-   "methods_as_written": null,
-   "path_as_written": "oauth/authorize",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"oauth/authorize\", OAuthAuthorizationView.as_view(), name=\"authorize\"),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/oauth2_urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/oauth2_urls.py:42",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 42,
-   "methods_as_written": null,
-   "path_as_written": "oauth/userinfo",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"oauth/userinfo\", OAuthUserInfoView.as_view(), name=\"user-info\"),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:488",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 488,
-   "methods_as_written": null,
-   "path_as_written": "_preflight",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"_preflight\", preflight_check),"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf",
    "file": "posthog/urls.py",
    "handler": "include",
    "handler_resolvable": false,
@@ -556,59 +509,11 @@
    "path_as_written": "api/customer_analytics/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-10",
-   "source": "path(\"api/customer_analytics/\", include(\"products.customer_analytics.backend.presentation.views.urls\")),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:542",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 542,
-   "methods_as_written": null,
-   "path_as_written": "api/user/redirect_to_site",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"api/user/redirect_to_site\", user.redirect_to_site),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:546",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 546,
-   "methods_as_written": null,
-   "path_as_written": "api/push_subscriptions",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"api/push_subscriptions\", push_subscriptions),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:552",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 552,
-   "methods_as_written": null,
-   "path_as_written": "api/social_signup",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"api/social_signup\", signup.SocialSignupViewset.as_view()),"
+   "rule": "OUT-10"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "posthog/urls.py",
    "handler": "csrf_exempt",
    "handler_resolvable": false,
@@ -620,27 +525,11 @@
    "path_as_written": "api/projects/<str:team_id>/internal/hog_flows/account_audience",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:620",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 620,
-   "methods_as_written": null,
-   "path_as_written": "api/oauth/connected-apps",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path("
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf",
    "file": "posthog/urls.py",
    "handler": "include",
    "handler_resolvable": false,
@@ -652,59 +541,11 @@
    "path_as_written": "",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-10",
-   "source": "path(\"\", include((oauth2_urls, \"oauth2_provider\"), namespace=\"oauth2_provider\")),"
+   "rule": "OUT-10"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:676",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 676,
-   "methods_as_written": null,
-   "path_as_written": ".well-known/http-message-signatures-directory",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\".well-known/http-message-signatures-directory\", http_message_signatures_directory),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:696",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 696,
-   "methods_as_written": null,
-   "path_as_written": "slack/command-callback",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"slack/command-callback\", slack_app_command_handler),"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "posthog/urls.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "posthog/urls.py:702",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 702,
-   "methods_as_written": null,
-   "path_as_written": "webhooks/stamphog/github",
-   "receiver": "opt_slash_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "opt_slash_path(\"webhooks/stamphog/github\", stamphog_github_webhook),"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/ai_observability/backend/api/trace_reviews.py",
    "handler": null,
    "handler_resolvable": true,
@@ -716,11 +557,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class TraceReviewViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, ModelViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/batch_exports/backend/routes.py",
    "handler": null,
    "handler_resolvable": true,
@@ -732,11 +573,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "routers.organizations.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/conversations/backend/api/github_setup.py",
    "handler": null,
    "handler_resolvable": true,
@@ -748,11 +589,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class GithubConnectView(APIView):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf",
    "file": "products/conversations/backend/api/urls.py",
    "handler": "SupportSlackDisconnectView.as_view",
    "handler_resolvable": false,
@@ -764,11 +605,11 @@
    "path_as_written": "^v1/slack/disconnect/?$",
    "receiver": "re_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-4",
-   "source": "re_path(r\"^v1/slack/disconnect/?$\", SupportSlackDisconnectView.as_view(), name=\"supporthog-slack-disconnect\"),"
+   "rule": "OUT-4"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "urlconf",
    "file": "products/conversations/backend/api/urls.py",
    "handler": "EmailSendTestView.as_view",
    "handler_resolvable": false,
@@ -780,11 +621,11 @@
    "path_as_written": "^v1/email/send-test/?$",
    "receiver": "re_path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-4",
-   "source": "re_path(r\"^v1/email/send-test/?$\", EmailSendTestView.as_view(), name=\"email-send-test\"),"
+   "rule": "OUT-4"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/customer_analytics/backend/presentation/views/views.py",
    "handler": null,
    "handler_resolvable": true,
@@ -796,11 +637,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class CalendarSyncViewSet(TeamAndOrgViewSetMixin, AccessControlViewSetMixin, viewsets.GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/customer_analytics/backend/routes.py",
    "handler": null,
    "handler_resolvable": true,
@@ -812,11 +653,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "[\"team_id\"],"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/data_warehouse/backend/routes.py",
    "handler": null,
    "handler_resolvable": true,
@@ -828,11 +669,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "[\"team_id\"],"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/engineering_analytics/backend/presentation/views/workflows.py",
    "handler": null,
    "handler_resolvable": true,
@@ -844,11 +685,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class WorkflowActionsMixin(EngineeringAnalyticsViewSetBase):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/exports/backend/admin/exported_asset_admin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -860,11 +701,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@admin.register(ExportedAsset)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/marketing_analytics/backend/api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -876,11 +717,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class MarketingAnalyticsViewSet(TeamAndOrgViewSetMixin, GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/mcp_store/backend/routes.py",
    "handler": null,
    "handler_resolvable": true,
@@ -892,11 +733,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "routers.projects.register("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/review_hog/backend/api/blind_spots.py",
    "handler": null,
    "handler_resolvable": true,
@@ -908,11 +749,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class ReviewBlindSpotsConfigViewSet(TeamAndOrgViewSetMixin, viewsets.GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/signals/backend/admin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -924,11 +765,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@admin.register(SignalScoutNote)"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "urlconf",
    "file": "products/tasks/backend/admin.py",
    "handler": "self.admin_site.admin_view",
    "handler_resolvable": false,
@@ -940,11 +781,11 @@
    "path_as_written": "<uuid:run_id>/download-logs/",
    "receiver": "path",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-3",
-   "source": "path("
+   "rule": "IN-BE-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "class_based_view",
    "file": "products/tasks/backend/presentation/views/channels_api.py",
    "handler": null,
    "handler_resolvable": true,
@@ -956,11 +797,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "class ChannelFeedMessageViewSet(TeamAndOrgViewSetMixin, viewsets.GenericViewSet):"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "products/tasks/backend/routes.py",
    "handler": null,
    "handler_resolvable": true,
@@ -972,43 +813,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "routers.root.register(r\"code/invites\", tasks.CodeInviteViewSet, \"code_invites\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "products/warehouse_sources/backend/temporal/data_imports/sources/devin_ai/tests/test_devin_ai.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "products/warehouse_sources/backend/temporal/data_imports/sources/devin_ai/tests/test_devin_ai.py:106",
-   "in_test_code": true,
-   "kind": "urlconf_helper",
-   "line": 106,
-   "methods_as_written": null,
-   "path_as_written": "sessions",
-   "receiver": "_endpoint_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_endpoint_path(\"sessions\", org_id)"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "products/warehouse_sources/backend/temporal/data_imports/sources/sentry/sentry.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "products/warehouse_sources/backend/temporal/data_imports/sources/sentry/sentry.py:954",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 954,
-   "methods_as_written": null,
-   "path_as_written": "trace_item_stats",
-   "receiver": "_endpoint_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_endpoint_path(\"trace_item_stats\", organization_slug=organization_slug),"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/anthropic.py",
    "handler": "anthropic_count_tokens",
    "handler_resolvable": true,
@@ -1022,11 +831,11 @@
    "path_as_written": "/v1/messages/count_tokens",
    "receiver": "anthropic_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@anthropic_router.post(\"/v1/messages/count_tokens\", response_model=None)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/anthropic.py",
    "handler": "anthropic_messages",
    "handler_resolvable": true,
@@ -1040,11 +849,11 @@
    "path_as_written": "/v1/messages",
    "receiver": "anthropic_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@anthropic_router.post(\"/v1/messages\", response_model=None)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/health.py",
    "handler": "readiness",
    "handler_resolvable": true,
@@ -1058,11 +867,11 @@
    "path_as_written": "/_readiness",
    "receiver": "health_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@health_router.get(\"/_readiness\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/models.py",
    "handler": "list_models",
    "handler_resolvable": true,
@@ -1076,11 +885,11 @@
    "path_as_written": "/v1/models",
    "receiver": "models_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@models_router.get(\"/v1/models\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/openai.py",
    "handler": "chat_completions_with_product",
    "handler_resolvable": true,
@@ -1094,11 +903,11 @@
    "path_as_written": "/{product}/v1/chat/completions",
    "receiver": "openai_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@openai_router.post(\"/{product}/v1/chat/completions\", response_model=None)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/openai.py",
    "handler": "responses_v1_with_product",
    "handler_resolvable": true,
@@ -1112,11 +921,11 @@
    "path_as_written": "/{product}/v1/responses",
    "receiver": "openai_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@openai_router.post(\"/{product}/v1/responses\", response_model=None)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/openai.py",
    "handler": "audio_transcriptions",
    "handler_resolvable": true,
@@ -1130,11 +939,11 @@
    "path_as_written": "/v1/audio/transcriptions",
    "receiver": "openai_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@openai_router.post(\"/v1/audio/transcriptions\", response_model=None)"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/src/llm_gateway/api/usage.py",
    "handler": "invalidate_plan_cache",
    "handler_resolvable": true,
@@ -1150,11 +959,11 @@
    "receiver": "usage_router",
    "registration_prefix": "/v1/usage",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@usage_router.post(\"/{product}/invalidate-plan-cache\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/llm-gateway/tests/test_main.py",
    "handler": "raises",
    "handler_resolvable": true,
@@ -1168,11 +977,11 @@
    "path_as_written": "/raises",
    "receiver": "app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@app.get(\"/raises\", dependencies=[Depends(refuse_to_read_postgres)])"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/stripe-mock/src/stripe_mock/routes/list_endpoints.py",
    "handler": "list_resource",
    "handler_resolvable": true,
@@ -1186,11 +995,11 @@
    "path_as_written": "/v1/{resource}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/v1/{resource}\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/stripe-mock/src/stripe_mock/routes/nested_endpoints.py",
    "handler": "list_customer_payment_methods",
    "handler_resolvable": true,
@@ -1204,11 +1013,11 @@
    "path_as_written": "/v1/customers/{customer_id}/payment_methods",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/v1/customers/{customer_id}/payment_methods\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "services/stripe-mock/src/stripe_mock/routes/webhook_endpoints.py",
    "handler": "create_webhook",
    "handler_resolvable": true,
@@ -1222,8 +1031,7 @@
    "path_as_written": "/v1/webhook_endpoints",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/v1/webhook_endpoints\")"
+   "rule": "IN-BE-1"
   }
  ],
  "rule_counts": {
@@ -1232,14 +1040,13 @@
   "OUT-10": 2,
   "OUT-2": 12,
   "OUT-3": 12,
-  "OUT-4": 3,
-  "OUT-9": 12
+  "OUT-4": 3
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 1523,
+  "population": 1470,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 60
+  "selected": 48
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {

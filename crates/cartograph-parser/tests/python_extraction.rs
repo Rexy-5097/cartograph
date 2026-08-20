@@ -845,11 +845,11 @@ fn a_known_registrar_still_works_without_a_literal_path() {
     // path is built elsewhere is still observed — the previous behaviour is
     // widened, never narrowed.
     let analysis = analyze_source(
-        r#"
+        r"
 @router.get(SOME_PATH)
 def listing():
     pass
-"#,
+",
     );
     assert_eq!(analysis.routes.len(), 1, "{:?}", analysis.routes);
 }

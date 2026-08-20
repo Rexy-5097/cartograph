@@ -5,8 +5,8 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M07
-status: NOT_STARTED
-current_branch: main
+status: AWAITING_REVIEW        # implementation and both benchmark passes complete
+current_branch: feature/m07-real-validation
 next_allowed_milestone: M07    # UNLOCKED - M06 accepted; M08 locked until M07 is accepted
 
 milestones:
@@ -61,10 +61,16 @@ milestones:
     accepted_tag: cartograph-m06          # immutable
     merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
   M07:
-    status: NOT_STARTED                   # unlocked; no code written
-    pull_request: null
-    provisional_tag: null
-    accepted_tag: null
+    status: AWAITING_REVIEW               # PR open, CI green, not merged, not tagged
+    pull_request: 10
+    provisional_tag: null                 # ADR-0010: none needed; the accepted tag
+    accepted_tag: null                    # belongs to the accepted merge commit
+    result: |
+      Seven pinned repositories, 58,225 files. Route extraction and
+      model-to-table resolution both precision 1.000 / recall 1.000 over 101
+      and 48 in-scope ground-truth records. Six fully verified chains, NONE
+      beginning at a frontend file: 12 of 1,458 HttpCall edges have a
+      TypeScript client. The negative result is the finding.
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M06
@@ -72,25 +78,38 @@ last_checkpoint:                 # ADR-0010: the tag is the authority for its SH
   tag: cartograph-m06
   merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
 
-gates:                           # main at cartograph-m05, 2026-08-19 (QG-001..009)
+gates:                           # feature/m07-real-validation, 2026-08-20 (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 335 passed, 0 failed
+  tests: PASS                    # QG-004 - 354 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
-  milestone_acceptance: PASS     # QG-008 - M04 criteria - M02 criteria
+  milestone_acceptance: PASS     # QG-008 - M07 deliverables present, no M08+ capability
   agentos_validator: PASS        # 99/100
-  ci: PASS                       # PR #8 and PR #9 green from base main
+  ci: PENDING                    # PR #10
 
 tests:
-  total: 335
+  total: 354
   failed: 0
 
 benchmarks:
   harness: ts_extraction, py_extraction, canonicalization, matching, evaluation and orm groups run
   published_numbers: none        # internal only until methodology is documented (M08+)
+  real_repository_corpus:        # M07 - benchmarks/corpus.json, pinned commits
+    repositories: 7
+    files_analysed: 58225
+    wall_seconds: 68.4
+    peak_rss_bytes: 825114624    # posthog
+    route_precision: 1.0         # 101 in-scope ground-truth records
+    route_recall: 1.0
+    queries_precision: 1.0       # 48 in-scope ground-truth records
+    queries_recall: 1.0
+    chains_fully_verified: 6
+    chains_from_a_frontend_file: 0
+    unmeasured: http_call recall, orm_access recall, chain recall
+    status: INTERNAL             # methodology is first-generation; not for publication
 
 smoke_tests:                     # robustness only - no accuracy claim
   - corpus: tiangolo/full-stack-fastapi-template
@@ -111,6 +130,9 @@ smoke_tests:                     # robustness only - no accuracy claim
 
 open_risks:
   - exfat-volume-quirks
+  - no-frontend-rooted-chain-on-any-real-repository   # M07 headline; see FW-1..FW-4
+  - orm-access-attribution-without-import-resolution  # 286 edges unconfirmable
+  - http-call-and-orm-access-recall-unmeasured
   - uncalibrated-confidence
   - graph-local-node-identity
   - ts-grammar-gaps

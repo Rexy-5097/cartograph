@@ -80,11 +80,12 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies_test.py",
    "handler": "get_user_endpoint",
    "handler_resolvable": true,
    "id": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies_test.py:32",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "verb_decorator",
    "line": 32,
    "methods_as_written": [
@@ -93,11 +94,11 @@
    "path_as_written": "/user",
    "receiver": "app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@app.get(\"/user\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/external/v1/integrations.py",
    "handler": "list_credentials",
    "handler_resolvable": true,
@@ -113,11 +114,11 @@
    "receiver": "integrations_router",
    "registration_prefix": "/integrations",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@integrations_router.get(\"/credentials\", response_model=list[CredentialsMetaResponse])"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/admin/diagnostics_admin_routes.py",
    "handler": "stop_multiple_executions",
    "handler_resolvable": true,
@@ -133,11 +134,11 @@
    "receiver": "router",
    "registration_prefix": "/admin",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/admin/platform_cost_routes.py",
    "handler": "get_cost_logs",
    "handler_resolvable": true,
@@ -153,11 +154,11 @@
    "receiver": "router",
    "registration_prefix": "/platform-costs",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/chat/routes.py",
    "handler": "update_session_title_route",
    "handler_resolvable": true,
@@ -171,11 +172,11 @@
    "path_as_written": "/sessions/{session_id}/title",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/experts/routes.py",
    "handler": "update_expert_soul",
    "handler_resolvable": true,
@@ -191,11 +192,11 @@
    "receiver": "router",
    "registration_prefix": "/experts",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.patch("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/library/routes/agents.py",
    "handler": "list_favorite_library_agents",
    "handler_resolvable": true,
@@ -211,11 +212,11 @@
    "receiver": "router",
    "registration_prefix": "/agents",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/oauth.py",
    "handler": "authorize",
    "handler_resolvable": true,
@@ -229,11 +230,11 @@
    "path_as_written": "/authorize",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/authorize\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/orgs/routes.py",
    "handler": "transfer_ownership",
    "handler_resolvable": true,
@@ -247,11 +248,11 @@
    "path_as_written": "/{org_id}/transfer-ownership",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/search/routes.py",
    "handler": "global_search_endpoint",
    "handler_resolvable": true,
@@ -265,11 +266,11 @@
    "path_as_written": "/global",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/v1.py",
    "handler": "update_user_timezone_route",
    "handler_resolvable": true,
@@ -283,11 +284,11 @@
    "path_as_written": "/auth/user/timezone",
    "receiver": "v1_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@v1_router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "autogpt_platform/backend/backend/api/features/workspace/routes.py",
    "handler": "preview_file",
    "handler_resolvable": true,
@@ -301,11 +302,11 @@
    "path_as_written": "/files/{file_id}/preview",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/bot/adapters/discord/adapter.py",
    "handler": null,
    "handler_resolvable": true,
@@ -317,11 +318,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "commands.register(self._tree, self._api)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/bot/adapters/slack/adapter.py",
    "handler": null,
    "handler_resolvable": true,
@@ -333,11 +334,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "app.add_api_route(COMMANDS_PATH, self._handle_command_request, methods=[\"POST\"])"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/bot/adapters/slack/oauth.py",
    "handler": null,
    "handler_resolvable": true,
@@ -349,91 +350,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "app.add_api_route(CALLBACK_PATH, _callback, methods=[\"GET\"])"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/context_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/context_test.py:198",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 198,
-   "methods_as_written": null,
-   "path_as_written": "/home/user/project/main.py",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/home/user/project/main.py\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/context_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/context_test.py:217",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 217,
-   "methods_as_written": null,
-   "path_as_written": "/home/user/../../etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/home/user/../../etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/context_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/context_test.py:222",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 222,
-   "methods_as_written": null,
-   "path_as_written": "/etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/context_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/context_test.py:239",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 239,
-   "methods_as_written": null,
-   "path_as_written": "/tmp/../etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/tmp/../etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/context_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/context_test.py:244",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 244,
-   "methods_as_written": null,
-   "path_as_written": "/tmp_evil/malicious.txt",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/tmp_evil/malicious.txt\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/dream/apply.py",
    "handler": null,
    "handler_resolvable": true,
@@ -445,11 +366,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "completion.register()"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/dream/scheduling.py",
    "handler": null,
    "handler_resolvable": true,
@@ -461,203 +382,91 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "result = await job.register(client_cached, user_id, tz_cached)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py",
    "handler": null,
    "handler_resolvable": true,
    "id": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py:124",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "imperative",
    "line": 124,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "c.register()"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py",
    "handler": null,
    "handler_resolvable": true,
    "id": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py:134",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "imperative",
    "line": 134,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "c.register()"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py",
    "handler": null,
    "handler_resolvable": true,
    "id": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py:155",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "imperative",
    "line": 155,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "c.register()"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py",
    "handler": null,
    "handler_resolvable": true,
    "id": "autogpt_platform/backend/backend/copilot/graphiti/ingest_test.py:210",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "imperative",
    "line": 210,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "completion.register()"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/copilot/sdk/cli_openrouter_compat_test.py",
    "handler": null,
    "handler_resolvable": true,
    "id": "autogpt_platform/backend/backend/copilot/sdk/cli_openrouter_compat_test.py:249",
-   "in_test_code": false,
+   "in_test_code": true,
    "kind": "imperative",
    "line": 249,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "app.router.add_route(\"*\", \"/{tail:.*}\", lambda _r: web.Response(status=404))"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:80",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 80,
-   "methods_as_written": null,
-   "path_as_written": "../../etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"../../etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:88",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 88,
-   "methods_as_written": null,
-   "path_as_written": "/etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:92",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 92,
-   "methods_as_written": null,
-   "path_as_written": "/",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:96",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 96,
-   "methods_as_written": null,
-   "path_as_written": "/home/other/file.txt",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/home/other/file.txt\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:119",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 119,
-   "methods_as_written": null,
-   "path_as_written": "/tmp/../etc/passwd",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/tmp/../etc/passwd\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/copilot/sdk/e2b_file_tools_test.py:124",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 124,
-   "methods_as_written": null,
-   "path_as_written": "/tmp_evil/malicious.txt",
-   "receiver": "resolve_sandbox_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "resolve_sandbox_path(\"/tmp_evil/malicious.txt\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "autogpt_platform/backend/backend/util/gcs_utils_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/util/gcs_utils_test.py:38",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 38,
-   "methods_as_written": null,
-   "path_as_written": "s3://my-bucket/file",
-   "receiver": "parse_gcs_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "parse_gcs_path(\"s3://my-bucket/file\")"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/util/service.py",
    "handler": null,
    "handler_resolvable": true,
@@ -669,11 +478,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.fastapi_app.add_api_route("
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "autogpt_platform/backend/backend/util/service.py",
    "handler": null,
    "handler_resolvable": true,
@@ -685,20 +494,18 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.fastapi_app.add_api_route("
+   "rule": "OUT-3"
   }
  ],
  "rule_counts": {
   "IN-BE-1": 12,
-  "OUT-3": 12,
-  "OUT-9": 12
+  "OUT-3": 12
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 351,
+  "population": 339,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 36
+  "selected": 24
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {

@@ -42,7 +42,12 @@ ROUTE_PATTERNS = [
     # Django URL conf.
     ("urlconf", re.compile(r"^\s*(?:re_)?path\s*\(")),
     # Django URL conf via a project-local helper (Zulip's rest_path, etc.).
-    ("urlconf_helper", re.compile(r"^\s*(\w*_?path|rest_path|url)\s*\(\s*[\"']")),
+    #
+    # Restricted to the known helper names. Matching any callee ending in
+    # `_path` caught AutoGPT's `resolve_sandbox_path(...)` — an ordinary
+    # function call in a test, recorded as a route because its name ends the
+    # right way and its argument happens to start with a slash.
+    ("urlconf_helper", re.compile(r"^\s*(rest_path|url|i18n_path|include_path)\s*\(\s*[\"']")),
     # Imperative registration, which no decorator pattern can catch.
     ("imperative", re.compile(r"\.(add_url_rule|add_api_route|register|add_route)\s*\(")),
     # Flask-AppBuilder class-based exposure.

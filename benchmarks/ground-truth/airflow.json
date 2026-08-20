@@ -244,6 +244,7 @@
  "route_declarations": [
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "airflow-core/docs/empty_plugin/empty_plugin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -255,11 +256,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/auth/managers/simple/routes/login.py",
    "handler": null,
    "handler_resolvable": true,
@@ -273,11 +274,11 @@
    "path_as_written": "/token",
    "receiver": "login_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@login_router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/api_fastapi/common/router.py",
    "handler": null,
    "handler_resolvable": true,
@@ -289,11 +290,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.add_api_route("
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py",
    "handler": "get_asset_queued_events",
    "handler_resolvable": true,
@@ -307,11 +308,11 @@
    "path_as_written": "/assets/{asset_id}/queuedEvents",
    "receiver": "assets_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@assets_router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dag_run.py",
    "handler": "patch_dag_run",
    "handler_resolvable": true,
@@ -325,11 +326,11 @@
    "path_as_written": "/{dag_run_id}",
    "receiver": "dag_run_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@dag_run_router.patch("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/log.py",
    "handler": "get_log",
    "handler_resolvable": true,
@@ -343,11 +344,11 @@
    "path_as_written": "/{task_id}/logs/{try_number}",
    "receiver": "task_instances_log_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@task_instances_log_router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py",
    "handler": "get_xcom_entry",
    "handler_resolvable": true,
@@ -361,11 +362,11 @@
    "path_as_written": "/{xcom_key:path}",
    "receiver": "xcom_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@xcom_router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/deadlines.py",
    "handler": "get_dag_deadline_alerts",
    "handler_resolvable": true,
@@ -379,11 +380,11 @@
    "path_as_written": "/deadlineAlerts",
    "receiver": "deadlines_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@deadlines_router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/assets.py",
    "handler": "get_asset_by_name",
    "handler_resolvable": true,
@@ -397,11 +398,11 @@
    "path_as_written": "/by-name",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/by-name\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/hitl.py",
    "handler": "get_hitl_detail",
    "handler_resolvable": true,
@@ -415,11 +416,11 @@
    "path_as_written": "/{task_instance_id}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/variables.py",
    "handler": "get_variable",
    "handler_resolvable": true,
@@ -433,27 +434,11 @@
    "path_as_written": "/{variable_key:path}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "airflow-core/src/airflow/configuration.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/configuration.py:205",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 205,
-   "methods_as_written": null,
-   "path_as_written": "provider_config_fallback_defaults.cfg",
-   "receiver": "_default_config_file_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_default_config_file_path(\"provider_config_fallback_defaults.cfg\"),"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/serialization/definitions/mappedoperator.py",
    "handler": null,
    "handler_resolvable": true,
@@ -465,11 +450,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@get_mapped_ti_count.register(SerializedBaseOperator)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/serialization/encoders.py",
    "handler": null,
    "handler_resolvable": true,
@@ -481,11 +466,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@serialize_timetable.register(NullTimetable)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/serialization/encoders.py",
    "handler": null,
    "handler_resolvable": true,
@@ -497,11 +482,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@serialize_partition_mapper.register(StartOfWeekMapper)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/serialization/encoders.py",
    "handler": null,
    "handler_resolvable": true,
@@ -513,11 +498,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@serialize_window.register(DayWindow)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/serialization/encoders.py",
    "handler": null,
    "handler_resolvable": true,
@@ -529,11 +514,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "@serialize_window.register(YearWindow)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "airflow-core/src/airflow/settings.py",
    "handler": null,
    "handler_resolvable": true,
@@ -545,11 +530,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "atexit.register(dispose_orm)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "airflow-core/tests/unit/plugins/test_plugin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -561,11 +546,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "devel-common/src/tests_common/pytest_plugin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -577,11 +562,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "forbidden_warnings=tuple(map(str.strip, forbidden_warnings)),"
+   "rule": "OUT-3"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "providers/amazon/src/airflow/providers/amazon/aws/auth_manager/routes/login.py",
    "handler": "login",
    "handler_resolvable": true,
@@ -595,11 +580,11 @@
    "path_as_written": "/login",
    "receiver": "login_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@login_router.get(\"/login\")"
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/databricks/src/airflow/providers/databricks/plugins/databricks_workflow.py",
    "handler": null,
    "handler_resolvable": true,
@@ -611,11 +596,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/repair_databricks_job/<string:dag_id>/<string:run_id>\", methods=(\"GET\",))"
+   "rule": "OUT-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "providers/edge3/src/airflow/providers/edge3/worker_api/routes/ui.py",
    "handler": "request_worker_shutdown",
    "handler_resolvable": true,
@@ -629,11 +614,11 @@
    "path_as_written": "/worker/{worker_name}/shutdown",
    "receiver": "ui_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@ui_router.post("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "verb_decorator",
    "file": "providers/fab/src/airflow/providers/fab/auth_manager/api_fastapi/routes/users.py",
    "handler": "get_user",
    "handler_resolvable": true,
@@ -647,11 +632,11 @@
    "path_as_written": "/users/{username}",
    "receiver": "fab_router",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@fab_router.get("
+   "rule": "IN-BE-1"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/fab/src/airflow/providers/fab/auth_manager/views/auth_oauth.py",
    "handler": null,
    "handler_resolvable": true,
@@ -663,11 +648,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/oauth-authorized/<provider>\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/fab/src/airflow/providers/fab/auth_manager/views/user.py",
    "handler": null,
    "handler_resolvable": true,
@@ -679,11 +664,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/show/<pk>\", methods=[\"GET\"])"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/fab/src/airflow/providers/fab/www/views.py",
    "handler": null,
    "handler_resolvable": true,
@@ -695,11 +680,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/fab/tests/unit/fab/auth_manager/test_security.py",
    "handler": null,
    "handler_resolvable": true,
@@ -711,11 +696,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/some_action\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "expose",
    "file": "providers/fab/tests/unit/fab/plugins/test_plugin.py",
    "handler": null,
    "handler_resolvable": true,
@@ -727,11 +712,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-2",
-   "source": "@expose(\"/\")"
+   "rule": "OUT-2"
   },
   {
    "classification": "IN_SCOPE",
+   "declaration_form": "route_decorator",
    "file": "providers/google/tests/unit/google/common/auth_backend/test_google_openid.py",
    "handler": "_test_dummy_endpoint",
    "handler_resolvable": true,
@@ -743,11 +728,11 @@
    "path_as_written": "/fab/v1/users",
    "receiver": "_app",
    "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-2",
-   "source": "@_app.route(\"/fab/v1/users\")"
+   "rule": "IN-BE-2"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "providers/microsoft/azure/tests/system/microsoft/azure/example_azure_ai_agents.py",
    "handler": null,
    "handler_resolvable": true,
@@ -759,11 +744,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "atexit.register(os.unlink, conn_file.name)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "shared/logging/tests/logging/test_structlog.py",
    "handler": null,
    "handler_resolvable": true,
@@ -775,27 +760,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "_WarningsInterceptor.register(sentinel)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "task-sdk/src/airflow/sdk/configuration.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "task-sdk/src/airflow/sdk/configuration.py:146",
-   "in_test_code": false,
-   "kind": "urlconf_helper",
-   "line": 146,
-   "methods_as_written": null,
-   "path_as_written": "provider_config_fallback_defaults.cfg",
-   "receiver": "_default_config_file_path",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-9",
-   "source": "_default_config_file_path(\"provider_config_fallback_defaults.cfg\"),"
-  },
-  {
-   "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "task-sdk/src/airflow/sdk/coordinators/_subprocess.py",
    "handler": null,
    "handler_resolvable": true,
@@ -807,11 +776,11 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "sel.register(soc, selectors.EVENT_READ, data=key)"
+   "rule": "OUT-3"
   },
   {
    "classification": "UNSUPPORTED",
+   "declaration_form": "imperative",
    "file": "task-sdk/src/airflow/sdk/execution_time/supervisor.py",
    "handler": null,
    "handler_resolvable": true,
@@ -823,22 +792,20 @@
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "self.selector.register("
+   "rule": "OUT-3"
   }
  ],
  "rule_counts": {
   "IN-BE-1": 12,
   "IN-BE-2": 1,
   "OUT-2": 8,
-  "OUT-3": 12,
-  "OUT-9": 2
+  "OUT-3": 12
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 292,
+  "population": 290,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 35
+  "selected": 33
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {

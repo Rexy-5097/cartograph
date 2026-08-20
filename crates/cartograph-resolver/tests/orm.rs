@@ -679,10 +679,10 @@ fn a_shared_model_base_declaring_neither_table_attribute_says_so() {
     // present. Naming one would be a guess, and the table stays unresolved.
     let analysis = orm(&[(
         "app/models.py",
-        r#"
+        r"
 class Ambiguous(Model):
     pass
-"#,
+",
     )]);
     let model = analysis.models.get("Ambiguous").expect("a model");
     assert_eq!(model.flavor, OrmFlavor::Unspecified);
@@ -700,7 +700,7 @@ class Ambiguous(Model):
 /// and Zulip, `web/src/desktop_notifications.ts:41`.
 ///
 /// A Python ORM model cannot be constructed from TypeScript. Before the
-/// language filter, `new Theme({...})` in a .tsx file produced an OrmAccess
+/// language filter, `new Theme({...})` in a .tsx file produced an `OrmAccess`
 /// edge to Superset's Python `Theme` model — 33 such edges across the corpus.
 #[test]
 fn a_typescript_call_never_becomes_an_orm_access() {
@@ -719,11 +719,11 @@ class Theme(Base):
         ),
         (
             "web/src/theme.tsx",
-            r#"
+            r"
 export function build(config) {
   return new Theme({ config });
 }
-"#,
+",
         ),
     ]);
 
@@ -795,12 +795,12 @@ class User(models.Model):
         ),
         (
             "app/service.py",
-            r#"
+            r"
 from app.models import User
 
 def load():
     return User.objects.filter(active=True)
-"#,
+",
         ),
     ]);
     assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
@@ -832,12 +832,12 @@ class SearchSettings(Base):
         ),
         (
             "backend/onyx/service.py",
-            r#"
+            r"
 from onyx.db.search_settings import SearchSettings
 
 def load(row):
     return SearchSettings(**row)
-"#,
+",
         ),
     ]);
     let sites: Vec<_> = analysis
@@ -863,12 +863,12 @@ class Order(models.Model):
         ),
         (
             "app/views.py",
-            r#"
+            r"
 from .models import Order
 
 def create():
     return Order.objects.create()
-"#,
+",
         ),
     ]);
     assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);

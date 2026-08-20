@@ -170,6 +170,35 @@ proves the check happened. A small change may need only a targeted test and a
 self-check. Resolver behaviour needs fixtures, adversarial tests and real
 repository inspection.
 
+## 12a. Measuring your own engine (M07)
+
+Three lessons from the first real benchmark. They apply to M08's calibration
+set and to anything else that scores this project's output.
+
+**A scope definition written from the implementation is circular.** The first
+version of `benchmarks/supported-subset.json` defined "supported" as the set of
+patterns the parser recognises. Recall against it is 1.0 by construction: a
+pattern the analyser misses is a pattern the definition excluded. Declare scope
+by what the *frameworks* do, then list the implementation's shortfalls
+separately — and write them down **before** measuring, so a miss discovered
+later cannot be moved out of the denominator.
+
+**The instrument is a second implementation, and it has its own bugs.** Six
+defects were found in the M07 harness against five in the engine. Three of them
+corrected numbers in Cartograph's favour: a multi-line class header that did
+not close the previous class's scope, route declarations counted from inside
+docstrings, and ORM flavour read from a base name. Any correction that improves
+the result deserves more scrutiny than one that worsens it, and belongs in the
+record with the reason it was made.
+
+**A benchmark must resist its own author.** Write the attacks: delete a
+ground-truth record, drop a difficult repository, unpin a commit, shrink a
+denominator, remove the refusal cases, strip the adversarial checks. Run them
+against the gate and count how many are caught. M07's first attempt caught ten
+of eleven — deleting a ground-truth record shrinks both sides of the recall
+ratio and was invisible — which is why results are now bound to the digest of
+the ground truth they were scored against.
+
 ## 13. The rule that decides ties
 
 Never optimise for *finish the milestone quickly*. Optimise for *finish the

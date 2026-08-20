@@ -10,6 +10,59 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M07, full-stack verification on real repositories
+
+**A negative result, and it is the point.** Across seven pinned real
+repositories and 58,225 files, Cartograph produced six fully verified
+frontend-to-table chains and **none of them begins at a frontend file**. Of
+1,458 `HttpCall` edges, 12 have a TypeScript client. The rest are Python test
+suites calling their own API. Real frontends reach their backend through
+generated client wrappers, so no URL appears at the call site — the single
+largest obstacle to the product's central claim, now measured rather than
+suspected. Full report: [docs/benchmarks/m07-report.md](docs/benchmarks/m07-report.md).
+
+- **A pinned corpus** — `benchmarks/corpus.json`: Superset, full-stack-fastapi,
+  Onyx, PostHog, Zulip, Airflow, AutoGPT, at exact commits, analysed at their
+  repository root so scope cannot be tuned against results. No corpus source
+  enters this repository.
+- **Scope declared before measuring** — `benchmarks/supported-subset.json`,
+  committed before the analyser had run against anything. It predicts seven
+  specific implementation gaps in advance so a miss found later cannot be
+  reclassified as out of scope.
+- **Ground truth independent of output** — drafted from source by an instrument
+  that is handed a filesystem path, cannot import the analyser, and never reads
+  its output. Its patterns describe what the frameworks serve, not what
+  Cartograph recognises.
+- **Graph export** — `cartograph match --json` now emits the graph it built, so
+  a chain is verified by traversing shared nodes rather than inferred from
+  matching names.
+- **A benchmark that resists its author** — `benchmarks/evaluate.py` runs ten
+  checks against the ways these numbers could be flattered, and QG-009 now
+  enforces the artefacts: pinned commits, declared scope, refusal records,
+  denominators equal to the in-scope record count, and results bound to the
+  digest of the ground truth they were scored against. Eleven attacks were
+  written against that gate; all eleven are detected.
+
+### Fixed — five defects the corpus exposed
+
+- **`Model` read as Django.** Django, Flask-SQLAlchemy and Flask-AppBuilder all
+  use a base named `Model`. Testing Django first meant every Superset and
+  Airflow model was searched for a `Meta.db_table` it does not have while its
+  `__tablename__` sat a line below; Superset resolved 3 tables out of 33.
+  Flavour is now read from what the class declares. `Queries` recall 0.729 → 1.000.
+- **ORM discovery ran over TypeScript.** `new Theme({config})` in a `.tsx` file
+  produced an `OrmAccess` edge to a Python model of the same name — 33 across
+  the corpus, now zero.
+- **Model names resolved without imports.** Airflow's architecture diagrams call
+  `User("DAG Author")` having imported `User` from the `diagrams` package; 218
+  were attributed to the Flask-AppBuilder model.
+- **Route decorators required a listed receiver.** Superset's four
+  `@health_blueprint.route(...)` declarations were invisible. A blueprint may be
+  bound to any name; the evidence is a literal URL path in the first argument.
+- **TypeScript route declarations read as client calls.** `app.get('/_health',
+  (c) => …)` is Express and Hono declaring a route; three in PostHog's Node
+  services were matched to a Python endpoint in a different service.
+
 ### Added — M06, ORM and database resolution
 
 **The chain is complete.** `CheckoutButton.tsx → POST /api/orders →
