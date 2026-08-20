@@ -295,16 +295,16 @@
   {
    "classification": "IN_SCOPE",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py",
-   "handler": "get_asset",
+   "handler": "get_asset_queued_events",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:563",
+   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:528",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 563,
+   "line": 528,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/assets/{asset_id}",
+   "path_as_written": "/assets/{asset_id}/queuedEvents",
    "receiver": "assets_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
@@ -313,34 +313,34 @@
   {
    "classification": "IN_SCOPE",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dag_run.py",
-   "handler": "get_upstream_asset_events",
+   "handler": "patch_dag_run",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dag_run.py:270",
+   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dag_run.py:192",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 270,
+   "line": 192,
    "methods_as_written": [
-    "GET"
+    "PATCH"
    ],
-   "path_as_written": "/{dag_run_id}/upstreamAssetEvents",
+   "path_as_written": "/{dag_run_id}",
    "receiver": "dag_run_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@dag_run_router.get("
+   "source": "@dag_run_router.patch("
   },
   {
    "classification": "IN_SCOPE",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/log.py",
-   "handler": "get_external_log_url",
+   "handler": "get_log",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/log.py:188",
+   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/log.py:79",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 188,
+   "line": 79,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/{task_id}/externalLogUrl/{try_number}",
+   "path_as_written": "/{task_id}/logs/{try_number}",
    "receiver": "task_instances_log_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
@@ -349,52 +349,70 @@
   {
    "classification": "IN_SCOPE",
    "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py",
-   "handler": "delete_xcom_entry",
+   "handler": "get_xcom_entry",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py:390",
+   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py:67",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 390,
+   "line": 67,
    "methods_as_written": [
-    "DELETE"
+    "GET"
    ],
    "path_as_written": "/{xcom_key:path}",
    "receiver": "xcom_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@xcom_router.delete("
+   "source": "@xcom_router.get("
   },
   {
    "classification": "IN_SCOPE",
-   "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/gantt.py",
-   "handler": "get_gantt_data",
+   "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/deadlines.py",
+   "handler": "get_dag_deadline_alerts",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/gantt.py:36",
+   "id": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/deadlines.py:146",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 36,
+   "line": 146,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/{dag_id}/{run_id}",
-   "receiver": "gantt_router",
+   "path_as_written": "/deadlineAlerts",
+   "receiver": "deadlines_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@gantt_router.get("
+   "source": "@deadlines_router.get("
   },
   {
    "classification": "IN_SCOPE",
-   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/connection_tests.py",
-   "handler": "get_connection_test_connection",
+   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/assets.py",
+   "handler": "get_asset_by_name",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/connection_tests.py:45",
+   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/assets.py:37",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 45,
+   "line": 37,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/{connection_test_id}/connection",
+   "path_as_written": "/by-name",
+   "receiver": "router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/by-name\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/hitl.py",
+   "handler": "get_hitl_detail",
+   "handler_resolvable": true,
+   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/hitl.py:137",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 137,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/{task_instance_id}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
@@ -402,35 +420,17 @@
   },
   {
    "classification": "IN_SCOPE",
-   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/task_instances.py",
-   "handler": "ti_heartbeat",
+   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/variables.py",
+   "handler": "get_variable",
    "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/task_instances.py:918",
+   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/variables.py:104",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 918,
-   "methods_as_written": [
-    "PUT"
-   ],
-   "path_as_written": "/{task_instance_id}/heartbeat",
-   "receiver": "ti_id_router",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@ti_id_router.put("
-  },
-  {
-   "classification": "IN_SCOPE",
-   "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/xcoms.py",
-   "handler": "get_mapped_xcom_by_slice",
-   "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/api_fastapi/execution_api/routes/xcoms.py:181",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 181,
+   "line": 104,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/{dag_id}/{run_id}/{task_id}/{key:path}/slice",
+   "path_as_written": "/{variable_key:path}",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
@@ -549,22 +549,6 @@
    "source": "atexit.register(dispose_orm)"
   },
   {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "airflow-core/src/airflow/triggers/shared_stream.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "airflow-core/src/airflow/triggers/shared_stream.py:302",
-   "in_test_code": false,
-   "kind": "urlconf",
-   "line": 302,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (rather than silently dropping events) so Airflow's retry / failure"
-  },
-  {
    "classification": "UNSUPPORTED",
    "file": "airflow-core/tests/unit/plugins/test_plugin.py",
    "handler": null,
@@ -598,21 +582,21 @@
   },
   {
    "classification": "IN_SCOPE",
-   "file": "providers/common/ai/src/airflow/providers/common/ai/plugins/hitl_review.py",
-   "handler": "find_session",
+   "file": "providers/amazon/src/airflow/providers/amazon/aws/auth_manager/routes/login.py",
+   "handler": "login",
    "handler_resolvable": true,
-   "id": "providers/common/ai/src/airflow/providers/common/ai/plugins/hitl_review.py:253",
+   "id": "providers/amazon/src/airflow/providers/amazon/aws/auth_manager/routes/login.py:72",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 253,
+   "line": 72,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/sessions/find",
-   "receiver": "hitl_review_app",
+   "path_as_written": "/login",
+   "receiver": "login_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@hitl_review_app.get("
+   "source": "@login_router.get(\"/login\")"
   },
   {
    "classification": "UNSUPPORTED",
@@ -632,21 +616,39 @@
   },
   {
    "classification": "IN_SCOPE",
-   "file": "providers/edge3/src/airflow/providers/edge3/worker_api/routes/worker.py",
-   "handler": "register",
+   "file": "providers/edge3/src/airflow/providers/edge3/worker_api/routes/ui.py",
+   "handler": "request_worker_shutdown",
    "handler_resolvable": true,
-   "id": "providers/edge3/src/airflow/providers/edge3/worker_api/routes/worker.py:190",
+   "id": "providers/edge3/src/airflow/providers/edge3/worker_api/routes/ui.py:234",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 190,
+   "line": 234,
    "methods_as_written": [
     "POST"
    ],
-   "path_as_written": "/{worker_name}",
-   "receiver": "worker_router",
+   "path_as_written": "/worker/{worker_name}/shutdown",
+   "receiver": "ui_router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@worker_router.post(\"/{worker_name}\", dependencies=[Depends(jwt_token_authorization_rest)])"
+   "source": "@ui_router.post("
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "providers/fab/src/airflow/providers/fab/auth_manager/api_fastapi/routes/users.py",
+   "handler": "get_user",
+   "handler_resolvable": true,
+   "id": "providers/fab/src/airflow/providers/fab/auth_manager/api_fastapi/routes/users.py:76",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 76,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/users/{username}",
+   "receiver": "fab_router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@fab_router.get("
   },
   {
    "classification": "UNSUPPORTED",
@@ -745,24 +747,6 @@
    "source": "@_app.route(\"/fab/v1/users\")"
   },
   {
-   "classification": "IN_SCOPE",
-   "file": "providers/informatica/dev/informatica_simulator/app/main.py",
-   "handler": "get_catalog_object",
-   "handler_resolvable": true,
-   "id": "providers/informatica/dev/informatica_simulator/app/main.py:262",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 262,
-   "methods_as_written": [
-    "GET"
-   ],
-   "path_as_written": "/access/2/catalog/data/objects/{object_id:path}",
-   "receiver": "app",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@app.get(\"/access/2/catalog/data/objects/{object_id:path}\")"
-  },
-  {
    "classification": "UNSUPPORTED",
    "file": "providers/microsoft/azure/tests/system/microsoft/azure/example_azure_ai_agents.py",
    "handler": null,
@@ -846,27 +830,27 @@
  "rule_counts": {
   "IN-BE-1": 12,
   "IN-BE-2": 1,
-  "N/A": 1,
   "OUT-2": 8,
   "OUT-3": 12,
   "OUT-9": 2
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 299,
+  "population": 292,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 36
+  "selected": 35
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {
   "cartograph_output_consulted": false,
   "notes": [
-   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
-   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
-   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
-   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "Drafts were reviewed against repository source before use. The review found six defects in the instrument, none in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver.",
+   "Handlers for Django URL-conf entries were read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
    "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
-   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset and all 61 Airflow models as Django.",
+   "CORRECTION AFTER PASS 2 \u2014 the model enumerator required a class header on one line, so a multi-line `class SqlaTable(` did not close the previous class's scope and its __tablename__ was recorded against SqlMetric forty lines earlier. Cartograph was right; the ground truth was wrong. One record across the corpus was affected.",
+   "CORRECTION AFTER PASS 2 \u2014 route declarations inside docstrings were being counted as routes. Onyx and AutoGPT document their dependencies with `@router.post(\"/tokens\")` inside a docstring; Cartograph, which parses, ignored all three, and the instrument charged it three false negatives for correctly declining to extract documentation. Both corrections move numbers in Cartograph's favour and are recorded here for exactly that reason."
   ],
   "reviewed": true,
   "reviewed_against": "repository source at the pinned commit"

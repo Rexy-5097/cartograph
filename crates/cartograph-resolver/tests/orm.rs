@@ -625,3 +625,251 @@ def raw():
         "a table name inside SQL text is not evidence of an ORM relationship"
     );
 }
+
+// ── M07 regression: defects found on real repositories ───────────────
+//
+// Each of these reproduces something the M07 corpus produced, reduced to the
+// smallest source that still shows it. They run against fixtures rather than
+// the repositories, so the lesson survives without the corpus.
+
+/// Superset, `superset/connectors/sqla/models.py:1039`.
+///
+/// 32 of Superset's 33 models and 61 of Airflow's declare `__tablename__`
+/// while inheriting a bare `Model` from Flask-AppBuilder. Reading `Model` as
+/// Django sent table resolution looking for a `Meta.db_table` that is not
+/// there: Superset resolved 3 tables out of 33.
+#[test]
+fn a_shared_model_base_with_a_tablename_is_sqlalchemy() {
+    let analysis = orm(&[(
+        "superset/models.py",
+        r#"
+class TableColumn(AuditMixinNullable, ImportExportMixin, Model):
+    __tablename__ = "table_columns"
+"#,
+    )]);
+    let model = analysis.models.get("TableColumn").expect("a model");
+    assert_eq!(model.flavor, OrmFlavor::SqlAlchemy, "{model:?}");
+    assert_eq!(
+        model.table,
+        TableName::Declared {
+            name: "table_columns".into(),
+            attribute: "__tablename__".into()
+        }
+    );
+}
+
+#[test]
+fn a_shared_model_base_with_meta_db_table_is_django() {
+    let analysis = orm(&[(
+        "app/models.py",
+        r#"
+class Invoice(Model):
+    class Meta:
+        db_table = "invoice_records"
+"#,
+    )]);
+    let model = analysis.models.get("Invoice").expect("a model");
+    assert_eq!(model.flavor, OrmFlavor::Django);
+    assert_eq!(model.table.name(), Some("invoice_records"));
+}
+
+#[test]
+fn a_shared_model_base_declaring_neither_table_attribute_says_so() {
+    // `Model` alone does not identify an ORM, and neither declaration is
+    // present. Naming one would be a guess, and the table stays unresolved.
+    let analysis = orm(&[(
+        "app/models.py",
+        r#"
+class Ambiguous(Model):
+    pass
+"#,
+    )]);
+    let model = analysis.models.get("Ambiguous").expect("a model");
+    assert_eq!(model.flavor, OrmFlavor::Unspecified);
+    assert!(model.table.name().is_none(), "{:?}", model.table);
+    let TableName::Unresolved { reason } = &model.table else {
+        panic!("expected Unresolved, got {:?}", model.table);
+    };
+    assert!(
+        reason.contains("Django") && reason.contains("SQLAlchemy"),
+        "the reason must name the ambiguity: {reason}"
+    );
+}
+
+/// Superset, `superset-frontend/packages/superset-core/src/theme/Theme.tsx:101`,
+/// and Zulip, `web/src/desktop_notifications.ts:41`.
+///
+/// A Python ORM model cannot be constructed from TypeScript. Before the
+/// language filter, `new Theme({...})` in a .tsx file produced an OrmAccess
+/// edge to Superset's Python `Theme` model — 33 such edges across the corpus.
+#[test]
+fn a_typescript_call_never_becomes_an_orm_access() {
+    let (edges, graph) = graph_of(&[
+        (
+            "app/models.py",
+            r#"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Theme(Base):
+    __tablename__ = "themes"
+"#,
+        ),
+        (
+            "web/src/theme.tsx",
+            r#"
+export function build(config) {
+  return new Theme({ config });
+}
+"#,
+        ),
+    ]);
+
+    let accesses: Vec<_> = graph
+        .edges()
+        .filter(|e| e.kind() == EdgeKind::OrmAccess)
+        .collect();
+    assert!(
+        accesses.is_empty(),
+        "a TypeScript call produced an ORM access: {:?}",
+        accesses
+            .iter()
+            .map(|e| e.evidence().as_str())
+            .collect::<Vec<_>>()
+    );
+    // The model itself is still resolved; only the bogus access is gone.
+    assert_eq!(edges, 1, "the model to table edge must survive");
+}
+
+/// Airflow, `airflow-core/docs/img/diagram_*_architecture.py`.
+///
+/// Those scripts call `User("DAG Author")` having imported `User` from the
+/// `diagrams` package. Matching on the name alone attributed 218 of them to
+/// the Flask-AppBuilder `User` model.
+#[test]
+fn a_name_imported_from_outside_the_project_is_not_the_model() {
+    let analysis = orm(&[
+        (
+            "app/models.py",
+            r#"
+from django.db import models
+
+class User(models.Model):
+    class Meta:
+        db_table = "users"
+"#,
+        ),
+        (
+            "docs/diagram.py",
+            r#"
+from diagrams.onprem.client import User
+
+def draw():
+    author = User("DAG Author")
+"#,
+        ),
+    ]);
+    assert!(
+        analysis.accesses.is_empty(),
+        "a third-party symbol was attributed to the project's model: {:?}",
+        analysis.accesses
+    );
+}
+
+#[test]
+fn a_model_imported_from_a_project_module_is_still_attributed() {
+    // The control for the test above. If this stops passing, the import rule
+    // has traded false positives for false negatives.
+    let analysis = orm(&[
+        (
+            "app/models.py",
+            r#"
+from django.db import models
+
+class User(models.Model):
+    class Meta:
+        db_table = "users"
+"#,
+        ),
+        (
+            "app/service.py",
+            r#"
+from app.models import User
+
+def load():
+    return User.objects.filter(active=True)
+"#,
+        ),
+    ]);
+    assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
+    assert_eq!(analysis.accesses[0].model, "User");
+    assert_eq!(analysis.accesses[0].kind, AccessKind::Query);
+}
+
+#[test]
+fn a_model_re_exported_by_another_project_module_is_still_attributed() {
+    // Onyx imports SearchSettings from onyx.db.search_settings, which
+    // re-exports it from onyx.db.models. The rule asks whether the module is
+    // the project's, not whether it is the declaring one.
+    let analysis = orm(&[
+        (
+            "backend/onyx/db/models.py",
+            r#"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class SearchSettings(Base):
+    __tablename__ = "search_settings"
+"#,
+        ),
+        (
+            "backend/onyx/db/search_settings.py",
+            "from onyx.db.models import SearchSettings\n",
+        ),
+        (
+            "backend/onyx/service.py",
+            r#"
+from onyx.db.search_settings import SearchSettings
+
+def load(row):
+    return SearchSettings(**row)
+"#,
+        ),
+    ]);
+    let sites: Vec<_> = analysis
+        .accesses
+        .iter()
+        .filter(|a| a.file == "backend/onyx/service.py")
+        .collect();
+    assert_eq!(sites.len(), 1, "{:?}", analysis.accesses);
+}
+
+#[test]
+fn a_relative_import_is_treated_as_project_local() {
+    let analysis = orm(&[
+        (
+            "app/models.py",
+            r#"
+from django.db import models
+
+class Order(models.Model):
+    class Meta:
+        db_table = "orders"
+"#,
+        ),
+        (
+            "app/views.py",
+            r#"
+from .models import Order
+
+def create():
+    return Order.objects.create()
+"#,
+        ),
+    ]);
+    assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
+}

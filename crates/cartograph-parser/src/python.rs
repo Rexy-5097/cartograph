@@ -541,17 +541,6 @@ impl Walker<'_> {
         let Some(Callee::Member { object, property }) = self.callee_shape(function) else {
             return;
         };
-        // `@app.get`, `@router.post`, `@bp.route`, … — a single receiver whose
-        // name is a known route registrar, or any receiver using `.route`.
-        let receiver_ok = object.len() == 1
-            && (ROUTE_DECORATOR_OBJECTS.contains(&object[0].as_str())
-                || object[0].ends_with("_router")
-                || object[0].ends_with("_app")
-                || object[0] == "bp");
-        if !receiver_ok {
-            return;
-        }
-
         let arguments = call.child_by_field_name("arguments");
         let Some(path_node) = arguments.and_then(|a| {
             let mut c = a.walk();
@@ -560,6 +549,25 @@ impl Walker<'_> {
         }) else {
             return; // no positional path argument: nothing to observe
         };
+
+        // `@app.get`, `@router.post`, `@bp.route`, … — a single receiver whose
+        // name is a known route registrar.
+        let known_registrar = object.len() == 1
+            && (ROUTE_DECORATOR_OBJECTS.contains(&object[0].as_str())
+                || object[0].ends_with("_router")
+                || object[0].ends_with("_app")
+                || object[0] == "bp");
+        // A blueprint may be bound to any name at all. Superset registers four
+        // routes on `health_blueprint`, and requiring the name to be on a list
+        // lost every one of them at M07. The discriminating evidence is the
+        // argument, not the receiver: a decorator named for an HTTP verb whose
+        // first positional argument is a literal URL path is a route
+        // declaration whatever the object is called. This is the same rule the
+        // TypeScript extractor uses to decide that `svc.get("/orders")` is an
+        // HTTP call while `cache.get(key)` is not.
+        if !known_registrar && !self.is_path_literal(path_node) {
+            return;
+        }
 
         let (style, methods) = if property == "route" {
             // Methods live in a `methods=[…]` keyword argument.
@@ -585,6 +593,18 @@ impl Walker<'_> {
             handler,
             span: span_of(decorator),
         });
+    }
+
+    /// Is this argument a string literal that looks like a URL path?
+    ///
+    /// Deliberately narrow: a leading slash. A decorator argument that is a
+    /// variable, an f-string or a dotted name is not evidence of a route, and
+    /// `@mock.patch("app.core.settings")` must never read as one.
+    fn is_path_literal(&self, node: Node<'_>) -> bool {
+        if !matches!(node.kind(), "string" | "concatenated_string") {
+            return false;
+        }
+        string_content(node, self.source).starts_with('/')
     }
 
     /// `methods=["GET", "POST"]` → the declared methods. Absent or non-literal

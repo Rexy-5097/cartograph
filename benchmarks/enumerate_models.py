@@ -19,6 +19,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import enumerate_source as es  # noqa: E402
 
 CLASS = re.compile(r"^\s*class\s+(\w+)\s*\(([^)]*)\)\s*:")
+# Any class header at all, including one whose bases run over several lines.
+# The strict pattern above needs `(...)` and the colon on one line, so
+# `class SqlaTable(` did not register as a new class — and Superset's
+# SqlaTable.__tablename__ = "tables" was recorded against the previous class,
+# SqlMetric, forty lines earlier. Detecting the boundary and reading the bases
+# are two different jobs.
+CLASS_START = re.compile(r"^class\s+(\w+)\s*[\(:]")
 TABLENAME = re.compile(r"""^\s*__tablename__\s*=\s*["']([^"']+)["']""")
 TABLENAME_DYNAMIC = re.compile(r"^\s*__tablename__\s*=\s*(?!['\"])")
 DB_TABLE = re.compile(r"""^\s*db_table\s*=\s*["']([^"']+)["']""")
@@ -60,8 +67,16 @@ def main():
         except OSError:
             continue
         rel = os.path.relpath(path, args.root).replace(os.sep, "/")
+        inert = es.inert_lines(lines)
         current = None
         for number, line in enumerate(lines, start=1):
+            if number in inert:
+                continue
+            # A new top-level class ends the previous class's scope, whether
+            # or not its bases can be read from this line.
+            if CLASS_START.match(line) and not CLASS.match(line):
+                current = None
+                continue
             match = CLASS.match(line)
             if match:
                 name, bases = match.group(1), match.group(2)

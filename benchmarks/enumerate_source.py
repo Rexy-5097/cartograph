@@ -65,6 +65,41 @@ SKIP_DIRS = {
 }
 
 
+def inert_lines(lines):
+    """Line numbers inside a triple-quoted string or a comment.
+
+    A regex over raw text cannot tell a route declaration from an example of
+    one. Onyx and AutoGPT both document their dependencies with
+
+        Usage from FastAPI::
+
+            @router.post("/tokens")
+            def create_token(...):
+
+    inside a docstring. Cartograph, which parses, ignored all three; this
+    instrument counted them as routes and charged Cartograph three false
+    negatives for correctly declining to extract documentation.
+    """
+    skip, inside = set(), None
+    for number, line in enumerate(lines, start=1):
+        if inside is not None:
+            skip.add(number)
+            if inside in line:
+                inside = None
+            continue
+        if line.lstrip().startswith("#"):
+            skip.add(number)
+            continue
+        for quote in ('"""', "'''"):
+            start = line.find(quote)
+            if start != -1:
+                if quote not in line[start + 3 :]:
+                    inside = quote
+                    skip.add(number)
+                break
+    return skip
+
+
 def walk(root, extensions):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
@@ -84,8 +119,9 @@ def scan(root, extensions, patterns):
         except OSError:
             continue
         rel = os.path.relpath(path, root)
+        inert = inert_lines(lines)
         for number, line in enumerate(lines, start=1):
-            if len(line) > 500:
+            if len(line) > 500 or number in inert:
                 continue
             # A decorator's path often sits on the following line:
             #

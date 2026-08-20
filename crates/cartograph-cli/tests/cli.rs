@@ -358,7 +358,9 @@ fn every_exported_edge_carries_its_four_attributes() {
             "missing provenance: {edge}"
         );
         assert!(
-            edge["evidence"].as_str().is_some_and(|e| !e.trim().is_empty()),
+            edge["evidence"]
+                .as_str()
+                .is_some_and(|e| !e.trim().is_empty()),
             "missing evidence: {edge}"
         );
         assert!(

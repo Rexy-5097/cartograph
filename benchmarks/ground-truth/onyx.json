@@ -240,57 +240,43 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
-   "file": "backend/ee/onyx/db/scim.py",
-   "handler": "create_token",
+   "file": "backend/ee/onyx/server/analytics/api.py",
+   "handler": "get_query_analytics",
    "handler_resolvable": true,
-   "id": "backend/ee/onyx/db/scim.py:11",
+   "id": "backend/ee/onyx/server/analytics/api.py:53",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 11,
-   "methods_as_written": [
-    "POST"
-   ],
-   "path_as_written": "/tokens",
-   "receiver": "router",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.post(\"/tokens\")"
-  },
-  {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "backend/ee/onyx/server/gateway/anthropic_passthrough.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/ee/onyx/server/gateway/anthropic_passthrough.py:4",
-   "in_test_code": false,
-   "kind": "urlconf",
-   "line": 4,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (api.py) cannot carry server-side tools, thinking-block signatures,"
-  },
-  {
-   "classification": "IN_SCOPE",
-   "file": "backend/ee/onyx/server/manage/standard_answer.py",
-   "handler": "list_standard_answers",
-   "handler_resolvable": true,
-   "id": "backend/ee/onyx/server/manage/standard_answer.py:46",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 46,
+   "line": 53,
    "methods_as_written": [
     "GET"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/admin/standard-answer",
+   "path_as_written": "/admin/query",
+   "receiver": "router",
+   "registration_prefix": "/analytics",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.get(\"/admin/query\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/ee/onyx/server/manage/standard_answer.py",
+   "handler": "patch_standard_answer",
+   "handler_resolvable": true,
+   "id": "backend/ee/onyx/server/manage/standard_answer.py:58",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 58,
+   "methods_as_written": [
+    "PATCH"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/admin/standard-answer/{standard_answer_id}",
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.get(\"/admin/standard-answer\")"
+   "source": "@router.patch(\"/admin/standard-answer/{standard_answer_id}\")"
   },
   {
    "classification": "UNSUPPORTED",
@@ -311,22 +297,22 @@
   {
    "classification": "IN_SCOPE",
    "file": "backend/ee/onyx/server/tenants/billing_api.py",
-   "handler": "update_seats",
+   "handler": "create_customer_portal_session",
    "handler_resolvable": true,
-   "id": "backend/ee/onyx/server/tenants/billing_api.py:155",
+   "id": "backend/ee/onyx/server/tenants/billing_api.py:165",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 155,
+   "line": 165,
    "methods_as_written": [
     "POST"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/seats/update",
+   "path_as_written": "/create-customer-portal-session",
    "receiver": "router",
    "registration_prefix": "/tenants",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.post(\"/seats/update\")"
+   "source": "@router.post(\"/create-customer-portal-session\")"
   },
   {
    "classification": "UNSUPPORTED",
@@ -343,40 +329,6 @@
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-3",
    "source": "REGISTRY.register(ShardCapacityCollector())"
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "backend/onyx/background/celery/configs/base.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "backend/onyx/background/celery/configs/base.py:181",
-   "in_test_code": false,
-   "kind": "imperative",
-   "line": 181,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "# serialization.register('pickle-bzip2', pickle_bz2_encoder, pickle_bz2_decoder, 'application/x-pickle-bz2', 'binary')"
-  },
-  {
-   "classification": "IN_SCOPE",
-   "file": "backend/onyx/db/dal.py",
-   "handler": "list_users",
-   "handler_resolvable": true,
-   "id": "backend/onyx/db/dal.py:20",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 20,
-   "methods_as_written": [
-    "GET"
-   ],
-   "path_as_written": "/users",
-   "receiver": "router",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/users\")"
   },
   {
    "classification": "UNSUPPORTED",
@@ -412,81 +364,101 @@
   },
   {
    "classification": "IN_SCOPE",
-   "file": "backend/onyx/server/documents/credential.py",
-   "handler": "create_credential_with_private_key",
+   "file": "backend/onyx/server/api_key/api.py",
+   "handler": "regenerate_existing_api_key",
    "handler_resolvable": true,
-   "id": "backend/onyx/server/documents/credential.py:194",
+   "id": "backend/onyx/server/api_key/api.py:56",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 194,
+   "line": 56,
    "methods_as_written": [
     "POST"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/credential/private-key",
+   "path_as_written": "/{api_key_id}/regenerate",
+   "receiver": "router",
+   "registration_prefix": "/admin/api-key",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/{api_key_id}/regenerate\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/documents/credential.py",
+   "handler": "list_credentials",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/documents/credential.py:261",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 261,
+   "methods_as_written": [
+    "GET"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/credential",
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.post(\"/credential/private-key\")"
+   "source": "@router.get(\"/credential\")"
   },
   {
    "classification": "IN_SCOPE",
    "file": "backend/onyx/server/features/notifications/api.py",
-   "handler": "get_notifications_summary_api",
+   "handler": "dismiss_all_notifications_endpoint",
    "handler_resolvable": true,
-   "id": "backend/onyx/server/features/notifications/api.py:195",
+   "id": "backend/onyx/server/features/notifications/api.py:214",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 195,
-   "methods_as_written": [
-    "GET"
-   ],
-   "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/summary",
-   "receiver": "router",
-   "registration_prefix": "/notifications",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@router.get(\"/summary\")"
-  },
-  {
-   "classification": "IN_SCOPE",
-   "file": "backend/onyx/server/features/skill/api.py",
-   "handler": "fetch_skill_for_current_user",
-   "handler_resolvable": true,
-   "id": "backend/onyx/server/features/skill/api.py:209",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 209,
-   "methods_as_written": [
-    "GET"
-   ],
-   "path_as_written": "/{skill_id}",
-   "receiver": "user_router",
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "IN-BE-1",
-   "source": "@user_router.get(\"/{skill_id}\")"
-  },
-  {
-   "classification": "IN_SCOPE",
-   "file": "backend/onyx/server/manage/administrative.py",
-   "handler": "document_boost_update",
-   "handler_resolvable": true,
-   "id": "backend/onyx/server/manage/administrative.py:87",
-   "in_test_code": false,
-   "kind": "verb_decorator",
-   "line": 87,
+   "line": 214,
    "methods_as_written": [
     "POST"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/admin/doc-boosts",
+   "path_as_written": "/dismiss-all",
+   "receiver": "router",
+   "registration_prefix": "/notifications",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@router.post(\"/dismiss-all\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/features/skill/api.py",
+   "handler": "preview_skill_for_current_user",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/features/skill/api.py:226",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 226,
+   "methods_as_written": [
+    "GET"
+   ],
+   "path_as_written": "/{skill_id}/preview",
+   "receiver": "user_router",
+   "relationship": "ROUTE_DECLARATION",
+   "rule": "IN-BE-1",
+   "source": "@user_router.get(\"/{skill_id}/preview\")"
+  },
+  {
+   "classification": "IN_SCOPE",
+   "file": "backend/onyx/server/manage/administrative.py",
+   "handler": "document_hidden_update",
+   "handler_resolvable": true,
+   "id": "backend/onyx/server/manage/administrative.py:102",
+   "in_test_code": false,
+   "kind": "verb_decorator",
+   "line": 102,
+   "methods_as_written": [
+    "POST"
+   ],
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/admin/doc-hidden",
    "receiver": "router",
    "registration_prefix": "/manage",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.post(\"/admin/doc-boosts\")"
+   "source": "@router.post(\"/admin/doc-hidden\")"
   },
   {
    "classification": "IN_SCOPE",
@@ -509,22 +481,22 @@
   {
    "classification": "IN_SCOPE",
    "file": "backend/onyx/server/manage/tracing/api.py",
-   "handler": "test_tracing_provider",
+   "handler": "adopt_env_tracing_provider",
    "handler_resolvable": true,
-   "id": "backend/onyx/server/manage/tracing/api.py:150",
+   "id": "backend/onyx/server/manage/tracing/api.py:178",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 150,
+   "line": 178,
    "methods_as_written": [
     "POST"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/providers/test",
+   "path_as_written": "/providers/{provider_type}/adopt-env",
    "receiver": "admin_router",
    "registration_prefix": "/admin/tracing",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@admin_router.post(\"/providers/test\")"
+   "source": "@admin_router.post(\"/providers/{provider_type}/adopt-env\")"
   },
   {
    "classification": "IN_SCOPE",
@@ -713,26 +685,26 @@
  ],
  "rule_counts": {
   "IN-BE-1": 12,
-  "N/A": 1,
-  "OUT-3": 10,
+  "OUT-3": 9,
   "OUT-9": 4
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 600,
+  "population": 596,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 27
+  "selected": 25
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {
   "cartograph_output_consulted": false,
   "notes": [
-   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
-   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
-   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
-   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "Drafts were reviewed against repository source before use. The review found six defects in the instrument, none in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver.",
+   "Handlers for Django URL-conf entries were read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
    "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
-   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset and all 61 Airflow models as Django.",
+   "CORRECTION AFTER PASS 2 \u2014 the model enumerator required a class header on one line, so a multi-line `class SqlaTable(` did not close the previous class's scope and its __tablename__ was recorded against SqlMetric forty lines earlier. Cartograph was right; the ground truth was wrong. One record across the corpus was affected.",
+   "CORRECTION AFTER PASS 2 \u2014 route declarations inside docstrings were being counted as routes. Onyx and AutoGPT document their dependencies with `@router.post(\"/tokens\")` inside a docstring; Cartograph, which parses, ignored all three, and the instrument charged it three false negatives for correctly declining to extract documentation. Both corrections move numbers in Cartograph's favour and are recorded here for exactly that reason."
   ],
   "reviewed": true,
   "reviewed_against": "repository source at the pinned commit"

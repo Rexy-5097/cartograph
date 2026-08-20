@@ -789,12 +789,13 @@
  "verification": {
   "cartograph_output_consulted": false,
   "notes": [
-   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
-   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
-   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
-   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "Drafts were reviewed against repository source before use. The review found six defects in the instrument, none in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver.",
+   "Handlers for Django URL-conf entries were read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
    "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
-   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset and all 61 Airflow models as Django.",
+   "CORRECTION AFTER PASS 2 \u2014 the model enumerator required a class header on one line, so a multi-line `class SqlaTable(` did not close the previous class's scope and its __tablename__ was recorded against SqlMetric forty lines earlier. Cartograph was right; the ground truth was wrong. One record across the corpus was affected.",
+   "CORRECTION AFTER PASS 2 \u2014 route declarations inside docstrings were being counted as routes. Onyx and AutoGPT document their dependencies with `@router.post(\"/tokens\")` inside a docstring; Cartograph, which parses, ignored all three, and the instrument charged it three false negatives for correctly declining to extract documentation. Both corrections move numbers in Cartograph's favour and are recorded here for exactly that reason."
   ],
   "reviewed": true,
   "reviewed_against": "repository source at the pinned commit"

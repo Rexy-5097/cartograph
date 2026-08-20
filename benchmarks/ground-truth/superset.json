@@ -36,7 +36,7 @@
    "reason": "__tablename__ declares the table",
    "relationship": "QUERIES",
    "rule": "IN-ORM-1",
-   "table": "tables",
+   "table": "sql_metrics",
    "table_source": "__tablename__"
   },
   {
@@ -257,35 +257,35 @@
  "route_declarations": [
   {
    "classification": "UNSUPPORTED",
-   "file": "superset-core/src/superset_core/rest_api/decorators.py",
+   "file": "superset/advanced_data_type/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset-core/src/superset_core/rest_api/decorators.py:77",
+   "id": "superset/advanced_data_type/api.py:59",
    "in_test_code": false,
    "kind": "expose",
-   "line": 77,
+   "line": 59,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/hello\", methods=(\"GET\",))"
+   "source": "@expose(\"/convert\", methods=(\"GET\",))"
   },
   {
    "classification": "UNSUPPORTED",
    "file": "superset/charts/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/charts/api.py:910",
+   "id": "superset/charts/api.py:1066",
    "in_test_code": false,
    "kind": "expose",
-   "line": 910,
+   "line": 1066,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<uuid>/purge\", methods=(\"POST\",))"
+   "source": "@expose(\"/<pk>/screenshot/<digest>/\", methods=(\"GET\",))"
   },
   {
    "classification": "UNSUPPORTED",
@@ -308,55 +308,55 @@
    "file": "superset/dashboards/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/dashboards/api.py:1147",
+   "id": "superset/dashboards/api.py:1313",
    "in_test_code": false,
    "kind": "expose",
-   "line": 1147,
+   "line": 1313,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<pk>/chart_customizations\", methods=(\"PUT\",))"
+   "source": "@expose(\"/<pk>\", methods=(\"DELETE\",))"
   },
   {
    "classification": "UNSUPPORTED",
    "file": "superset/dashboards/filter_state/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/dashboards/filter_state/api.py:233",
+   "id": "superset/dashboards/filter_state/api.py:278",
    "in_test_code": false,
    "kind": "expose",
-   "line": 233,
+   "line": 278,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/filter_state/<string:key>\", methods=(\"GET\",))"
+   "source": "@expose(\"/<int:pk>/filter_state/<string:key>\", methods=(\"DELETE\",))"
   },
   {
    "classification": "UNSUPPORTED",
    "file": "superset/databases/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/databases/api.py:1783",
+   "id": "superset/databases/api.py:1861",
    "in_test_code": false,
    "kind": "expose",
-   "line": 1783,
+   "line": 1861,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/upload/\", methods=(\"POST\",))"
+   "source": "@expose(\"/<int:pk>/function_names/\", methods=(\"GET\",))"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "superset/datasets/columns/api.py",
+   "file": "superset/datasets/metrics/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/datasets/columns/api.py:48",
+   "id": "superset/datasets/metrics/api.py:48",
    "in_test_code": false,
    "kind": "expose",
    "line": 48,
@@ -365,7 +365,7 @@
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/column/<int:column_id>\", methods=(\"DELETE\",))"
+   "source": "@expose(\"/<int:pk>/metric/<int:metric_id>\", methods=(\"DELETE\",))"
   },
   {
    "classification": "UNSUPPORTED",
@@ -401,35 +401,35 @@
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "superset/extensions/view.py",
+   "file": "superset/importexport/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/extensions/view.py:30",
+   "id": "superset/importexport/api.py:46",
    "in_test_code": false,
    "kind": "expose",
-   "line": 30,
+   "line": 46,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/list/\")"
+   "source": "@expose(\"/export/\", methods=(\"GET\",))"
   },
   {
    "classification": "UNSUPPORTED",
-   "file": "superset/security/api.py",
+   "file": "superset/security/manager.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/security/api.py:277",
+   "id": "superset/security/manager.py:301",
    "in_test_code": false,
    "kind": "expose",
-   "line": 277,
+   "line": 301,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/search/\", methods=[\"GET\"])"
+   "source": "@expose(\"/\", methods=[\"POST\"])"
   },
   {
    "classification": "UNSUPPORTED",
@@ -468,16 +468,16 @@
    "file": "superset/themes/api.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "superset/themes/api.py:625",
+   "id": "superset/themes/api.py:692",
    "in_test_code": false,
    "kind": "expose",
-   "line": 625,
+   "line": 692,
    "methods_as_written": null,
    "path_as_written": null,
    "receiver": null,
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-2",
-   "source": "@expose(\"/<int:pk>/set_system_dark\", methods=(\"PUT\",))"
+   "source": "@expose(\"/unset_system_default\", methods=(\"DELETE\",))"
   },
   {
    "classification": "UNSUPPORTED",
@@ -494,22 +494,6 @@
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-3",
    "source": "atexit.register(_browser_manager._cleanup)"
-  },
-  {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "superset/utils/webdriver.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "superset/utils/webdriver.py:255",
-   "in_test_code": false,
-   "kind": "urlconf",
-   "line": 255,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (see `take_tiled_screenshot` in screenshot_utils.py, #42119)"
   },
   {
    "classification": "UNSUPPORTED",
@@ -676,38 +660,6 @@
    "source": "@app.route(\"/test\")"
   },
   {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "tests/unit_tests/commands/sql_lab/streaming_export_command_test.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "tests/unit_tests/commands/sql_lab/streaming_export_command_test.py:801",
-   "in_test_code": true,
-   "kind": "urlconf",
-   "line": 801,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (Database._execute_sql_with_mutation_and_logging, used by get_df())"
-  },
-  {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "tests/unit_tests/mcp_service/test_mcp_e2e_smoke.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "tests/unit_tests/mcp_service/test_mcp_e2e_smoke.py:148",
-   "in_test_code": true,
-   "kind": "urlconf",
-   "line": 148,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (``server.py:938``): FastMCP-level middleware from"
-  },
-  {
    "classification": "IN_SCOPE",
    "file": "tests/unit_tests/security/test_password_change.py",
    "handler": "index",
@@ -824,22 +776,6 @@
    "file": "tests/unit_tests/views/test_spa_service_worker.py",
    "handler": null,
    "handler_resolvable": true,
-   "id": "tests/unit_tests/views/test_spa_service_worker.py:53",
-   "in_test_code": true,
-   "kind": "imperative",
-   "line": 53,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "OUT-3",
-   "source": "\"\"\"Return the raw Jinja expression inside the SW `.register(...)` call."
-  },
-  {
-   "classification": "UNSUPPORTED",
-   "file": "tests/unit_tests/views/test_spa_service_worker.py",
-   "handler": null,
-   "handler_resolvable": true,
    "id": "tests/unit_tests/views/test_spa_service_worker.py:63",
    "in_test_code": true,
    "kind": "imperative",
@@ -870,27 +806,27 @@
  ],
  "rule_counts": {
   "IN-BE-2": 10,
-  "N/A": 3,
   "OUT-2": 12,
-  "OUT-3": 12,
+  "OUT-3": 11,
   "OUT-9": 1
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 335,
+  "population": 329,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 38
+  "selected": 34
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {
   "cartograph_output_consulted": false,
   "notes": [
-   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
-   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
-   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
-   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "Drafts were reviewed against repository source before use. The review found six defects in the instrument, none in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver.",
+   "Handlers for Django URL-conf entries were read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
    "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
-   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset and all 61 Airflow models as Django.",
+   "CORRECTION AFTER PASS 2 \u2014 the model enumerator required a class header on one line, so a multi-line `class SqlaTable(` did not close the previous class's scope and its __tablename__ was recorded against SqlMetric forty lines earlier. Cartograph was right; the ground truth was wrong. One record across the corpus was affected.",
+   "CORRECTION AFTER PASS 2 \u2014 route declarations inside docstrings were being counted as routes. Onyx and AutoGPT document their dependencies with `@router.post(\"/tokens\")` inside a docstring; Cartograph, which parses, ignored all three, and the instrument charged it three false negatives for correctly declining to extract documentation. Both corrections move numbers in Cartograph's favour and are recorded here for exactly that reason."
   ],
   "reviewed": true,
   "reviewed_against": "repository source at the pinned commit"

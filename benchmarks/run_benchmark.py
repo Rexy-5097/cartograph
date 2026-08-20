@@ -60,6 +60,38 @@ def toolchain_metadata(binary):
     }
 
 
+def capture_normalize(binary, target, raw_dir, name):
+    """Records every canonicalised observation the analyser made.
+
+    `match --json` reports decisions and the graph, but a route that took part
+    in no decision never appears in it — so route-extraction recall cannot be
+    measured from it. `normalize --json` lists every observation with its
+    file, line and handler, which is what a ground-truth route record has to
+    be compared against.
+    """
+    proc = subprocess.run(
+        [binary, "normalize", "--json", target],
+        capture_output=True, text=True, check=False,
+    )
+    if proc.returncode != 0:
+        return None, {"status": "NORMALIZE_FAILED", "stderr_tail": proc.stderr[-1000:]}
+    try:
+        report = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        return None, {"status": "NORMALIZE_BAD_OUTPUT", "error": str(exc)}
+
+    path = os.path.join(raw_dir, f"{name}.normalize.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=1, sort_keys=True)
+    return path, {
+        "status": "OK",
+        "raw_path": os.path.relpath(path, ROOT),
+        "raw_sha256": sha256_file(path),
+        "route_declarations": report["totals"]["route_declarations"],
+        "client_calls": report["totals"]["client_calls"],
+    }
+
+
 def measure(binary, target):
     """Runs one analysis, returning its output, wall time and peak RSS.
 
@@ -129,6 +161,8 @@ def analyse(entry, args, metadata):
     with open(raw_path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=1, sort_keys=True)
 
+    _, normalize = capture_normalize(args.binary, target, args.raw, name)
+
     totals = report["totals"]
     graph = report["graph"]
     by_kind = {}
@@ -145,6 +179,7 @@ def analyse(entry, args, metadata):
         # scored, so output edited after the fact no longer matches.
         "raw_sha256": sha256_file(raw_path),
         "raw_path": os.path.relpath(raw_path, ROOT),
+        "normalize": normalize,
         "measurements": {
             "files_analysed": totals["files"],
             "backend_routes": totals["backend_routes"],

@@ -80,56 +80,56 @@
  "route_declarations": [
   {
    "classification": "IN_SCOPE",
-   "file": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies.py",
-   "handler": "delete_org",
+   "file": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies_test.py",
+   "handler": "get_user_endpoint",
    "handler_resolvable": true,
-   "id": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies.py:294",
+   "id": "autogpt_platform/autogpt_libs/autogpt_libs/auth/dependencies_test.py:32",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 294,
+   "line": 32,
    "methods_as_written": [
-    "DELETE"
+    "GET"
    ],
-   "path_as_written": "/org/{org_id}",
-   "receiver": "router",
+   "path_as_written": "/user",
+   "receiver": "app",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.delete(\"/org/{org_id}\")"
+   "source": "@app.get(\"/user\")"
   },
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/external/v1/integrations.py",
-   "handler": "list_providers",
+   "handler": "list_credentials",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/external/v1/integrations.py:253",
+   "id": "autogpt_platform/backend/backend/api/external/v1/integrations.py:476",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 253,
+   "line": 476,
    "methods_as_written": [
     "GET"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/providers",
+   "path_as_written": "/credentials",
    "receiver": "integrations_router",
    "registration_prefix": "/integrations",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@integrations_router.get(\"/providers\", response_model=list[ProviderInfo])"
+   "source": "@integrations_router.get(\"/credentials\", response_model=list[CredentialsMetaResponse])"
   },
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/features/admin/diagnostics_admin_routes.py",
-   "handler": "requeue_multiple_executions",
+   "handler": "stop_multiple_executions",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/admin/diagnostics_admin_routes.py:433",
+   "id": "autogpt_platform/backend/backend/api/features/admin/diagnostics_admin_routes.py:549",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 433,
+   "line": 549,
    "methods_as_written": [
     "POST"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/diagnostics/executions/requeue-bulk",
+   "path_as_written": "/diagnostics/executions/stop-bulk",
    "receiver": "router",
    "registration_prefix": "/admin",
    "relationship": "ROUTE_DECLARATION",
@@ -138,20 +138,20 @@
   },
   {
    "classification": "IN_SCOPE",
-   "file": "autogpt_platform/backend/backend/api/features/admin/memory_admin_routes.py",
-   "handler": "get_community_rebuild_status",
+   "file": "autogpt_platform/backend/backend/api/features/admin/platform_cost_routes.py",
+   "handler": "get_cost_logs",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/admin/memory_admin_routes.py:1012",
+   "id": "autogpt_platform/backend/backend/api/features/admin/platform_cost_routes.py:61",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 1012,
+   "line": 61,
    "methods_as_written": [
     "GET"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/{user_id}/communities/rebuild/{job_id}",
+   "path_as_written": "/logs",
    "receiver": "router",
-   "registration_prefix": "/admin/memory",
+   "registration_prefix": "/platform-costs",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
    "source": "@router.get("
@@ -159,58 +159,60 @@
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/features/chat/routes.py",
-   "handler": "delete_session",
+   "handler": "update_session_title_route",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/chat/routes.py:729",
+   "id": "autogpt_platform/backend/backend/api/features/chat/routes.py:799",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 729,
+   "line": 799,
    "methods_as_written": [
-    "DELETE"
+    "PATCH"
    ],
-   "path_as_written": "/sessions/{session_id}",
+   "path_as_written": "/sessions/{session_id}/title",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.delete("
+   "source": "@router.patch("
   },
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/features/experts/routes.py",
-   "handler": "list_expert_templates",
+   "handler": "update_expert_soul",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/experts/routes.py:31",
+   "id": "autogpt_platform/backend/backend/api/features/experts/routes.py:73",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 31,
+   "line": 73,
    "methods_as_written": [
-    "GET"
+    "PATCH"
    ],
    "note": "served path requires prefix composition (OUT-5)",
-   "path_as_written": "/templates",
+   "path_as_written": "/{expert_id}/soul",
    "receiver": "router",
    "registration_prefix": "/experts",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.get(\"/templates\", operation_id=\"list_expert_templates\")"
+   "source": "@router.patch("
   },
   {
    "classification": "IN_SCOPE",
-   "file": "autogpt_platform/backend/backend/api/features/integrations/router.py",
-   "handler": "get_provider_enum_example",
+   "file": "autogpt_platform/backend/backend/api/features/library/routes/agents.py",
+   "handler": "list_favorite_library_agents",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/integrations/router.py:1537",
+   "id": "autogpt_platform/backend/backend/api/features/library/routes/agents.py:78",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 1537,
+   "line": 78,
    "methods_as_written": [
     "GET"
    ],
-   "path_as_written": "/providers/enum-example",
+   "note": "served path requires prefix composition (OUT-5)",
+   "path_as_written": "/favorites",
    "receiver": "router",
+   "registration_prefix": "/agents",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.get(\"/providers/enum-example\", response_model=ProviderEnumResponse)"
+   "source": "@router.get("
   },
   {
    "classification": "IN_SCOPE",
@@ -233,20 +235,20 @@
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/features/orgs/routes.py",
-   "handler": "remove_member",
+   "handler": "transfer_ownership",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/orgs/routes.py:207",
+   "id": "autogpt_platform/backend/backend/api/features/orgs/routes.py:225",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 207,
+   "line": 225,
    "methods_as_written": [
-    "DELETE"
+    "POST"
    ],
-   "path_as_written": "/{org_id}/members/{uid}",
+   "path_as_written": "/{org_id}/transfer-ownership",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.delete("
+   "source": "@router.post("
   },
   {
    "classification": "IN_SCOPE",
@@ -287,20 +289,20 @@
   {
    "classification": "IN_SCOPE",
    "file": "autogpt_platform/backend/backend/api/features/workspace/routes.py",
-   "handler": "delete_workspace_file",
+   "handler": "preview_file",
    "handler_resolvable": true,
-   "id": "autogpt_platform/backend/backend/api/features/workspace/routes.py:229",
+   "id": "autogpt_platform/backend/backend/api/features/workspace/routes.py:200",
    "in_test_code": false,
    "kind": "verb_decorator",
-   "line": 229,
+   "line": 200,
    "methods_as_written": [
-    "DELETE"
+    "GET"
    ],
-   "path_as_written": "/files/{file_id}",
+   "path_as_written": "/files/{file_id}/preview",
    "receiver": "router",
    "relationship": "ROUTE_DECLARATION",
    "rule": "IN-BE-1",
-   "source": "@router.delete("
+   "source": "@router.get("
   },
   {
    "classification": "UNSUPPORTED",
@@ -685,46 +687,30 @@
    "relationship": "ROUTE_DECLARATION",
    "rule": "OUT-3",
    "source": "self.fastapi_app.add_api_route("
-  },
-  {
-   "classification": "INSTRUMENT_NO_PATH",
-   "file": "classic/forge/forge/components/context/context.py",
-   "handler": null,
-   "handler_resolvable": true,
-   "id": "classic/forge/forge/components/context/context.py:120",
-   "in_test_code": false,
-   "kind": "urlconf",
-   "line": 120,
-   "methods_as_written": null,
-   "path_as_written": null,
-   "receiver": null,
-   "relationship": "ROUTE_DECLARATION",
-   "rule": "N/A",
-   "source": "path (str | Path): The path of the folder to open"
   }
  ],
  "rule_counts": {
   "IN-BE-1": 12,
-  "N/A": 1,
   "OUT-3": 12,
   "OUT-9": 12
  },
  "sampling": {
   "per_form_target": 12,
-  "population": 356,
+  "population": 351,
   "rule": "matches from benchmarks/enumerate_source.py, bucketed by declaration form; within each form, sorted by (file, line) and taken at an even stride up to the per-form target. Stratified so a repository dominated by one form still contributes records of the others. Fixed before any result was seen.",
-  "selected": 37
+  "selected": 36
  },
  "schema": "cartograph.ground-truth/1",
  "verification": {
   "cartograph_output_consulted": false,
   "notes": [
-   "Drafts were reviewed against repository source before use; the review found and fixed four defects in the instrument, not in Cartograph.",
-   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver. It now applies only to decorator forms.",
-   "Handlers for Django URL-conf entries were being read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
-   "Records whose path could not be recovered are marked INSTRUMENT_NO_PATH and excluded from every denominator, rather than being counted as routes or silently dropped.",
+   "Drafts were reviewed against repository source before use. The review found six defects in the instrument, none in Cartograph.",
+   "GAP-1 (an unrecognised decorator receiver) was being applied to Django path() entries, which have no receiver.",
+   "Handlers for Django URL-conf entries were read as 'the next def in the file', which attributed an unrelated admin helper to a route. The view is now read from the entry's second argument.",
    "path(..., include(...)) is a mount point, not a route (OUT-10); a view named through csrf_exempt/admin_view/as_view is marked handler_resolvable=false, so the route counts but the chain cannot.",
-   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` alone is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset models and all 61 Airflow models as Django."
+   "ORM flavour is decided by what a class declares (__tablename__ vs Meta.db_table), not by its base name: `Model` is used by both Django and Flask-AppBuilder, and attributing it by name mislabelled all 32 Superset and all 61 Airflow models as Django.",
+   "CORRECTION AFTER PASS 2 \u2014 the model enumerator required a class header on one line, so a multi-line `class SqlaTable(` did not close the previous class's scope and its __tablename__ was recorded against SqlMetric forty lines earlier. Cartograph was right; the ground truth was wrong. One record across the corpus was affected.",
+   "CORRECTION AFTER PASS 2 \u2014 route declarations inside docstrings were being counted as routes. Onyx and AutoGPT document their dependencies with `@router.post(\"/tokens\")` inside a docstring; Cartograph, which parses, ignored all three, and the instrument charged it three false negatives for correctly declining to extract documentation. Both corrections move numbers in Cartograph's favour and are recorded here for exactly that reason."
   ],
   "reviewed": true,
   "reviewed_against": "repository source at the pinned commit"

@@ -176,6 +176,16 @@ struct Walker<'a> {
     deferred_exports: Vec<(String, ExportStatus)>,
 }
 
+/// Is this argument a function written in place?
+///
+/// A route registration passes its handler; a request passes options.
+fn is_function_expression(node: &Node<'_>) -> bool {
+    matches!(
+        node.kind(),
+        "arrow_function" | "function_expression" | "function" | "generator_function"
+    )
+}
+
 impl Walker<'_> {
     fn walk(&mut self, node: Node<'_>) {
         let export = std::mem::replace(&mut self.export, ExportContext::None);
@@ -579,6 +589,19 @@ impl Walker<'_> {
                 };
                 let known_client =
                     object.len() == 1 && HTTP_CLIENT_OBJECTS.contains(&object[0].as_str());
+                // `app.get("/_health", (c) => ...)` is Express and Hono
+                // declaring a route, not anything calling one. It is
+                // syntactically identical to a client call, and at M07 three
+                // such declarations in PostHog's Node services were matched to
+                // a Python health endpoint in an unrelated service.
+                //
+                // The handler argument is what separates them — but only for
+                // an unknown receiver. Node's own `http.get(url, callback)` is
+                // a real request that also passes a function, so a receiver
+                // that is a known HTTP client keeps its meaning.
+                if !known_client && arg_nodes.iter().skip(1).any(is_function_expression) {
+                    return;
+                }
                 if known_client || self.looks_like_path(first) {
                     (true, Some(verb))
                 } else {
