@@ -113,7 +113,7 @@ async def create_order(payload: dict):
     ]);
 
     // CheckoutButton.tsx → create_order → Order → orders
-    let (handler, kind) = hop(&graph, "web/src/CheckoutButton.tsx");
+    let (handler, kind) = hop(&graph, "onSubmit");
     assert_eq!((handler, kind), ("create_order", EdgeKind::HttpCall));
 
     let (model, kind) = hop(&graph, "create_order");

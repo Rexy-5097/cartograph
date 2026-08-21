@@ -31,6 +31,7 @@ fn span() -> Span {
 fn declare(path: &str, methods: &[HttpMethodHint]) -> CanonicalRoute {
     normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: methods.to_vec(),
             path: UrlObservation::Literal {
@@ -48,6 +49,7 @@ fn declare(path: &str, methods: &[HttpMethodHint]) -> CanonicalRoute {
 fn url_conf(path: &str) -> CanonicalRoute {
     normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::UrlConfEntry,
             methods: Vec::new(),
             path: UrlObservation::Literal {
@@ -65,6 +67,7 @@ fn url_conf(path: &str) -> CanonicalRoute {
 fn call(url: &str, method: Option<HttpMethodHint>) -> CanonicalRoute {
     normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "fetch".into(),
             method_hint: method,
             url: UrlObservation::Literal {
@@ -81,6 +84,7 @@ fn call(url: &str, method: Option<HttpMethodHint>) -> CanonicalRoute {
 fn call_template(parts: Vec<TemplatePart>, method: Option<HttpMethodHint>) -> CanonicalRoute {
     normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "fetch".into(),
             method_hint: method,
             url: UrlObservation::Template { parts },
@@ -621,6 +625,7 @@ fn an_unsupported_route_shares_a_shape_with_nothing() {
 fn a_dynamic_url_is_not_interpreted() {
     let route = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "requests.post".into(),
             method_hint: Some(HttpMethodHint::Post),
             url: UrlObservation::Dynamic {
@@ -775,6 +780,7 @@ fn a_shared_shape_is_not_a_claim_that_two_routes_are_the_same_endpoint() {
     // same endpoint requires evidence M03 does not have and does not seek.
     let billing = normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: vec![HttpMethodHint::Get],
             path: UrlObservation::Literal {
@@ -788,6 +794,7 @@ fn a_shared_shape_is_not_a_claim_that_two_routes_are_the_same_endpoint() {
     );
     let shipping = normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: vec![HttpMethodHint::Get],
             path: UrlObservation::Literal {

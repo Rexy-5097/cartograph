@@ -8,14 +8,19 @@
 | Field | Value |
 |---|---|
 | Active milestone | **M07 — Verified full-stack chain** (awaiting review) |
-| Status | M00–M06 **ACCEPTED**; M07 complete on its branch, PR #10 open, not merged |
-| Branch | `feature/m07-real-validation` |
+| Status | M00–M06 **ACCEPTED**; M07 validation PR #10 and remediation PR #11 open, neither merged |
+| Branch | `feature/m07-remediation-accuracy` |
 | Next permitted milestone | M07 — **unlocked**; M08 locked until M07 is accepted |
 | Last accepted checkpoint | `cartograph-m06` (immutable, commit `ef26ae2`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
 
+- **M07 remediation** — import resolution, configuration-object requests,
+  router prefix composition and client-wrapper call edges. Three complete
+  chains now run from a hand-written React component to a database table on
+  Airflow. 379 false ORM accesses removed, including five of M07's six
+  reported chains. Route and Queries metrics unchanged at 1.000.
 - **M07: real-repository validation** — a pinned seven-repository corpus,
   scope declared before measuring, ground truth authored by an instrument that
   never sees analyser output, two full passes, and eleven attacks on the

@@ -27,6 +27,7 @@ fn backend(routes: &[(&str, &[HttpMethodHint], &str)]) -> RouteIndex {
     RouteIndex::build(routes.iter().map(|(path, methods, handler)| {
         normalize_route_declaration(
             &RouteObservation {
+                receiver: None,
                 style: RouteDeclarationStyle::VerbDecorator,
                 methods: methods.to_vec(),
                 path: UrlObservation::Literal {
@@ -43,6 +44,7 @@ fn backend(routes: &[(&str, &[HttpMethodHint], &str)]) -> RouteIndex {
 
 fn client(url: &str, method: Option<HttpMethodHint>) -> HttpCallObservation {
     HttpCallObservation {
+        enclosing: None,
         callee: "axios.post".into(),
         method_hint: method,
         url: UrlObservation::Literal {
@@ -208,6 +210,7 @@ fn an_unknown_client_value_aligns_with_a_parameter_but_stays_undetermined() {
     let index = backend(&[("/orders/{id}", &[HttpMethodHint::Post], "replace")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.post".into(),
             method_hint: POST,
             url: UrlObservation::Template {
@@ -346,6 +349,7 @@ fn identical_endpoints_in_unrelated_services_are_ambiguous_not_joined() {
         .map(|(file, handler)| {
             normalize_route_declaration(
                 &RouteObservation {
+                    receiver: None,
                     style: RouteDeclarationStyle::VerbDecorator,
                     methods: vec![HttpMethodHint::Post],
                     path: UrlObservation::Literal {
@@ -387,6 +391,7 @@ fn an_unresolved_client_prefix_is_refused_rather_than_suffix_matched() {
     let index = backend(&[("/orders/{id}", &[HttpMethodHint::Post], "replace")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.post".into(),
             method_hint: POST,
             url: UrlObservation::Template {
@@ -424,6 +429,7 @@ fn a_client_path_that_could_not_be_canonicalised_is_refused() {
     let index = backend(&[("/orders", &[HttpMethodHint::Post], "create")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "requests.post".into(),
             method_hint: POST,
             url: UrlObservation::Dynamic {
@@ -447,6 +453,7 @@ fn a_client_path_that_could_not_be_canonicalised_is_refused() {
 fn an_unsupported_route_is_never_indexed() {
     let index = RouteIndex::build([normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::UrlConfEntry,
             methods: Vec::new(),
             path: UrlObservation::Literal {
@@ -509,6 +516,7 @@ fn an_unknown_client_value_against_a_literal_is_possible_but_never_exact() {
     let index = backend(&[("/orders/latest", &[HttpMethodHint::Get], "latest")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.get".into(),
             method_hint: GET,
             url: UrlObservation::Template {
@@ -629,6 +637,7 @@ fn indexing_does_not_change_results_at_scale() {
     let index = RouteIndex::build(routes.iter().map(|(p, m, h)| {
         normalize_route_declaration(
             &RouteObservation {
+                receiver: None,
                 style: RouteDeclarationStyle::VerbDecorator,
                 methods: m.clone(),
                 path: UrlObservation::Literal { value: p.clone() },

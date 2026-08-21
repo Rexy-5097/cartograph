@@ -6,7 +6,7 @@ spec_frozen: 2026-08
 
 current_milestone: M07
 status: AWAITING_REVIEW        # implementation and both benchmark passes complete
-current_branch: feature/m07-real-validation
+current_branch: feature/m07-remediation-accuracy
 next_allowed_milestone: M07    # UNLOCKED - M06 accepted; M08 locked until M07 is accepted
 
 milestones:
@@ -71,6 +71,18 @@ milestones:
       and 48 in-scope ground-truth records. Six fully verified chains, NONE
       beginning at a frontend file: 12 of 1,458 HttpCall edges have a
       TypeScript client. The negative result is the finding.
+    remediation:                          # PR #11, branch feature/m07-remediation-accuracy
+      status: AWAITING_REVIEW
+      pull_request: 11
+      result: |
+        Import resolution, configuration-object requests, router prefix
+        composition and client-wrapper call edges. THREE complete chains now
+        run from a hand-written React component to a database table on
+        Airflow, each verified against source. 379 false OrmAccess edges
+        removed - including five of M07's six chains, which ran through a
+        response datamodel sharing a model's name. The honest M07 baseline is
+        one chain, not six. Route and Queries metrics unchanged at 1.000.
+        HttpCall, OrmAccess and chain recall remain UNMEASURED.
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M06
@@ -82,16 +94,16 @@ gates:                           # feature/m07-real-validation, 2026-08-20 (QG-0
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 354 passed, 0 failed
+  tests: PASS                    # QG-004 - 399 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M07 deliverables present, no M08+ capability
   agentos_validator: PASS        # 99/100
-  ci: PENDING                    # PR #10
+  ci: PENDING                    # PR #11
 
 tests:
-  total: 354
+  total: 399
   failed: 0
 
 benchmarks:
@@ -106,8 +118,10 @@ benchmarks:
     route_recall: 1.0
     queries_precision: 1.0       # 48 in-scope ground-truth records
     queries_recall: 1.0
-    chains_fully_verified: 6
+    chains_fully_verified: 6        # baseline; five of them later shown false
     chains_from_a_frontend_file: 0
+    remediation_chains_fully_verified: 24
+    remediation_chains_from_a_frontend_file: 6
     unmeasured: http_call recall, orm_access recall, chain recall
     status: INTERNAL             # methodology is first-generation; not for publication
 

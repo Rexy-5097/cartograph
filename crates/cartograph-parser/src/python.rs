@@ -31,8 +31,8 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::error::ParserError;
 use crate::model::{
     CallSite, Callee, ConcatPart, ExportStatus, FileAnalysis, HttpCallObservation, HttpMethodHint,
-    Import, NamedImport, ParseStatus, RouteDeclarationStyle, RouteObservation, SourceLanguage,
-    StringFact, Symbol, SymbolKind, TemplatePart, UrlObservation,
+    Import, NamedImport, ParseStatus, RouteDeclarationStyle, RouteObservation, RouterDeclaration,
+    RouterInclusion, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart, UrlObservation,
 };
 use crate::syntax::{span_of, text_of};
 
@@ -74,6 +74,9 @@ impl PythonExtractor {
             strings: Vec::new(),
             http_calls: Vec::new(),
             routes: Vec::new(),
+            routers: Vec::new(),
+            router_inclusions: Vec::new(),
+            module_aliases: Vec::new(),
             diagnostics: Vec::new(),
         };
 
@@ -396,6 +399,8 @@ impl Walker<'_> {
         }
         let name = self.text(left);
 
+        self.extract_router_declaration(node, &name);
+
         if name == "__all__" {
             if let Some(right) = node.child_by_field_name("right") {
                 self.collect_dunder_all(right);
@@ -491,7 +496,117 @@ impl Walker<'_> {
         });
 
         self.extract_django_route(&callee, arguments, node);
+        self.extract_router_inclusion(&callee, arguments, node);
         self.observe_http(&callee, arguments, node);
+    }
+
+    /// `router = APIRouter(prefix="/pools")`.
+    ///
+    /// Any constructor whose name ends in `Router` counts, because projects
+    /// subclass it: Airflow's routes are declared on `AirflowRouter`, and
+    /// requiring the exact name `APIRouter` would miss every one of them.
+    /// The suffix is the evidence, and a constructor that is not called at all
+    /// declares nothing.
+    fn extract_router_declaration(&mut self, assignment: Node<'_>, name: &str) {
+        let Some(right) = assignment.child_by_field_name("right") else {
+            return;
+        };
+        if right.kind() != "call" {
+            return;
+        }
+        let Some(function) = right.child_by_field_name("function") else {
+            return;
+        };
+        let constructor = match self.callee_shape(function) {
+            Some(Callee::Identifier { name }) => name,
+            Some(Callee::Member { property, .. }) => property,
+            None => return,
+        };
+        if !constructor.ends_with("Router") {
+            return;
+        }
+        let arguments = right.child_by_field_name("arguments");
+        let (prefix, prefix_unresolved) = self.keyword_string(arguments, "prefix");
+        self.analysis.routers.push(RouterDeclaration {
+            name: name.to_owned(),
+            prefix,
+            prefix_unresolved,
+            constructor,
+            span: span_of(assignment),
+        });
+    }
+
+    /// `parent.include_router(child, prefix="/x")`.
+    ///
+    /// Records the mounting, not a resolved path. Which routers these names
+    /// refer to, and what prefix the chain composes to, is the resolver's
+    /// question — this file may not even declare them.
+    fn extract_router_inclusion(
+        &mut self,
+        callee: &Callee,
+        arguments: Option<Node<'_>>,
+        call: Node<'_>,
+    ) {
+        let Callee::Member { object, property } = callee else {
+            return;
+        };
+        if property != "include_router" {
+            return;
+        }
+        let Some(args) = arguments else { return };
+        let mut cursor = args.walk();
+        let positional: Vec<_> = args
+            .named_children(&mut cursor)
+            .filter(|n| n.kind() != "keyword_argument")
+            .collect();
+        // The child router must be named, not built inline: an expression here
+        // is a router this analysis cannot identify.
+        let Some(child) = positional
+            .first()
+            .filter(|n| matches!(n.kind(), "identifier" | "attribute"))
+        else {
+            return;
+        };
+        let (prefix, prefix_unresolved) = self.keyword_string(arguments, "prefix");
+        self.analysis.router_inclusions.push(RouterInclusion {
+            parent: object.join("."),
+            child: self.text(*child),
+            prefix,
+            prefix_unresolved,
+            span: span_of(call),
+        });
+    }
+
+    /// A `keyword=` argument's string literal, and whether it was present but
+    /// not literal.
+    ///
+    /// The two are different facts. Absent means "no prefix"; present but
+    /// dynamic means "a prefix exists and this analysis cannot read it", and
+    /// composing that as empty would produce a wrong path.
+    fn keyword_string(&self, arguments: Option<Node<'_>>, keyword: &str) -> (Option<String>, bool) {
+        let Some(args) = arguments else {
+            return (None, false);
+        };
+        let mut cursor = args.walk();
+        for arg in args.named_children(&mut cursor) {
+            if arg.kind() != "keyword_argument" {
+                continue;
+            }
+            let named = arg
+                .child_by_field_name("name")
+                .is_some_and(|n| self.text(n) == keyword);
+            if !named {
+                continue;
+            }
+            let Some(value) = arg.child_by_field_name("value") else {
+                return (None, true);
+            };
+            if value.kind() == "string" {
+                return (Some(string_content(value, self.source)), false);
+            }
+            return (None, true);
+        }
+        (None, false)
     }
 
     /// A plain identifier or unbroken attribute chain, or `None`.
@@ -589,6 +704,7 @@ impl Walker<'_> {
         self.analysis.routes.push(RouteObservation {
             style,
             methods,
+            receiver: Some(object.join(".")),
             path: self.url_observation(path_node),
             handler,
             span: span_of(decorator),
@@ -684,6 +800,8 @@ impl Walker<'_> {
 
         self.analysis.routes.push(RouteObservation {
             style: RouteDeclarationStyle::UrlConfEntry,
+            // A url-conf entry is not registered on a router object.
+            receiver: None,
             // A URL conf entry declares no HTTP method; the view decides.
             methods: Vec::new(),
             path: self.url_observation(path_node),
@@ -721,6 +839,7 @@ impl Walker<'_> {
             callee: callee.to_string(),
             method_hint: Some(verb),
             url: self.url_observation(first),
+            enclosing: self.scope.last().cloned(),
             span: span_of(call),
         });
     }

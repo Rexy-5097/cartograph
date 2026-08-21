@@ -50,6 +50,8 @@ pub fn normalize_route_declaration(
         span: observation.span,
         raw_path: raw_text(&observation.path),
         handler: observation.handler.clone(),
+        // A route declaration is not inside a client function.
+        enclosing: None,
     };
     let methods = Methods::from_hints(&observation.methods);
 
@@ -88,6 +90,7 @@ pub fn normalize_client_call(
         span: observation.span,
         raw_path: raw_text(&observation.url),
         handler: None,
+        enclosing: observation.enclosing.clone(),
     };
     let methods = observation
         .method_hint

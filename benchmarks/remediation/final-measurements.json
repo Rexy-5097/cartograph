@@ -1,0 +1,386 @@
+{
+  "corpus_sha256": "ca61401e77e250a11840aa625fb0caf4a6788d94c7add1d04c4acd17926b4a01",
+  "milestone": "M07",
+  "pass": 8,
+  "repositories": [
+    {
+      "analysis_root": ".",
+      "commit": "8222db334054172bf44789c58ab3857e4567b952",
+      "measurements": {
+        "backend_routes": 10,
+        "client_calls": 2355,
+        "decisions": {
+          "ambiguous": 6,
+          "exact": 0,
+          "no_match": 998,
+          "strong": 15,
+          "unsupported": 1336
+        },
+        "dynamic_urls": {
+          "fully_resolved": 53,
+          "partially_resolved": 1806
+        },
+        "files_analysed": 6063,
+        "graph": {
+          "edges": 663,
+          "edges_by_kind": {
+            "call": 45,
+            "http-call": 15,
+            "orm-access": 571,
+            "queries": 32
+          },
+          "nodes": 615
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 603,
+          "models": 33,
+          "tables_resolved": 32
+        }
+      },
+      "name": "superset",
+      "normalize": {
+        "client_calls": 2355,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/superset.normalize.json",
+        "raw_sha256": "d9b04d20ddb2365ad928cb6ac477f50d48f27c7c614144c340a265deef034430",
+        "route_declarations": 10,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 4628,
+        "peak_rss_bytes": 153321472,
+        "wall_seconds": 5.148
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/superset.json",
+      "raw_sha256": "6687596816492138b2c7618b0b1d3819698c7b5872bcbf8f68d977ee07ffde45",
+      "repository": "apache/superset",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "162344da111e833b30892728372ab95331f06873",
+      "measurements": {
+        "backend_routes": 23,
+        "client_calls": 86,
+        "decisions": {
+          "ambiguous": 0,
+          "exact": 0,
+          "no_match": 23,
+          "strong": 0,
+          "unsupported": 63
+        },
+        "dynamic_urls": {
+          "fully_resolved": 0,
+          "partially_resolved": 63
+        },
+        "files_analysed": 156,
+        "graph": {
+          "edges": 1,
+          "edges_by_kind": {
+            "call": 1
+          },
+          "nodes": 2
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 0,
+          "models": 0,
+          "tables_resolved": 0
+        }
+      },
+      "name": "full-stack-fastapi",
+      "normalize": {
+        "client_calls": 86,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/full-stack-fastapi.normalize.json",
+        "raw_sha256": "4b9a5168a19f6ebbc8cc2b61e611c5d52b52591064dda1c9dc44d8ca5ecb5197",
+        "route_declarations": 23,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 60,
+        "peak_rss_bytes": 9601024,
+        "wall_seconds": 0.092
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/full-stack-fastapi.json",
+      "raw_sha256": "8aa6a4c7dbb6122033bdc8ac1bccf67caa2a4a91df3413a118fd3964fa920b14",
+      "repository": "fastapi/full-stack-fastapi-template",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "8ee706ebaa32804ae7d674bfb779f1b43609b1e4",
+      "measurements": {
+        "backend_routes": 626,
+        "client_calls": 1547,
+        "decisions": {
+          "ambiguous": 11,
+          "exact": 153,
+          "no_match": 483,
+          "strong": 37,
+          "unsupported": 863
+        },
+        "dynamic_urls": {
+          "fully_resolved": 61,
+          "partially_resolved": 1055
+        },
+        "files_analysed": 5747,
+        "graph": {
+          "edges": 1076,
+          "edges_by_kind": {
+            "call": 102,
+            "http-call": 190,
+            "orm-access": 637,
+            "queries": 147
+          },
+          "nodes": 1156
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 784,
+          "models": 153,
+          "tables_resolved": 147
+        }
+      },
+      "name": "onyx",
+      "normalize": {
+        "client_calls": 1547,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/onyx.normalize.json",
+        "raw_sha256": "36d67b25055ff7777b6e9aba2e8825626b0246d1bee8396bddae22722d8c9842",
+        "route_declarations": 626,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 3883,
+        "peak_rss_bytes": 126320640,
+        "wall_seconds": 4.316
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/onyx.json",
+      "raw_sha256": "86af27b11541c61733c11e282e33aa762a04cf12e2da10b763295fc748653761",
+      "repository": "onyx-dot-app/onyx",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "2dd790a6e7c3d3ab25ff8f45f07b0d0250de4c25",
+      "measurements": {
+        "backend_routes": 270,
+        "client_calls": 18675,
+        "decisions": {
+          "ambiguous": 137,
+          "exact": 193,
+          "no_match": 11448,
+          "strong": 719,
+          "unsupported": 6178
+        },
+        "dynamic_urls": {
+          "fully_resolved": 226,
+          "partially_resolved": 15171
+        },
+        "files_analysed": 32335,
+        "graph": {
+          "edges": 7876,
+          "edges_by_kind": {
+            "call": 226,
+            "http-call": 912,
+            "orm-access": 6691,
+            "queries": 47
+          },
+          "nodes": 6864
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 6738,
+          "models": 110,
+          "tables_resolved": 47
+        }
+      },
+      "name": "posthog",
+      "normalize": {
+        "client_calls": 18675,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/posthog.normalize.json",
+        "raw_sha256": "b1004f17ab1b7f50eb92eaac0c6a220a5fe02a61550a76123e56536f30f2e49a",
+        "route_declarations": 270,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 47016,
+        "peak_rss_bytes": 964542464,
+        "wall_seconds": 49.878
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/posthog.json",
+      "raw_sha256": "42a9dc73ddb7f520d29b672e132c063cfbef6991ea706898e91d83dc86e980a4",
+      "repository": "PostHog/posthog",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "0ce8f6278cdeacdc9b26dba6b08a63e567df87ac",
+      "measurements": {
+        "backend_routes": 235,
+        "client_calls": 164,
+        "decisions": {
+          "ambiguous": 6,
+          "exact": 0,
+          "no_match": 110,
+          "strong": 11,
+          "unsupported": 37
+        },
+        "dynamic_urls": {
+          "fully_resolved": 3,
+          "partially_resolved": 30
+        },
+        "files_analysed": 1539,
+        "graph": {
+          "edges": 1469,
+          "edges_by_kind": {
+            "call": 120,
+            "http-call": 11,
+            "orm-access": 1337,
+            "queries": 1
+          },
+          "nodes": 1308
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 1338,
+          "models": 74,
+          "tables_resolved": 1
+        }
+      },
+      "name": "zulip",
+      "normalize": {
+        "client_calls": 164,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/zulip.normalize.json",
+        "raw_sha256": "fbd50c7fcc299f9b2346c49848e30780c80b5ea35daef6e6d9abad8f11e1b433",
+        "route_declarations": 235,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 2328,
+        "peak_rss_bytes": 83755008,
+        "wall_seconds": 2.645
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/zulip.json",
+      "raw_sha256": "dfbe30bd2ecd39e155530f569607e2422f927ac9745a91f35f4910a0a14b567a",
+      "repository": "zulip/zulip",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "9b43d6abc0fc0766b1b1a886657bb6befc33ee1d",
+      "measurements": {
+        "backend_routes": 279,
+        "client_calls": 2464,
+        "decisions": {
+          "ambiguous": 1342,
+          "exact": 67,
+          "no_match": 358,
+          "strong": 108,
+          "unsupported": 589
+        },
+        "dynamic_urls": {
+          "fully_resolved": 238,
+          "partially_resolved": 1007
+        },
+        "files_analysed": 8654,
+        "graph": {
+          "edges": 3350,
+          "edges_by_kind": {
+            "call": 895,
+            "http-call": 175,
+            "orm-access": 2220,
+            "queries": 60
+          },
+          "nodes": 3104
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 2280,
+          "models": 62,
+          "tables_resolved": 60
+        }
+      },
+      "name": "airflow",
+      "normalize": {
+        "client_calls": 2464,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/airflow.normalize.json",
+        "raw_sha256": "caa55f27e799152d1cfb8f64b6711790ae2eccb6aa18308a192002a9105c7767",
+        "route_declarations": 279,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 9402,
+        "peak_rss_bytes": 217219072,
+        "wall_seconds": 10.411
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/airflow.json",
+      "raw_sha256": "ff4aa32800c29534d3b4250e921cbba8a00bb3ce2c5989e143e7a8ebf737af09",
+      "repository": "apache/airflow",
+      "status": "OK"
+    },
+    {
+      "analysis_root": ".",
+      "commit": "601093ddfe23a3d58a9c8f4a208bd49b203ee612",
+      "measurements": {
+        "backend_routes": 336,
+        "client_calls": 1091,
+        "decisions": {
+          "ambiguous": 42,
+          "exact": 268,
+          "no_match": 371,
+          "strong": 166,
+          "unsupported": 244
+        },
+        "dynamic_urls": {
+          "fully_resolved": 66,
+          "partially_resolved": 187
+        },
+        "files_analysed": 3731,
+        "graph": {
+          "edges": 501,
+          "edges_by_kind": {
+            "call": 56,
+            "http-call": 434,
+            "orm-access": 8,
+            "queries": 3
+          },
+          "nodes": 621
+        },
+        "orm": {
+          "ambiguous_model_names": 0,
+          "edges": 11,
+          "models": 4,
+          "tables_resolved": 3
+        }
+      },
+      "name": "autogpt",
+      "normalize": {
+        "client_calls": 1091,
+        "raw_path": "../.cartograph-corpus/_raw/remediation/autogpt.normalize.json",
+        "raw_sha256": "fdfce739c183b1a1f9c75cfaa22441785332388c698cedcda62b0b46de198e38",
+        "route_declarations": 336,
+        "status": "OK"
+      },
+      "performance": {
+        "analysis_ms": 2932,
+        "peak_rss_bytes": 111099904,
+        "wall_seconds": 3.294
+      },
+      "raw_path": "../.cartograph-corpus/_raw/remediation/autogpt.json",
+      "raw_sha256": "d826012b7fde58097f724ec0a36fe5b18efcf327f44aa823b1948ca75f32c990",
+      "repository": "Significant-Gravitas/AutoGPT",
+      "status": "OK"
+    }
+  ],
+  "schema": "cartograph.benchmark-measurement/1",
+  "status": "INTERNAL",
+  "toolchain": {
+    "binary_sha256": "91c9c6dc4115d2bfd30e764c7432854909a025e3e1126d68bfd5a8a81054575a",
+    "cartograph_commit": "073eab750f7631d128948324c8677c591f630318",
+    "cartograph_tree_clean": false,
+    "cartograph_version": "cartograph 0.0.0\nspecification V3\nmilestone M01",
+    "os": "Darwin 25.5.0 arm64",
+    "python": "3.14.4",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+  }
+}

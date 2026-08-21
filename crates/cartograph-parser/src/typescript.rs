@@ -30,8 +30,8 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::error::ParserError;
 use crate::model::{
     CallSite, Callee, ConcatPart, ExportStatus, FileAnalysis, HttpCallObservation, HttpMethodHint,
-    Import, NamedImport, ParseStatus, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart,
-    UrlObservation,
+    Import, ModuleAlias, NamedImport, ParseStatus, SourceLanguage, StringFact, Symbol, SymbolKind,
+    TemplatePart, UrlObservation,
 };
 use crate::syntax::{has_keyword_child, span_of};
 
@@ -101,7 +101,10 @@ impl TypeScriptExtractor {
             calls: Vec::new(),
             strings: Vec::new(),
             http_calls: Vec::new(),
-            routes: Vec::new(), // TypeScript route declarations: not M02's scope
+            routes: Vec::new(),
+            routers: Vec::new(),
+            router_inclusions: Vec::new(),
+            module_aliases: Vec::new(), // TypeScript route declarations: not M02's scope
             diagnostics: Vec::new(),
         };
 
@@ -201,6 +204,7 @@ impl Walker<'_> {
                 self.extract_export(node);
                 return;
             }
+            "pair" => self.extract_module_aliases(node),
             "function_declaration" | "generator_function_declaration" => {
                 self.extract_function(node, SymbolKind::Function, export);
                 return;
@@ -335,6 +339,57 @@ impl Walker<'_> {
 
     fn extract_export(&mut self, node: Node<'_>) {
         let is_default = has_keyword_child(node, "default");
+
+        // `export * from "./queries"` and `export { X } from "./m"` — a barrel
+        // file. It declares nothing itself and forwards everything, so without
+        // recording it an importer of the barrel reaches a dead end. Airflow's
+        // generated query layer is exactly this: `openapi-gen/queries/index.ts`
+        // is two wildcard re-exports and nothing else.
+        //
+        // Recorded as an import, because that is what it is from the
+        // resolver's point of view: this module binds those names from
+        // another. A wildcard uses the namespace binding `*`, the same
+        // representation the Python extractor gives `from x import *`.
+        if let Some(source) = node.child_by_field_name("source") {
+            let specifier = string_content(source, self.source);
+            let mut named = Vec::new();
+            let mut wildcard = false;
+            let mut cursor = node.walk();
+            for child in node.named_children(&mut cursor) {
+                match child.kind() {
+                    "export_clause" => {
+                        let mut inner = child.walk();
+                        for spec in child.named_children(&mut inner) {
+                            if spec.kind() != "export_specifier" {
+                                continue;
+                            }
+                            let Some(name) = spec.child_by_field_name("name") else {
+                                continue;
+                            };
+                            named.push(NamedImport {
+                                imported: self.text(name),
+                                local: spec.child_by_field_name("alias").map(|a| self.text(a)),
+                            });
+                        }
+                    }
+                    "*" => wildcard = true,
+                    _ => {}
+                }
+            }
+            if named.is_empty() && !wildcard {
+                // `export * as ns from "./m"` and anything else unrecognised.
+                wildcard = true;
+            }
+            self.analysis.imports.push(Import {
+                specifier,
+                default_name: None,
+                namespace_name: wildcard.then(|| "*".to_owned()),
+                named,
+                type_only: has_keyword_child(node, "type"),
+                span: span_of(node),
+            });
+            return;
+        }
 
         if let Some(declaration) = node.child_by_field_name("declaration") {
             self.export = if is_default {
@@ -513,7 +568,21 @@ impl Walker<'_> {
             return;
         };
         let Some(callee) = self.callee_shape(callee_node) else {
-            return; // not reliably identifiable — skip, don't guess
+            // The callee is not a plain identifier or an unbroken property
+            // chain — a parenthesised expression, a computed member, a call in
+            // the chain. No CallSite is recorded, because naming that callee
+            // would be a guess.
+            //
+            // A request configuration object is different: its URL is stated
+            // literally and does not depend on identifying the callee at all.
+            // full-stack-fastapi's generated SDK writes every request as
+            // `(options?.client ?? client).get({ url: '/api/v1/items/' })`,
+            // and refusing the whole call for the sake of the callee's shape
+            // discards a fact the source states plainly.
+            if !is_new {
+                self.observe_http_from_config(callee_node, node);
+            }
+            return;
         };
 
         let arguments = node.child_by_field_name("arguments");
@@ -576,6 +645,37 @@ impl Walker<'_> {
             return;
         };
 
+        // A request described by a configuration object rather than by
+        // positional arguments. Generated clients overwhelmingly write this
+        // shape, and M07 measured the cost of not reading it: of 1,458
+        // HttpCall edges across seven repositories only twelve had a
+        // TypeScript client, because every generated SDK in the corpus hides
+        // its URL in an options object.
+        //
+        //     __request(OpenAPI, { method: 'POST', url: '/api/v2/pools' })
+        //     (options.client ?? client).post({ url: '/api/v1/items/' })
+        //     SupersetClient.get({ endpoint: '/api/v1/chart/' })
+        //
+        // The evidence is the literal URL itself, so this does not depend on
+        // recognising a generator, a client library or a callee name.
+        if let Some((url, method)) = self.request_config(&arg_nodes) {
+            // A literal `method` property wins. Failing that, a callee named
+            // for a verb states the method just as plainly: `client.get({url})`
+            // is a GET. Neither is an inference — both are written down.
+            let method = method.or_else(|| match callee {
+                Callee::Member { property, .. } => HttpMethodHint::from_name(property),
+                Callee::Identifier { .. } => None,
+            });
+            self.analysis.http_calls.push(HttpCallObservation {
+                callee: callee.to_string(),
+                method_hint: method,
+                url,
+                enclosing: self.scope.last().cloned(),
+                span: span_of(call_node),
+            });
+            return;
+        }
+
         let (is_http, method_hint) = match callee {
             Callee::Identifier { name } if name == "fetch" => (
                 true,
@@ -630,8 +730,158 @@ impl Walker<'_> {
             callee: callee.to_string(),
             method_hint,
             url,
+            enclosing: self.scope.last().cloned(),
             span: span_of(call_node),
         });
+    }
+
+    /// `resolve: { alias: { openapi: "/openapi-gen" } }` in a build config.
+    ///
+    /// Read only under a `resolve` property, so an unrelated object with a key
+    /// called `alias` — a database column mapping, a CLI flag table — cannot
+    /// be mistaken for module resolution. Only string values are taken;
+    /// anything computed is not a fact this can read.
+    fn extract_module_aliases(&mut self, pair: Node<'_>) {
+        let Some(key) = pair.child_by_field_name("key") else {
+            return;
+        };
+        let key_name = match key.kind() {
+            "property_identifier" => self.text(key),
+            "string" => string_content(key, self.source),
+            _ => return,
+        };
+        if key_name != "resolve" {
+            return;
+        }
+        let Some(resolve_object) = pair.child_by_field_name("value") else {
+            return;
+        };
+        if resolve_object.kind() != "object" {
+            return;
+        }
+        let Some(alias_object) = self.literal_property(resolve_object, &["alias"]) else {
+            return;
+        };
+        if alias_object.kind() != "object" {
+            return;
+        }
+
+        let mut cursor = alias_object.walk();
+        for entry in alias_object.named_children(&mut cursor) {
+            if entry.kind() != "pair" {
+                continue;
+            }
+            let (Some(name), Some(value)) = (
+                entry.child_by_field_name("key"),
+                entry.child_by_field_name("value"),
+            ) else {
+                continue;
+            };
+            let alias = match name.kind() {
+                "property_identifier" => self.text(name),
+                "string" => string_content(name, self.source),
+                _ => continue,
+            };
+            if value.kind() != "string" {
+                continue;
+            }
+            self.analysis.module_aliases.push(ModuleAlias {
+                alias,
+                target: string_content(value, self.source),
+                span: span_of(entry),
+            });
+        }
+    }
+
+    /// Records a configuration-object request whose callee could not be named.
+    ///
+    /// The callee is recorded as the invoked property when there is one, so
+    /// the observation still says what was called, and never as raw source.
+    fn observe_http_from_config(&mut self, callee_node: Node<'_>, call_node: Node<'_>) {
+        let Some(arguments) = call_node.child_by_field_name("arguments") else {
+            return;
+        };
+        let mut cursor = arguments.walk();
+        let arg_nodes: Vec<_> = arguments.named_children(&mut cursor).collect();
+        let Some((url, method)) = self.request_config(&arg_nodes) else {
+            return;
+        };
+        let callee = callee_node
+            .child_by_field_name("property")
+            .map_or_else(|| "(unnamed)".to_owned(), |p| self.text(p));
+        let method = method.or_else(|| HttpMethodHint::from_name(&callee));
+        self.analysis.http_calls.push(HttpCallObservation {
+            callee,
+            method_hint: method,
+            url,
+            enclosing: self.scope.last().cloned(),
+            span: span_of(call_node),
+        });
+    }
+
+    /// A request configuration object among a call's arguments.
+    ///
+    /// Returns the URL and, when the object states one literally, the method.
+    ///
+    /// # What this deliberately will not read
+    ///
+    /// Only `url` and `endpoint` are accepted as the URL key. `path` is not:
+    /// React Router, Vue Router and every routing table in the corpus write
+    /// `{ path: "/orders", element: … }`, and reading those would turn a
+    /// frontend's own route table into outbound HTTP calls — a false positive
+    /// class larger than the true positives this exists to find.
+    ///
+    /// The value must be a literal or template whose text begins a URL path,
+    /// which is the same discriminating evidence the positional forms use.
+    fn request_config(
+        &self,
+        arguments: &[Node<'_>],
+    ) -> Option<(UrlObservation, Option<HttpMethodHint>)> {
+        for argument in arguments {
+            if argument.kind() != "object" {
+                continue;
+            }
+            let url_node = self.literal_property(*argument, &["url", "endpoint"])?;
+            if !self.looks_like_path(url_node) {
+                continue;
+            }
+            let url = match url_node.kind() {
+                "string" => UrlObservation::Literal {
+                    value: string_content(url_node, self.source),
+                },
+                _ => UrlObservation::Template {
+                    parts: template_parts(url_node, self.source),
+                },
+            };
+            let method = self
+                .literal_property(*argument, &["method"])
+                .filter(|n| n.kind() == "string")
+                .and_then(|n| HttpMethodHint::from_name(&string_content(n, self.source)));
+            return Some((url, method));
+        }
+        None
+    }
+
+    /// The value node of the first of `keys` this object states.
+    fn literal_property<'t>(&self, object: Node<'t>, keys: &[&str]) -> Option<Node<'t>> {
+        let mut cursor = object.walk();
+        for pair in object.named_children(&mut cursor) {
+            if pair.kind() != "pair" {
+                continue;
+            }
+            let Some(key) = pair.child_by_field_name("key") else {
+                continue;
+            };
+            let name = match key.kind() {
+                "property_identifier" => self.text(key),
+                "string" => string_content(key, self.source),
+                _ => continue,
+            };
+            if keys.contains(&name.as_str()) {
+                return pair.child_by_field_name("value");
+            }
+        }
+        None
     }
 
     /// Does this argument syntactically look like a URL path?

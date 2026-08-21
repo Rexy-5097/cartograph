@@ -24,6 +24,7 @@ fn span() -> Span {
 
 fn declaration(path: &str) -> RouteObservation {
     RouteObservation {
+        receiver: None,
         style: RouteDeclarationStyle::VerbDecorator,
         methods: vec![HttpMethodHint::Get],
         path: UrlObservation::Literal {
@@ -93,6 +94,7 @@ fn templates(c: &mut Criterion) {
     // Template paths take the segment-reassembly path through the normaliser.
     let corpus: Vec<RouteObservation> = (0..1_000)
         .map(|i| RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: vec![HttpMethodHint::Post],
             path: UrlObservation::Template {

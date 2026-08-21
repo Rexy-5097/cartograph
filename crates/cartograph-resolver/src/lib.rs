@@ -53,24 +53,29 @@
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
 
 pub mod canonical;
+pub mod client_trace;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
+pub mod imports;
 pub mod matching;
 pub mod normalize;
 pub mod orm;
+pub mod routers;
 pub mod symbolic;
 
 pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,
 };
+pub use client_trace::{ClientFunction, add_client_call_edges, client_functions};
 pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,
 };
 pub use edge::add_edge_for_match;
 pub use evaluator::{Scope, evaluate_expression, evaluate_string_fact};
+pub use imports::{ModuleIndex, Resolution};
 pub use matching::{
     Candidate, MatchReason, MatchResult, MatchStatus, MethodCompatibility, PathCompatibility,
     RouteIndex, UnsupportedReason, match_client, priors,
@@ -79,4 +84,5 @@ pub use normalize::{normalize_client_call, normalize_method, normalize_route_dec
 pub use orm::{
     AccessKind, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel, TableName, add_orm_edges,
 };
+pub use routers::{PrefixResolution, RouterIndex, with_composed_prefix};
 pub use symbolic::SymbolicValue;

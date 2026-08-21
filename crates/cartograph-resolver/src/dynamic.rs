@@ -303,6 +303,7 @@ pub fn with_resolved_url(
         callee: call.callee.clone(),
         method_hint: call.method_hint,
         url: resolved.observation.clone(),
+        enclosing: call.enclosing.clone(),
         span: call.span,
     }
 }

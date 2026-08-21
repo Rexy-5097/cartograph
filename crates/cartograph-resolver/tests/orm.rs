@@ -699,7 +699,7 @@ class Ambiguous(Model):
 /// Superset, `superset-frontend/packages/superset-core/src/theme/Theme.tsx:101`,
 /// and Zulip, `web/src/desktop_notifications.ts:41`.
 ///
-/// A Python ORM model cannot be constructed from TypeScript. Before the
+/// A Python ORM model cannot be constructed from `TypeScript`. Before the
 /// language filter, `new Theme({...})` in a .tsx file produced an `OrmAccess`
 /// edge to Superset's Python `Theme` model — 33 such edges across the corpus.
 #[test]
@@ -872,4 +872,98 @@ def create():
         ),
     ]);
     assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
+}
+
+// ── M07 remediation: import-resolved access attribution ──────────────
+
+/// Onyx, `backend/onyx/connectors/airtable/airtable_connector.py:483`, and
+/// Airflow, `providers/edge3/.../worker_api/routes/ui.py:135`.
+///
+/// A `Pydantic` model and an ORM model sharing a name is the commonest shape of
+/// this defect. Onyx declares `Document(Base)` in db/models.py and
+/// `Document(DocumentBase)` — a Pydantic model — in connectors/models.py; the
+/// connector imports the second. Checking only that the module belongs to the
+/// project accepted it, and 379 such accesses stood at M07.
+#[test]
+fn a_pydantic_model_sharing_an_orm_models_name_is_not_the_model() {
+    let analysis = orm(&[
+        (
+            "app/db/models.py",
+            r"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class Document(Base):
+    __tablename__ = 'document'
+",
+        ),
+        (
+            "app/schemas.py",
+            r"
+from pydantic import BaseModel
+
+class Document(BaseModel):
+    title: str
+",
+        ),
+        (
+            "app/connector.py",
+            r"
+from app.schemas import Document
+
+def load(row):
+    return Document(title=row.title)
+",
+        ),
+    ]);
+    assert!(
+        analysis.accesses.is_empty(),
+        "a Pydantic model was attributed to the ORM model: {:?}",
+        analysis.accesses
+    );
+}
+
+#[test]
+fn the_orm_model_itself_is_still_attributed_when_imported_directly() {
+    // The control. Onyx's genuine chain — `from onyx.db.models import
+    // UserGroup` then `UserGroup(...)` — must survive the rule above.
+    let analysis = orm(&[
+        (
+            "app/db/models.py",
+            r"
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
+class UserGroup(Base):
+    __tablename__ = 'user_group'
+",
+        ),
+        (
+            "app/schemas.py",
+            r"
+from pydantic import BaseModel
+
+class UserGroup(BaseModel):
+    name: str
+",
+        ),
+        (
+            "app/api.py",
+            r"
+from app.db.models import UserGroup
+
+def create_group(name):
+    return UserGroup(name=name)
+",
+        ),
+    ]);
+    assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
+    assert_eq!(
+        analysis.accesses[0].handler.as_deref(),
+        Some("create_group")
+    );
 }
