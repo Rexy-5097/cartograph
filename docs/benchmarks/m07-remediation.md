@@ -159,6 +159,23 @@ optimised, and the memory trend remains future work FW-9.
 
 ---
 
+## Found by the acceptance audit
+
+A corpus-wide false-positive audit after the remediation merged found **one**
+false positive in 1,737 `HttpCall` edges: PostHog's
+`nodejs/src/common/api/router.ts:45` writes `app.get('/_metrics', getMetrics)`
+— an Express registration with a *named* handler — and it was matched to
+Django's `metrics_view`. The remediation had refused registrations with inline
+handlers and documented the named-handler case as still indistinguishable.
+
+It is now refused too. A registration passes handlers, written inline or
+referenced by name; a request passes options. The rule applies only to a
+receiver that is not a known HTTP client, because Node's own
+`http.get(url, callback)` passes a function and is a real request. Exactly one
+edge in the corpus matched the shape — the false positive itself — so nothing
+correct was lost, and Zulip's four hand-written frontend requests through
+`channel.get({url})` are untouched.
+
 ## Still not solved
 
 | # | Finding |
@@ -166,6 +183,7 @@ optimised, and the memory trend remains future work FW-9.
 | FW-1 | Onyx's frontend calls `/api/manage/...` while its backend composes `/manage/...`: the `/api` comes from a Next.js `rewrites()` mapping, a deployment-time mechanism |
 | FW-2 | Onyx's global prefix is applied by a project-local helper, not `include_router`, so it does not compose |
 | FW-3 | Django chains still break: the `HttpCall` target is a `Function` in the URL-conf file, the `OrmAccess` source a `Function` in the view file |
+| FW-11 | Airflow's generated client declares two operations twice under different service names; ADR-0011 collapses them into one node. Both declarations are byte-identical in method and URL, so nothing is misattributed, but the alias is lost |
 | FW-5 | 126 `OrmAccess` edges remain unconfirmable — names bound by star or conditional imports, which are permitted rather than refused |
 | FW-6 | Class-based views and DRF routers still carry most of PostHog's and Superset's API |
 | FW-7 | `session.query(Model)` and `select(Model)` remain unsupported |

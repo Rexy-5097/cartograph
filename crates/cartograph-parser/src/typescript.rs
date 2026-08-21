@@ -179,13 +179,20 @@ struct Walker<'a> {
     deferred_exports: Vec<(String, ExportStatus)>,
 }
 
-/// Is this argument a function written in place?
+/// Is this argument a handler rather than a request option?
 ///
-/// A route registration passes its handler; a request passes options.
-fn is_function_expression(node: &Node<'_>) -> bool {
+/// A handler is a function written in place, or a reference to one. A request's
+/// trailing arguments are options — an object, a string, a number — never a
+/// bare reference.
+fn is_handler_argument(node: &Node<'_>) -> bool {
     matches!(
         node.kind(),
-        "arrow_function" | "function_expression" | "function" | "generator_function"
+        "arrow_function"
+            | "function_expression"
+            | "function"
+            | "generator_function"
+            | "identifier"
+            | "member_expression"
     )
 }
 
@@ -699,7 +706,22 @@ impl Walker<'_> {
                 // an unknown receiver. Node's own `http.get(url, callback)` is
                 // a real request that also passes a function, so a receiver
                 // that is a known HTTP client keeps its meaning.
-                if !known_client && arg_nodes.iter().skip(1).any(is_function_expression) {
+                // Express and Hono register a route by passing handlers:
+                //
+                //     app.get('/_health', (c) => c.json({ok: true}))
+                //     app.get('/_metrics', getMetrics)
+                //     app.get('/x', requireAuth, handleX)
+                //
+                // Every argument after the path is a handler — written inline
+                // or named — and none of them is a request option. A request,
+                // by contrast, passes options: an object, or nothing.
+                //
+                // The rule applies only to a receiver that is not a known HTTP
+                // client, because Node's own `http.get(url, callback)` passes a
+                // function and is a real request.
+                let all_handlers =
+                    arg_nodes.len() > 1 && arg_nodes.iter().skip(1).all(is_handler_argument);
+                if !known_client && all_handlers {
                     return;
                 }
                 if known_client || self.looks_like_path(first) {
