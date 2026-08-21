@@ -1,0 +1,93 @@
+{
+  "schema": "cartograph.remediation-target/1",
+  "purpose": "The acceptance target for the M07 remediation, written from source inspection BEFORE any implementation change. The remediation is not accepted because more chains appear; it is accepted when this specific chain is recovered correctly and precision does not fall.",
+  "written_before_implementation": true,
+
+  "primary_criterion": {
+    "id": "AC-1",
+    "statement": "At least one complete chain that begins in genuine frontend TypeScript — not a test, not a Python client, not a server-side TypeScript route — and ends at a database table, every node being the correct declaration and every edge carrying evidence, confidence and provenance.",
+    "verified_in_source": true,
+    "repository": "apache/airflow",
+    "commit": "9b43d6abc0fc0766b1b1a886657bb6befc33ee1d",
+    "chain": [
+      {
+        "step": 1,
+        "kind": "frontend call site",
+        "file": "airflow-core/src/airflow/ui/src/queries/useAddPool.ts",
+        "line": 53,
+        "source_fact": "usePoolServicePostPool({...}) — hand-written frontend code under ui/src, not generated, not a test"
+      },
+      {
+        "step": 2,
+        "kind": "generated query hook",
+        "file": "airflow-core/src/airflow/ui/openapi-gen/queries/queries.ts",
+        "line": 2406,
+        "source_fact": "mutationFn: ({ requestBody }) => PoolService.postPool({ requestBody })"
+      },
+      {
+        "step": 3,
+        "kind": "generated client function — the HTTP observation site",
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3667,
+        "source_fact": "__request(OpenAPI, { method: 'POST', url: '/api/v2/pools', ... })"
+      },
+      {
+        "step": 4,
+        "kind": "backend route, composed",
+        "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/pools.py",
+        "line": 157,
+        "source_fact": "@pools_router.post(\"\") where pools_router = AirflowRouter(tags=[\"Pool\"], prefix=\"/pools\") at pools.py:51, included by public_router = AirflowRouter(prefix=\"/api/v2\") at routes/public/__init__.py:56 — composed served path POST /api/v2/pools"
+      },
+      {
+        "step": 5,
+        "kind": "handler",
+        "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/pools.py",
+        "line": 165,
+        "source_fact": "def post_pool(body: PoolBody, session: SessionDep) -> PoolResponse"
+      },
+      {
+        "step": 6,
+        "kind": "ORM access",
+        "file": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/pools.py",
+        "line": 169,
+        "source_fact": "pool = Pool(**body.model_dump()) — direct model construction, already a supported access form (ACC-3)"
+      },
+      {
+        "step": 7,
+        "kind": "table",
+        "source_fact": "Pool.__tablename__ = \"slot_pool\"",
+        "table": "slot_pool"
+      }
+    ],
+    "already_working_at_baseline": ["step 5 -> 6 -> 7 (OrmAccess and Queries edges exist in the M07 pass-2 graph)"],
+    "missing_at_baseline": [
+      "step 3: __request(OpenAPI, {method, url}) is a configuration-object call, so no HTTP observation is made at all (M07 FE-U1)",
+      "step 4: the decorator states \"\" and the served path needs two levels of router prefix composition (M07 OUT-5)",
+      "steps 1-2: no call edge links a frontend module to the client function that holds the URL (M07 OUT-6)"
+    ]
+  },
+
+  "non_regression_criteria": [
+    {"id": "AC-2", "statement": "Route-declaration precision and recall stay at 1.000 over the unchanged 101 in-scope ground-truth records."},
+    {"id": "AC-3", "statement": "Queries precision and recall stay at 1.000 over the unchanged 48 in-scope ground-truth records, and all 290 produced Queries edges stay source-confirmed."},
+    {"id": "AC-4", "statement": "The 13 must_not_produce assertions stay satisfied: no table is invented for a SQLModel class."},
+    {"id": "AC-5", "statement": "OrmAccess edges from non-Python files stay at 0."},
+    {"id": "AC-6", "statement": "Every edge keeps confidence, provenance, evidence and a source location. Zero exceptions."},
+    {"id": "AC-7", "statement": "No previously correct M04/M05/M06 behaviour regresses: the full workspace test suite passes, and the 19 M07 regression fixtures keep passing."}
+  ],
+
+  "accuracy_rules": {
+    "false_positive_priority": "A change that adds true positives but also adds a false positive is not accepted until the false positive is investigated and either eliminated or shown to be outside the corpus. A wrong edge corrupts the architecture model; a missing edge does not.",
+    "refusal_preferred": "Where evidence is insufficient — an unresolved module, an ambiguous symbol, a dynamic prefix — produce no edge and record the reason.",
+    "measurement": "orm_access_unconfirmable (286 at baseline) must fall, and must not be reduced by loosening what counts as confirmable."
+  },
+
+  "explicitly_out_of_scope": [
+    "M08 calibration of confidence priors",
+    "incremental analysis, Salsa, file watching",
+    "desktop application, Tauri, Sigma.js",
+    "blast radius, structural diff, MCP, ASK",
+    "resolving Next.js rewrites or other deployment-time path rewriting",
+    "a general Python or TypeScript module resolver — only the subset the corpus exercises"
+  ]
+}
