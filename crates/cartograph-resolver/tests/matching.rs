@@ -44,6 +44,7 @@ fn backend(routes: &[(&str, &[HttpMethodHint], &str)]) -> RouteIndex {
 
 fn client(url: &str, method: Option<HttpMethodHint>) -> HttpCallObservation {
     HttpCallObservation {
+        enclosing: None,
         callee: "axios.post".into(),
         method_hint: method,
         url: UrlObservation::Literal {
@@ -209,6 +210,7 @@ fn an_unknown_client_value_aligns_with_a_parameter_but_stays_undetermined() {
     let index = backend(&[("/orders/{id}", &[HttpMethodHint::Post], "replace")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.post".into(),
             method_hint: POST,
             url: UrlObservation::Template {
@@ -389,6 +391,7 @@ fn an_unresolved_client_prefix_is_refused_rather_than_suffix_matched() {
     let index = backend(&[("/orders/{id}", &[HttpMethodHint::Post], "replace")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.post".into(),
             method_hint: POST,
             url: UrlObservation::Template {
@@ -426,6 +429,7 @@ fn a_client_path_that_could_not_be_canonicalised_is_refused() {
     let index = backend(&[("/orders", &[HttpMethodHint::Post], "create")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "requests.post".into(),
             method_hint: POST,
             url: UrlObservation::Dynamic {
@@ -512,6 +516,7 @@ fn an_unknown_client_value_against_a_literal_is_possible_but_never_exact() {
     let index = backend(&[("/orders/latest", &[HttpMethodHint::Get], "latest")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "axios.get".into(),
             method_hint: GET,
             url: UrlObservation::Template {

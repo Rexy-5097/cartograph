@@ -185,6 +185,7 @@ fn failed_analysis(
         routes: Vec::new(),
         routers: Vec::new(),
         router_inclusions: Vec::new(),
+        module_aliases: Vec::new(),
         diagnostics: vec![Diagnostic {
             severity: Severity::Error,
             kind,

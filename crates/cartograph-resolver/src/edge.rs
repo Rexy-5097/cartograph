@@ -88,10 +88,30 @@ pub fn add_edge_for_match(
 }
 
 fn client_node(graph: &mut ArchitectureGraph, result: &MatchResult) -> Result<NodeId, GraphError> {
-    let file = &result.client.provenance.file;
-    let location = SourceLocation::new(file.clone(), 1).ok();
+    let provenance = &result.client.provenance;
+    let file = &provenance.file;
+
+    // The function the call sits inside, when the extractor found one. A
+    // generated client wraps every request in a function that components
+    // import and call, and naming it keeps the wrapper on the path instead of
+    // attributing the request to a whole file. This is no longer a guess:
+    // M01/M02 record the enclosing scope of a call site.
+    //
+    // A call at module scope still yields a File node, which is what every
+    // client observation produced before M07's remediation.
+    let (kind, name, line) = provenance.enclosing.as_ref().map_or_else(
+        || (NodeKind::File, file.clone(), 1),
+        |function| {
+            (
+                NodeKind::Function,
+                function.clone(),
+                provenance.span.start_line,
+            )
+        },
+    );
+    let location = SourceLocation::new(file.clone(), line).ok();
     graph
-        .node_for(NodeKind::File, file.clone(), location)
+        .node_for(kind, name, location)
         .map_err(|_| GraphError::UnknownNode {
             id: NodeId::from_raw(u64::MAX),
         })

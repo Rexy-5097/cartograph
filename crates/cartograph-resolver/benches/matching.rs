@@ -40,6 +40,7 @@ fn route(path: &str, method: HttpMethodHint, handler: &str) -> RouteObservation 
 
 fn call(url: &str, method: Option<HttpMethodHint>) -> HttpCallObservation {
     HttpCallObservation {
+        enclosing: None,
         callee: "axios.post".into(),
         method_hint: method,
         url: UrlObservation::Literal {

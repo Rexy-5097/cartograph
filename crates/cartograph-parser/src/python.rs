@@ -76,6 +76,7 @@ impl PythonExtractor {
             routes: Vec::new(),
             routers: Vec::new(),
             router_inclusions: Vec::new(),
+            module_aliases: Vec::new(),
             diagnostics: Vec::new(),
         };
 
@@ -838,6 +839,7 @@ impl Walker<'_> {
             callee: callee.to_string(),
             method_hint: Some(verb),
             url: self.url_observation(first),
+            enclosing: self.scope.last().cloned(),
             span: span_of(call),
         });
     }

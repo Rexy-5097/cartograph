@@ -30,8 +30,8 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::error::ParserError;
 use crate::model::{
     CallSite, Callee, ConcatPart, ExportStatus, FileAnalysis, HttpCallObservation, HttpMethodHint,
-    Import, NamedImport, ParseStatus, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart,
-    UrlObservation,
+    Import, ModuleAlias, NamedImport, ParseStatus, SourceLanguage, StringFact, Symbol, SymbolKind,
+    TemplatePart, UrlObservation,
 };
 use crate::syntax::{has_keyword_child, span_of};
 
@@ -103,7 +103,8 @@ impl TypeScriptExtractor {
             http_calls: Vec::new(),
             routes: Vec::new(),
             routers: Vec::new(),
-            router_inclusions: Vec::new(), // TypeScript route declarations: not M02's scope
+            router_inclusions: Vec::new(),
+            module_aliases: Vec::new(), // TypeScript route declarations: not M02's scope
             diagnostics: Vec::new(),
         };
 
@@ -203,6 +204,7 @@ impl Walker<'_> {
                 self.extract_export(node);
                 return;
             }
+            "pair" => self.extract_module_aliases(node),
             "function_declaration" | "generator_function_declaration" => {
                 self.extract_function(node, SymbolKind::Function, export);
                 return;
@@ -337,6 +339,57 @@ impl Walker<'_> {
 
     fn extract_export(&mut self, node: Node<'_>) {
         let is_default = has_keyword_child(node, "default");
+
+        // `export * from "./queries"` and `export { X } from "./m"` — a barrel
+        // file. It declares nothing itself and forwards everything, so without
+        // recording it an importer of the barrel reaches a dead end. Airflow's
+        // generated query layer is exactly this: `openapi-gen/queries/index.ts`
+        // is two wildcard re-exports and nothing else.
+        //
+        // Recorded as an import, because that is what it is from the
+        // resolver's point of view: this module binds those names from
+        // another. A wildcard uses the namespace binding `*`, the same
+        // representation the Python extractor gives `from x import *`.
+        if let Some(source) = node.child_by_field_name("source") {
+            let specifier = string_content(source, self.source);
+            let mut named = Vec::new();
+            let mut wildcard = false;
+            let mut cursor = node.walk();
+            for child in node.named_children(&mut cursor) {
+                match child.kind() {
+                    "export_clause" => {
+                        let mut inner = child.walk();
+                        for spec in child.named_children(&mut inner) {
+                            if spec.kind() != "export_specifier" {
+                                continue;
+                            }
+                            let Some(name) = spec.child_by_field_name("name") else {
+                                continue;
+                            };
+                            named.push(NamedImport {
+                                imported: self.text(name),
+                                local: spec.child_by_field_name("alias").map(|a| self.text(a)),
+                            });
+                        }
+                    }
+                    "*" => wildcard = true,
+                    _ => {}
+                }
+            }
+            if named.is_empty() && !wildcard {
+                // `export * as ns from "./m"` and anything else unrecognised.
+                wildcard = true;
+            }
+            self.analysis.imports.push(Import {
+                specifier,
+                default_name: None,
+                namespace_name: wildcard.then(|| "*".to_owned()),
+                named,
+                type_only: has_keyword_child(node, "type"),
+                span: span_of(node),
+            });
+            return;
+        }
 
         if let Some(declaration) = node.child_by_field_name("declaration") {
             self.export = if is_default {
@@ -617,6 +670,7 @@ impl Walker<'_> {
                 callee: callee.to_string(),
                 method_hint: method,
                 url,
+                enclosing: self.scope.last().cloned(),
                 span: span_of(call_node),
             });
             return;
@@ -676,8 +730,67 @@ impl Walker<'_> {
             callee: callee.to_string(),
             method_hint,
             url,
+            enclosing: self.scope.last().cloned(),
             span: span_of(call_node),
         });
+    }
+
+    /// `resolve: { alias: { openapi: "/openapi-gen" } }` in a build config.
+    ///
+    /// Read only under a `resolve` property, so an unrelated object with a key
+    /// called `alias` — a database column mapping, a CLI flag table — cannot
+    /// be mistaken for module resolution. Only string values are taken;
+    /// anything computed is not a fact this can read.
+    fn extract_module_aliases(&mut self, pair: Node<'_>) {
+        let Some(key) = pair.child_by_field_name("key") else {
+            return;
+        };
+        let key_name = match key.kind() {
+            "property_identifier" => self.text(key),
+            "string" => string_content(key, self.source),
+            _ => return,
+        };
+        if key_name != "resolve" {
+            return;
+        }
+        let Some(resolve_object) = pair.child_by_field_name("value") else {
+            return;
+        };
+        if resolve_object.kind() != "object" {
+            return;
+        }
+        let Some(alias_object) = self.literal_property(resolve_object, &["alias"]) else {
+            return;
+        };
+        if alias_object.kind() != "object" {
+            return;
+        }
+
+        let mut cursor = alias_object.walk();
+        for entry in alias_object.named_children(&mut cursor) {
+            if entry.kind() != "pair" {
+                continue;
+            }
+            let (Some(name), Some(value)) = (
+                entry.child_by_field_name("key"),
+                entry.child_by_field_name("value"),
+            ) else {
+                continue;
+            };
+            let alias = match name.kind() {
+                "property_identifier" => self.text(name),
+                "string" => string_content(name, self.source),
+                _ => continue,
+            };
+            if value.kind() != "string" {
+                continue;
+            }
+            self.analysis.module_aliases.push(ModuleAlias {
+                alias,
+                target: string_content(value, self.source),
+                span: span_of(entry),
+            });
+        }
     }
 
     /// Records a configuration-object request whose callee could not be named.
@@ -701,6 +814,7 @@ impl Walker<'_> {
             callee,
             method_hint: method,
             url,
+            enclosing: self.scope.last().cloned(),
             span: span_of(call_node),
         });
     }

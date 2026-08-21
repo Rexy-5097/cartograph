@@ -103,7 +103,7 @@
       "description": "benchmark metadata that does not describe the run",
       "detail": {
         "agree": true,
-        "cartograph_commit": "6af1bd8702d274ca83097e9e82eb30648e0ecac4",
+        "cartograph_commit": "073eab750f7631d128948324c8677c591f630318",
         "rustc_now": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
         "rustc_recorded": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
       },
@@ -135,79 +135,250 @@
     "zulip": "3162a1eeaf05386ab2b30ef7ce24ca45a1d0eef6ab45c784073d37b1e3a4499d"
   },
   "milestone": "M07",
-  "pass": 3,
+  "pass": 8,
   "repositories": {
     "airflow": {
       "chains": {
-        "chains": [],
-        "distinct_handlers_in_chains": 0,
-        "fully_verified": 0,
+        "chains": [
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              19,
+              1132,
+              1083
+            ],
+            "frontend": "enqueueConnectionTest",
+            "handler": "enqueue_connection_test",
+            "handler_node": 39,
+            "model": "ConnectionTestRequest",
+            "table": "connection_test_request"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              21,
+              1130,
+              1082
+            ],
+            "frontend": "postConnection",
+            "handler": "post_connection",
+            "handler_node": 43,
+            "model": "Connection",
+            "table": "connection"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              23,
+              1131,
+              1082
+            ],
+            "frontend": "testConnection",
+            "handler": "test_connection",
+            "handler_node": 47,
+            "model": "Connection",
+            "table": "connection"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              76,
+              1134,
+              1113
+            ],
+            "frontend": "postPool",
+            "handler": "post_pool",
+            "handler_node": 149,
+            "model": "Pool",
+            "table": "slot_pool"
+          },
+          {
+            "confidences": [
+              0.9,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              93,
+              1133,
+              1089
+            ],
+            "frontend": "reparseDagFile",
+            "handler": "reparse_dag_file",
+            "handler_node": 183,
+            "model": "DagPriorityParsingRequest",
+            "table": "dag_priority_parsing_request"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              134,
+              1130,
+              1082
+            ],
+            "frontend": "airflow-core/src/airflow/ui/tests/e2e/specs/connections.spec.ts",
+            "handler": "post_connection",
+            "handler_node": 43,
+            "model": "Connection",
+            "table": "connection"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              136,
+              1130,
+              1082
+            ],
+            "frontend": "airflow-core/src/airflow/ui/tests/e2e/specs/connections.spec.ts",
+            "handler": "post_connection",
+            "handler_node": 43,
+            "model": "Connection",
+            "table": "connection"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              138,
+              1130,
+              1082
+            ],
+            "frontend": "airflow-core/src/airflow/ui/tests/e2e/specs/connections.spec.ts",
+            "handler": "post_connection",
+            "handler_node": 43,
+            "model": "Connection",
+            "table": "connection"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              140,
+              1134,
+              1113
+            ],
+            "frontend": "airflow-core/src/airflow/ui/tests/e2e/specs/pools.spec.ts",
+            "handler": "post_pool",
+            "handler_node": 149,
+            "model": "Pool",
+            "table": "slot_pool"
+          },
+          {
+            "confidences": [
+              0.98,
+              0.8,
+              0.8
+            ],
+            "edges": [
+              141,
+              1134,
+              1113
+            ],
+            "frontend": "airflow-core/src/airflow/ui/tests/e2e/specs/pools.spec.ts",
+            "handler": "post_pool",
+            "handler_node": 149,
+            "model": "Pool",
+            "table": "slot_pool"
+          }
+        ],
+        "distinct_handlers_in_chains": 5,
+        "fully_verified": 10,
         "partial": {
-          "http_call_only": 199
+          "http_call_only": 165
         }
       },
       "commit": "9b43d6abc0fc0766b1b1a886657bb6befc33ee1d",
       "edge_attribute_problems": [],
       "http_call": {
         "endpoint_not_at_cited_location": [],
-        "endpoints_confirmed": 199,
-        "produced": 199,
+        "endpoints_confirmed": 175,
+        "produced": 175,
         "sample": [
           {
-            "client": "airflow-core/tests/unit/api_fastapi/auth/managers/simple/routes/test_login.py:36",
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:27",
             "confidence": 0.98,
-            "evidence": "POST /auth/token matched POST /auth/token at airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73 (generate_token); exact HTTP method; every path segment static and equal",
-            "target": "generate_token",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73"
+            "evidence": "GET /api/v2/assets matched GET /api/v2/assets at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:138 (get_assets); exact HTTP method; every path segment static and equal",
+            "target": "get_assets",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:138"
           },
           {
-            "client": "airflow-core/tests/unit/api_fastapi/auth/managers/simple/routes/test_login.py:53",
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:64",
             "confidence": 0.98,
-            "evidence": "POST /auth/token matched POST /auth/token at airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73 (generate_token); exact HTTP method; every path segment static and equal",
-            "target": "generate_token",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73"
-          },
-          {
-            "client": "airflow-core/tests/unit/api_fastapi/auth/managers/simple/routes/test_login.py:66",
-            "confidence": 0.98,
-            "evidence": "POST /auth/token matched POST /auth/token at airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73 (generate_token); exact HTTP method; every path segment static and equal",
-            "target": "generate_token",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/auth.py:73"
-          },
-          {
-            "client": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_assets.py:842",
-            "confidence": 0.98,
-            "evidence": "GET /assets/aliases matched GET /assets/aliases at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253 (get_asset_aliases); exact HTTP method; every path segment static and equal",
+            "evidence": "GET /api/v2/assets/aliases matched GET /api/v2/assets/aliases at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253 (get_asset_aliases); exact HTTP method; every path segment static and equal",
             "target": "get_asset_aliases",
             "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253"
           },
           {
-            "client": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_assets.py:855",
-            "confidence": 0.98,
-            "evidence": "GET /assets/aliases matched GET /assets/aliases at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253 (get_asset_aliases); exact HTTP method; every path segment static and equal",
-            "target": "get_asset_aliases",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253"
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:92",
+            "confidence": 0.9,
+            "evidence": "GET /api/v2/assets/aliases/{asset_alias_id} matched GET /api/v2/assets/aliases/{asset_alias_id} at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:285 (get_asset_alias); exact HTTP method; 4 static segment(s) equal; declared parameter(s) at position(s) 4 bound to concrete values",
+            "target": "get_asset_alias",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:285"
           },
           {
-            "client": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_assets.py:886",
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:132",
             "confidence": 0.98,
-            "evidence": "GET /assets/aliases matched GET /assets/aliases at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253 (get_asset_aliases); exact HTTP method; every path segment static and equal",
-            "target": "get_asset_aliases",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253"
-          },
-          {
-            "client": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_assets.py:917",
-            "confidence": 0.98,
-            "evidence": "GET /assets/aliases matched GET /assets/aliases at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253 (get_asset_aliases); exact HTTP method; every path segment static and equal",
-            "target": "get_asset_aliases",
-            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:253"
-          },
-          {
-            "client": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_assets.py:991",
-            "confidence": 0.98,
-            "evidence": "GET /assets/events matched GET /assets/events at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:301 (get_asset_events); exact HTTP method; every path segment static and equal",
+            "evidence": "GET /api/v2/assets/events matched GET /api/v2/assets/events at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:301 (get_asset_events); exact HTTP method; every path segment static and equal",
             "target": "get_asset_events",
             "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:301"
+          },
+          {
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:172",
+            "confidence": 0.98,
+            "evidence": "POST /api/v2/assets/events matched POST /api/v2/assets/events at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:390 (create_asset_event); exact HTTP method; every path segment static and equal",
+            "target": "create_asset_event",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:390"
+          },
+          {
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:196",
+            "confidence": 0.9,
+            "evidence": "POST /api/v2/assets/{asset_id}/materialize matched POST /api/v2/assets/{asset_id}/materialize at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:432 (materialize_asset); exact HTTP method; 4 static segment(s) equal; declared parameter(s) at position(s) 3 bound to concrete values",
+            "target": "materialize_asset",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:432"
+          },
+          {
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:225",
+            "confidence": 0.9,
+            "evidence": "GET /api/v2/assets/{asset_id}/queuedEvents matched GET /api/v2/assets/{asset_id}/queuedEvents at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:528 (get_asset_queued_events); exact HTTP method; 4 static segment(s) equal; declared parameter(s) at position(s) 3 bound to concrete values",
+            "target": "get_asset_queued_events",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:528"
+          },
+          {
+            "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:252",
+            "confidence": 0.9,
+            "evidence": "DELETE /api/v2/assets/{asset_id}/queuedEvents matched DELETE /api/v2/assets/{asset_id}/queuedEvents at airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:694 (delete_asset_queued_events); exact HTTP method; 4 static segment(s) equal; declared parameter(s) at position(s) 3 bound to concrete values",
+            "target": "delete_asset_queued_events",
+            "target_at": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/assets.py:694"
           }
         ],
         "unverifiable": 0
@@ -320,15 +491,15 @@
         "distinct_handlers_in_chains": 0,
         "fully_verified": 0,
         "partial": {
-          "http_call_only": 296
+          "http_call_only": 434
         }
       },
       "commit": "601093ddfe23a3d58a9c8f4a208bd49b203ee612",
       "edge_attribute_problems": [],
       "http_call": {
         "endpoint_not_at_cited_location": [],
-        "endpoints_confirmed": 296,
-        "produced": 296,
+        "endpoints_confirmed": 434,
+        "produced": 434,
         "sample": [
           {
             "client": "autogpt_platform/autogpt_libs/autogpt_libs/auth/service_test.py:80",
@@ -338,53 +509,53 @@
             "target_at": "autogpt_platform/autogpt_libs/autogpt_libs/auth/service_test.py:39"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/analytics_test.py:216",
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:56",
             "confidence": 0.98,
-            "evidence": "POST /log_raw_analytics matched POST /log_raw_analytics at autogpt_platform/backend/backend/api/features/analytics.py:49 (log_raw_analytics); exact HTTP method; every path segment static and equal",
-            "target": "log_raw_analytics",
-            "target_at": "autogpt_platform/backend/backend/api/features/analytics.py:49"
+            "evidence": "POST /admin/add_credits matched POST /admin/add_credits at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36 (add_user_credits); exact HTTP method; every path segment static and equal",
+            "target": "add_user_credits",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/analytics_test.py:269",
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:108",
             "confidence": 0.98,
-            "evidence": "POST /log_raw_analytics matched POST /log_raw_analytics at autogpt_platform/backend/backend/api/features/analytics.py:49 (log_raw_analytics); exact HTTP method; every path segment static and equal",
-            "target": "log_raw_analytics",
-            "target_at": "autogpt_platform/backend/backend/api/features/analytics.py:49"
+            "evidence": "POST /admin/add_credits matched POST /admin/add_credits at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36 (add_user_credits); exact HTTP method; every path segment static and equal",
+            "target": "add_user_credits",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/analytics_test.py:306",
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:158",
             "confidence": 0.98,
-            "evidence": "POST /log_raw_analytics matched POST /log_raw_analytics at autogpt_platform/backend/backend/api/features/analytics.py:49 (log_raw_analytics); exact HTTP method; every path segment static and equal",
-            "target": "log_raw_analytics",
-            "target_at": "autogpt_platform/backend/backend/api/features/analytics.py:49"
+            "evidence": "GET /admin/users_history matched GET /admin/users_history at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61 (admin_get_all_user_history); exact HTTP method; every path segment static and equal",
+            "target": "admin_get_all_user_history",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/analytics_test.py:335",
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:202",
             "confidence": 0.98,
-            "evidence": "POST /log_raw_analytics matched POST /log_raw_analytics at autogpt_platform/backend/backend/api/features/analytics.py:49 (log_raw_analytics); exact HTTP method; every path segment static and equal",
-            "target": "log_raw_analytics",
-            "target_at": "autogpt_platform/backend/backend/api/features/analytics.py:49"
+            "evidence": "GET /admin/users_history matched GET /admin/users_history at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61 (admin_get_all_user_history); exact HTTP method; every path segment static and equal",
+            "target": "admin_get_all_user_history",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/chat/routes_test.py:100",
-            "confidence": 0.9,
-            "evidence": "PATCH /sessions/sess-1/title matched PATCH /sessions/{session_id}/title at autogpt_platform/backend/backend/api/features/chat/routes.py:799 (update_session_title_route); exact HTTP method; 2 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
-            "target": "update_session_title_route",
-            "target_at": "autogpt_platform/backend/backend/api/features/chat/routes.py:799"
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:255",
+            "confidence": 0.98,
+            "evidence": "GET /admin/users_history matched GET /admin/users_history at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61 (admin_get_all_user_history); exact HTTP method; every path segment static and equal",
+            "target": "admin_get_all_user_history",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:61"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/chat/routes_test.py:116",
-            "confidence": 0.9,
-            "evidence": "PATCH /sessions/sess-1/title matched PATCH /sessions/{session_id}/title at autogpt_platform/backend/backend/api/features/chat/routes.py:799 (update_session_title_route); exact HTTP method; 2 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
-            "target": "update_session_title_route",
-            "target_at": "autogpt_platform/backend/backend/api/features/chat/routes.py:799"
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:273",
+            "confidence": 0.98,
+            "evidence": "POST /admin/add_credits matched POST /admin/add_credits at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36 (add_user_credits); exact HTTP method; every path segment static and equal",
+            "target": "add_user_credits",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36"
           },
           {
-            "client": "autogpt_platform/backend/backend/api/features/chat/routes_test.py:132",
-            "confidence": 0.9,
-            "evidence": "PATCH /sessions/sess-1/title matched PATCH /sessions/{session_id}/title at autogpt_platform/backend/backend/api/features/chat/routes.py:799 (update_session_title_route); exact HTTP method; 2 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
-            "target": "update_session_title_route",
-            "target_at": "autogpt_platform/backend/backend/api/features/chat/routes.py:799"
+            "client": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes_test.py:277",
+            "confidence": 0.98,
+            "evidence": "POST /admin/add_credits matched POST /admin/add_credits at autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36 (add_user_credits); exact HTTP method; every path segment static and equal",
+            "target": "add_user_credits",
+            "target_at": "autogpt_platform/backend/backend/api/features/admin/credit_admin_routes.py:36"
           }
         ],
         "unverifiable": 0
@@ -639,31 +810,37 @@
               0.8
             ],
             "edges": [
-              22,
-              248,
-              212
+              187,
+              573,
+              432
             ],
-            "frontend": "backend/tests/integration/tests/scim/test_scim_groups.py",
-            "handler": "create_group",
-            "handler_node": 14,
-            "model": "UserGroup",
-            "table": "user_group"
+            "frontend": "createProject",
+            "handler": "create_project",
+            "handler_node": 222,
+            "model": "UserProject",
+            "table": "user_project"
           }
         ],
         "distinct_handlers_in_chains": 1,
         "fully_verified": 1,
         "partial": {
-          "http_call_only": 70,
-          "reached_model_not_table": 3
+          "http_call_only": 189
         }
       },
       "commit": "8ee706ebaa32804ae7d674bfb779f1b43609b1e4",
       "edge_attribute_problems": [],
       "http_call": {
         "endpoint_not_at_cited_location": [],
-        "endpoints_confirmed": 74,
-        "produced": 74,
+        "endpoints_confirmed": 190,
+        "produced": 190,
         "sample": [
+          {
+            "client": "backend/tests/api/test_api.py:37",
+            "confidence": 0.98,
+            "evidence": "POST /chat/create-chat-session matched POST /chat/create-chat-session at backend/onyx/server/query_and_chat/chat_backend.py:462 (create_new_chat_session); exact HTTP method; every path segment static and equal",
+            "target": "create_new_chat_session",
+            "target_at": "backend/onyx/server/query_and_chat/chat_backend.py:462"
+          },
           {
             "client": "backend/tests/api/test_api.py:110",
             "confidence": 0.98,
@@ -679,46 +856,39 @@
             "target_at": "backend/tests/unit/onyx/server/auth/test_captcha_api.py:23"
           },
           {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:51",
-            "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
+            "client": "backend/tests/external_dependency_unit/auth/test_oidc_multi_live_idp.py:211",
+            "confidence": 0.8,
+            "evidence": "GET /auth/oidc/{*}/authorize matched GET /auth/oidc/{provider_name}/authorize at backend/onyx/server/oidc_multi.py:310 (oidc_login_for_provider); exact HTTP method; 3 static segment(s) equal; client value(s) at position(s) 2 not determined",
+            "target": "oidc_login_for_provider",
+            "target_at": "backend/onyx/server/oidc_multi.py:310"
           },
           {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:54",
-            "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
+            "client": "backend/tests/external_dependency_unit/auth/test_oidc_multi_live_idp.py:233",
+            "confidence": 0.8,
+            "evidence": "GET /auth/oidc/{*}/authorize matched GET /auth/oidc/{provider_name}/authorize at backend/onyx/server/oidc_multi.py:310 (oidc_login_for_provider); exact HTTP method; 3 static segment(s) equal; client value(s) at position(s) 2 not determined",
+            "target": "oidc_login_for_provider",
+            "target_at": "backend/onyx/server/oidc_multi.py:310"
           },
           {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:66",
+            "client": "backend/tests/external_dependency_unit/auth/test_sso_admin_api.py:157",
             "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
+            "evidence": "POST /admin/sso/provider matched POST /admin/sso/provider at backend/onyx/server/manage/sso/api.py:159 (create_sso_provider_endpoint); exact HTTP method; every path segment static and equal",
+            "target": "create_sso_provider_endpoint",
+            "target_at": "backend/onyx/server/manage/sso/api.py:159"
           },
           {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:67",
+            "client": "backend/tests/external_dependency_unit/auth/test_sso_admin_api.py:187",
             "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
+            "evidence": "GET /admin/sso/provider matched GET /admin/sso/provider at backend/onyx/server/manage/sso/api.py:148 (list_sso_providers); exact HTTP method; every path segment static and equal",
+            "target": "list_sso_providers",
+            "target_at": "backend/onyx/server/manage/sso/api.py:148"
           },
           {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:71",
-            "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
-          },
-          {
-            "client": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:84",
-            "confidence": 0.98,
-            "evidence": "POST /feedback matched POST /feedback at backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37 (feedback); exact HTTP method; every path segment static and equal",
-            "target": "feedback",
-            "target_at": "backend/tests/external_dependency_unit/server/test_feedback_rate_limiting.py:37"
+            "client": "backend/tests/external_dependency_unit/auth/test_sso_admin_api.py:196",
+            "confidence": 0.8,
+            "evidence": "PATCH /admin/sso/provider/{*} matched PATCH /admin/sso/provider/{provider_id} at backend/onyx/server/manage/sso/api.py:196 (update_sso_provider_endpoint); exact HTTP method; 3 static segment(s) equal; client value(s) at position(s) 3 not determined",
+            "target": "update_sso_provider_endpoint",
+            "target_at": "backend/onyx/server/manage/sso/api.py:196"
           }
         ],
         "unverifiable": 0
@@ -808,7 +978,7 @@
         "distinct_handlers_in_chains": 0,
         "fully_verified": 0,
         "partial": {
-          "http_call_only": 873
+          "http_call_only": 912
         }
       },
       "commit": "2dd790a6e7c3d3ab25ff8f45f07b0d0250de4c25",
@@ -2424,6 +2594,14 @@
             "target_at": "posthog/urls.py:554"
           },
           {
+            "client": "nodejs/src/common/api/router.ts:45",
+            "confidence": 0.78400004,
+            "evidence": "GET /_metrics matched UNKNOWN /_metrics at posthog/urls.py:748 (metrics_view); route declared no method; every path segment static and equal",
+            "source_line": "urlpatterns.append(path(\"_metrics\", metrics_view))",
+            "target": "metrics_view",
+            "target_at": "posthog/urls.py:748"
+          },
+          {
             "client": "posthog/admin/test_code_based_verification_global_disable_admin.py:29",
             "confidence": 0.78400004,
             "evidence": "GET /admin/api/code-based-verification-global-disable/ matched UNKNOWN /admin/api/code-based-verification-global-disable/ at ee/urls.py:143 (CodeBasedVerificationGlobalDisableViewSet.as_view); route declared no method; every path segment static and equal",
@@ -3496,6 +3674,38 @@
             "target_at": "ee/partners/stripe/api/provisioning/urls.py:37"
           },
           {
+            "client": "posthog/api/oauth/test_views.py:5124",
+            "confidence": 0.78400004,
+            "evidence": "GET /auth.md matched UNKNOWN /auth.md at posthog/oauth2_urls.py:40 (OAuthClientManifestView.as_view); route declared no method; every path segment static and equal",
+            "source_line": "path(\"auth.md\", OAuthClientManifestView.as_view(), name=\"auth-md-manifest\"),",
+            "target": "OAuthClientManifestView.as_view",
+            "target_at": "posthog/oauth2_urls.py:40"
+          },
+          {
+            "client": "posthog/api/oauth/test_views.py:5129",
+            "confidence": 0.78400004,
+            "evidence": "GET /auth.md matched UNKNOWN /auth.md at posthog/oauth2_urls.py:40 (OAuthClientManifestView.as_view); route declared no method; every path segment static and equal",
+            "source_line": "path(\"auth.md\", OAuthClientManifestView.as_view(), name=\"auth-md-manifest\"),",
+            "target": "OAuthClientManifestView.as_view",
+            "target_at": "posthog/oauth2_urls.py:40"
+          },
+          {
+            "client": "posthog/api/oauth/test_views.py:5138",
+            "confidence": 0.78400004,
+            "evidence": "GET /auth.md matched UNKNOWN /auth.md at posthog/oauth2_urls.py:40 (OAuthClientManifestView.as_view); route declared no method; every path segment static and equal",
+            "source_line": "path(\"auth.md\", OAuthClientManifestView.as_view(), name=\"auth-md-manifest\"),",
+            "target": "OAuthClientManifestView.as_view",
+            "target_at": "posthog/oauth2_urls.py:40"
+          },
+          {
+            "client": "posthog/api/oauth/test_views.py:5148",
+            "confidence": 0.78400004,
+            "evidence": "GET /auth.md matched UNKNOWN /auth.md at posthog/oauth2_urls.py:40 (OAuthClientManifestView.as_view); route declared no method; every path segment static and equal",
+            "source_line": "path(\"auth.md\", OAuthClientManifestView.as_view(), name=\"auth-md-manifest\"),",
+            "target": "OAuthClientManifestView.as_view",
+            "target_at": "posthog/oauth2_urls.py:40"
+          },
+          {
             "client": "posthog/api/test/dashboards/test_dashboard.py:802",
             "confidence": 0.71999997,
             "evidence": "GET /shared_dashboard/testtoken matched UNKNOWN /shared_dashboard/{access_token} at posthog/urls.py:646 (sharing.SharingViewerPageViewSet.as_view); route declared no method; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
@@ -3984,6 +4194,14 @@
             "target_at": "posthog/urls.py:511"
           },
           {
+            "client": "posthog/api/test/test_render_query.py:13",
+            "confidence": 0.78400004,
+            "evidence": "GET /render_query matched UNKNOWN /render_query at posthog/urls.py:662 (render_query); route declared no method; every path segment static and equal",
+            "source_line": "path(\"render_query\", render_query, name=\"render_query\"),",
+            "target": "render_query",
+            "target_at": "posthog/urls.py:662"
+          },
+          {
             "client": "posthog/api/test/test_sharing.py:372",
             "confidence": 0.71999997,
             "evidence": "GET /shared_dashboard/my_test_token matched UNKNOWN /shared_dashboard/{access_token} at posthog/urls.py:646 (sharing.SharingViewerPageViewSet.as_view); route declared no method; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
@@ -3995,6 +4213,22 @@
             "client": "posthog/api/test/test_sharing.py:376",
             "confidence": 0.71999997,
             "evidence": "GET /shared_dashboard/my_test_token matched UNKNOWN /shared_dashboard/{access_token} at posthog/urls.py:646 (sharing.SharingViewerPageViewSet.as_view); route declared no method; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+            "source_line": "path(",
+            "target": "sharing.SharingViewerPageViewSet.as_view",
+            "target_at": "posthog/urls.py:646"
+          },
+          {
+            "client": "posthog/api/test/test_sharing.py:1602",
+            "confidence": 0.78400004,
+            "evidence": "GET /exporter matched UNKNOWN /exporter at posthog/urls.py:663 (sharing.SharingViewerPageViewSet.as_view); route declared no method; every path segment static and equal",
+            "source_line": "path(",
+            "target": "sharing.SharingViewerPageViewSet.as_view",
+            "target_at": "posthog/urls.py:646"
+          },
+          {
+            "client": "posthog/api/test/test_sharing.py:1625",
+            "confidence": 0.78400004,
+            "evidence": "GET /exporter matched UNKNOWN /exporter at posthog/urls.py:663 (sharing.SharingViewerPageViewSet.as_view); route declared no method; every path segment static and equal",
             "source_line": "path(",
             "target": "sharing.SharingViewerPageViewSet.as_view",
             "target_at": "posthog/urls.py:646"
@@ -4992,6 +5226,14 @@
             "target_at": "ee/urls.py:111"
           },
           {
+            "client": "posthog/test/test_middleware.py:1882",
+            "confidence": 0.78400004,
+            "evidence": "GET /login matched UNKNOWN /login at ee/partners/stripe/api/provisioning/urls.py:17 (stripe_provisioning_login); route declared no method; every path segment static and equal",
+            "source_line": "path(",
+            "target": "stripe_provisioning_login",
+            "target_at": "ee/partners/stripe/api/provisioning/urls.py:17"
+          },
+          {
             "client": "posthog/test/test_oauth_impersonation.py:159",
             "confidence": 0.78400004,
             "evidence": "POST /oauth/token/ matched UNKNOWN /oauth/token at ee/partners/stripe/api/provisioning/urls.py:37 (csrf_exempt); route declared no method; every path segment static and equal; trailing slash differs",
@@ -5083,6 +5325,62 @@
             "client": "posthog/test/test_urls.py:91",
             "confidence": 0.71999997,
             "evidence": "GET /integrations/connect/github/ matched UNKNOWN /integrations/connect/{kind}/ at posthog/urls.py:645 (login_required); route declared no method; 2 static segment(s) equal; declared parameter(s) at position(s) 2 bound to concrete values",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:106",
+            "confidence": 0.78400004,
+            "evidence": "GET /login matched UNKNOWN /login at ee/partners/stripe/api/provisioning/urls.py:17 (stripe_provisioning_login); route declared no method; every path segment static and equal",
+            "source_line": "path(",
+            "target": "stripe_provisioning_login",
+            "target_at": "ee/partners/stripe/api/provisioning/urls.py:17"
+          },
+          {
+            "client": "posthog/test/test_urls.py:140",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:150",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:156",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:162",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:168",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
+            "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
+            "target": "login_required",
+            "target_at": "posthog/urls.py:539"
+          },
+          {
+            "client": "posthog/test/test_urls.py:175",
+            "confidence": 0.78400004,
+            "evidence": "GET /authorize_and_redirect/ matched UNKNOWN /authorize_and_redirect/ at posthog/urls.py:644 (login_required); route declared no method; every path segment static and equal",
             "source_line": "path(\"toolbar_oauth/authorize/\", login_required(user.toolbar_oauth_authorize)),",
             "target": "login_required",
             "target_at": "posthog/urls.py:539"
@@ -5928,8 +6226,8 @@
             "target_at": "posthog/urls.py:511"
           }
         ],
-        "endpoints_confirmed": 234,
-        "produced": 873,
+        "endpoints_confirmed": 257,
+        "produced": 912,
         "sample": [
           {
             "client": "ee/api/vercel/test/test_vercel_authentication.py:89",
@@ -6964,16 +7262,58 @@
         "distinct_handlers_in_chains": 0,
         "fully_verified": 0,
         "partial": {
-          "http_call_only": 9
+          "http_call_only": 15
         }
       },
       "commit": "8222db334054172bf44789c58ab3857e4567b952",
       "edge_attribute_problems": [],
       "http_call": {
         "endpoint_not_at_cited_location": [],
-        "endpoints_confirmed": 9,
-        "produced": 9,
+        "endpoints_confirmed": 15,
+        "produced": 15,
         "sample": [
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/connection/SupersetClientClass.test.ts:57",
+            "confidence": 0.78400004,
+            "evidence": "UNKNOWN /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); neither side declared a method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/connection/SupersetClientClass.test.ts:60",
+            "confidence": 0.78400004,
+            "evidence": "UNKNOWN /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); neither side declared a method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/connection/SupersetClientClass.test.ts:72",
+            "confidence": 0.78400004,
+            "evidence": "UNKNOWN /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); neither side declared a method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/query/api/v1/makeApi.test.ts:33",
+            "confidence": 0.78400004,
+            "evidence": "GET /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); route declared no method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/query/api/v1/makeApi.test.ts:67",
+            "confidence": 0.78400004,
+            "evidence": "GET /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); route declared no method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
+          {
+            "client": "superset-frontend/packages/superset-ui-core/test/query/api/v1/makeApi.test.ts:79",
+            "confidence": 0.78400004,
+            "evidence": "POST /test matched UNKNOWN /test at tests/unit_tests/async_events/async_query_manager_tests.py:347 (test_view); route declared no method; every path segment static and equal",
+            "target": "test_view",
+            "target_at": "tests/unit_tests/async_events/async_query_manager_tests.py:347"
+          },
           {
             "client": "tests/unit_tests/async_events/async_query_manager_tests.py:356",
             "confidence": 0.78400004,
@@ -6987,48 +7327,6 @@
             "evidence": "GET / matched UNKNOWN / at tests/unit_tests/security/test_password_change.py:137 (index); route declared no method; every path segment static and equal",
             "target": "index",
             "target_at": "tests/unit_tests/security/test_password_change.py:137"
-          },
-          {
-            "client": "tests/unit_tests/utils/profiler_test.py:56",
-            "confidence": 0.78400004,
-            "evidence": "GET / matched UNKNOWN / at tests/unit_tests/security/test_password_change.py:137 (index); route declared no method; every path segment static and equal",
-            "target": "index",
-            "target_at": "tests/unit_tests/security/test_password_change.py:137"
-          },
-          {
-            "client": "tests/unit_tests/utils/profiler_test.py:74",
-            "confidence": 0.78400004,
-            "evidence": "GET / matched UNKNOWN / at tests/unit_tests/security/test_password_change.py:137 (index); route declared no method; every path segment static and equal",
-            "target": "index",
-            "target_at": "tests/unit_tests/security/test_password_change.py:137"
-          },
-          {
-            "client": "tests/unit_tests/views/test_error_handling.py:100",
-            "confidence": 0.78400004,
-            "evidence": "GET /ssh-tunnel-error matched UNKNOWN /ssh-tunnel-error at tests/unit_tests/views/test_error_handling.py:82 (ssh_tunnel_error_view); route declared no method; every path segment static and equal",
-            "target": "ssh_tunnel_error_view",
-            "target_at": "tests/unit_tests/views/test_error_handling.py:82"
-          },
-          {
-            "client": "tests/unit_tests/views/test_error_handling.py:116",
-            "confidence": 0.78400004,
-            "evidence": "GET /generic-error matched UNKNOWN /generic-error at tests/unit_tests/views/test_error_handling.py:88 (generic_error_view); route declared no method; every path segment static and equal",
-            "target": "generic_error_view",
-            "target_at": "tests/unit_tests/views/test_error_handling.py:88"
-          },
-          {
-            "client": "tests/unit_tests/views/test_error_handling.py:154",
-            "confidence": 0.78400004,
-            "evidence": "GET /query-validation-error matched UNKNOWN /query-validation-error at tests/unit_tests/views/test_error_handling.py:138 (query_validation_error_view); route declared no method; every path segment static and equal",
-            "target": "query_validation_error_view",
-            "target_at": "tests/unit_tests/views/test_error_handling.py:138"
-          },
-          {
-            "client": "tests/unit_tests/views/test_error_handling.py:172",
-            "confidence": 0.78400004,
-            "evidence": "GET /generic-superset-exception matched UNKNOWN /generic-superset-exception at tests/unit_tests/views/test_error_handling.py:142 (generic_superset_exception_view); route declared no method; every path segment static and equal",
-            "target": "generic_superset_exception_view",
-            "target_at": "tests/unit_tests/views/test_error_handling.py:142"
           }
         ],
         "unverifiable": 0
@@ -7102,13 +7400,45 @@
         "distinct_handlers_in_chains": 0,
         "fully_verified": 0,
         "partial": {
-          "http_call_only": 7
+          "http_call_only": 11
         }
       },
       "commit": "0ce8f6278cdeacdc9b26dba6b08a63e567df87ac",
       "edge_attribute_problems": [],
       "http_call": {
         "endpoint_not_at_cited_location": [
+          {
+            "client": "web/src/portico/email_log.ts:40",
+            "confidence": 0.78400004,
+            "evidence": "POST /emails/ matched UNKNOWN /emails/ at zproject/dev_urls.py:75 (email_page); route declared no method; every path segment static and equal",
+            "source_line": "path(\"emails/\", email_page),",
+            "target": "email_page",
+            "target_at": "zproject/dev_urls.py:75"
+          },
+          {
+            "client": "web/src/portico/integrations_dev_panel.ts:334",
+            "confidence": 0.78400004,
+            "evidence": "POST /devtools/integrations/check_send_webhook_fixture_message matched UNKNOWN /devtools/integrations/check_send_webhook_fixture_message at zproject/dev_urls.py:93 (check_send_webhook_fixture_message); route declared no method; every path segment static and equal",
+            "source_line": "path(",
+            "target": "check_send_webhook_fixture_message",
+            "target_at": "zproject/dev_urls.py:93"
+          },
+          {
+            "client": "web/src/portico/integrations_dev_panel.ts:370",
+            "confidence": 0.78400004,
+            "evidence": "POST /devtools/integrations/send_all_webhook_fixture_messages matched UNKNOWN /devtools/integrations/send_all_webhook_fixture_messages at zproject/dev_urls.py:97 (send_all_webhook_fixture_messages); route declared no method; every path segment static and equal",
+            "source_line": "path(",
+            "target": "send_all_webhook_fixture_messages",
+            "target_at": "zproject/dev_urls.py:97"
+          },
+          {
+            "client": "web/src/reload.ts:256",
+            "confidence": 0.78400004,
+            "evidence": "GET /compatibility matched UNKNOWN /compatibility at zproject/urls.py:875 (check_global_compatibility); route declared no method; every path segment static and equal",
+            "source_line": "path(\"compatibility\", check_global_compatibility),",
+            "target": "check_global_compatibility",
+            "target_at": "zproject/urls.py:875"
+          },
           {
             "client": "zerver/views/development/email_log.py:78",
             "confidence": 0.78400004,
@@ -7167,7 +7497,7 @@
           }
         ],
         "endpoints_confirmed": 0,
-        "produced": 7,
+        "produced": 11,
         "sample": [],
         "unverifiable": 0
       },
@@ -7246,8 +7576,8 @@
   "status": "INTERNAL \u2014 methodology is not yet stable; these numbers are not for publication",
   "supported_subset_sha256": "1410a01ffc729421b41da16daf36a91005cece987b9716eefb476f42385db2f9",
   "toolchain": {
-    "binary_sha256": "fd666b88f2586c418a1a6147c0584aba2604c075a0ad9a3918ec30888a44ae67",
-    "cartograph_commit": "6af1bd8702d274ca83097e9e82eb30648e0ecac4",
+    "binary_sha256": "91c9c6dc4115d2bfd30e764c7432854909a025e3e1126d68bfd5a8a81054575a",
+    "cartograph_commit": "073eab750f7631d128948324c8677c591f630318",
     "cartograph_tree_clean": false,
     "cartograph_version": "cartograph 0.0.0\nspecification V3\nmilestone M01",
     "os": "Darwin 25.5.0 arm64",

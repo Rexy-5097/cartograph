@@ -19,8 +19,8 @@ use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
     MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
-    add_edge_for_match, add_orm_edges, collect_exported_constants, match_client,
-    normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
+    add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
+    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
     with_composed_prefix, with_resolved_url,
 };
 use serde::Serialize;
@@ -46,6 +46,8 @@ struct Totals {
     orm_ambiguous: usize,
     /// Routes whose served path was composed from enclosing router prefixes.
     routes_composed: usize,
+    /// Calls from a caller into a client wrapper that issues a request.
+    client_call_edges: usize,
     /// Dynamic URLs the evaluator fully determined (M05).
     dynamic_resolved: usize,
     /// Dynamic URLs partly determined, with the gaps kept explicit.
@@ -256,6 +258,10 @@ fn analyse(path: &Path) -> Result<Outcome> {
             totals.edges += 1;
         }
     }
+    // The client wrapper stays on the path: a component calls a generated
+    // client function, and that function issues the request.
+    totals.client_call_edges = add_client_call_edges(&mut graph, &analyses, &modules, None)?;
+
     // M06: handler → model → table, over the same graph so the cross-stack
     // chain stays connected (ADR-0011).
     let orm = OrmAnalysis::build(&analyses);
@@ -480,6 +486,10 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
     println!(
         "Routers            {} route(s) given a composed served path",
         totals.routes_composed
+    );
+    println!(
+        "Client wrappers    {} call edge(s) into a function that issues a request",
+        totals.client_call_edges
     );
     println!("HttpCall edges     {}", totals.edges);
     println!(

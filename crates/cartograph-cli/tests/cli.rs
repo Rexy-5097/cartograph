@@ -329,7 +329,9 @@ fn match_json_exports_the_graph_it_built() {
     );
     assert_eq!(
         edges.len() as u64,
-        value["totals"]["edges"].as_u64().unwrap() + value["totals"]["orm_edges"].as_u64().unwrap(),
+        value["totals"]["edges"].as_u64().unwrap()
+            + value["totals"]["orm_edges"].as_u64().unwrap()
+            + value["totals"]["client_call_edges"].as_u64().unwrap(),
         "the graph must hold exactly the edges the run reported"
     );
     assert!(!edges.is_empty(), "this fixture produces edges");

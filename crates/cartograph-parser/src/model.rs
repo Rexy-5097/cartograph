@@ -136,6 +136,9 @@ pub struct FileAnalysis {
     /// Routers mounted inside other routers in this file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub router_inclusions: Vec<RouterInclusion>,
+    /// Module aliases this file declares, when it is a build configuration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_aliases: Vec<ModuleAlias>,
     /// Parse problems, capped per file.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -467,6 +470,14 @@ pub struct HttpCallObservation {
     pub method_hint: Option<HttpMethodHint>,
     /// The first argument, as observed.
     pub url: UrlObservation,
+    /// The function the call sits inside, when it sits inside one.
+    ///
+    /// A generated API client wraps every request in a function, and that
+    /// function is what a component imports and calls. Recording it is what
+    /// lets the graph keep the client wrapper on the path rather than
+    /// attaching a component straight to a backend handler.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enclosing: Option<String>,
     /// Where the call is.
     pub span: Span,
 }
@@ -505,6 +516,25 @@ pub enum RouteDeclarationStyle {
     ///
     /// Django's form.
     UrlConfEntry,
+}
+
+/// A module alias declared by a build configuration.
+///
+/// `vite.config.ts` writes `resolve: { alias: { openapi: "/openapi-gen" } }`,
+/// and a frontend then imports `"openapi/queries"`. Without the alias that
+/// specifier is indistinguishable from a package name, so the import cannot be
+/// followed and a component cannot be linked to the client it calls.
+///
+/// An observation of what the configuration says. Whether it resolves to a
+/// file is the resolver's question.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleAlias {
+    /// The specifier prefix being aliased, e.g. `openapi`.
+    pub alias: String,
+    /// What it stands for, exactly as written, e.g. `/openapi-gen`.
+    pub target: String,
+    /// Where the declaration is.
+    pub span: Span,
 }
 
 /// A router object created in source: `APIRouter(prefix="/pools")`.

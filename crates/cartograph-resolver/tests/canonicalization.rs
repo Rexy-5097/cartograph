@@ -67,6 +67,7 @@ fn url_conf(path: &str) -> CanonicalRoute {
 fn call(url: &str, method: Option<HttpMethodHint>) -> CanonicalRoute {
     normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "fetch".into(),
             method_hint: method,
             url: UrlObservation::Literal {
@@ -83,6 +84,7 @@ fn call(url: &str, method: Option<HttpMethodHint>) -> CanonicalRoute {
 fn call_template(parts: Vec<TemplatePart>, method: Option<HttpMethodHint>) -> CanonicalRoute {
     normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "fetch".into(),
             method_hint: method,
             url: UrlObservation::Template { parts },
@@ -623,6 +625,7 @@ fn an_unsupported_route_shares_a_shape_with_nothing() {
 fn a_dynamic_url_is_not_interpreted() {
     let route = normalize_client_call(
         &HttpCallObservation {
+            enclosing: None,
             callee: "requests.post".into(),
             method_hint: Some(HttpMethodHint::Post),
             url: UrlObservation::Dynamic {

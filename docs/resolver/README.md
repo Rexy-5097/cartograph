@@ -65,3 +65,9 @@ create_order()
 ▼
 orders — table
 ```
+
+## The remediation subsystems (M07)
+
+- [imports.md](imports.md) — a name, the module it came from, and the declaration.
+- [routers.md](routers.md) — the path a route is actually served on.
+- [client-tracing.md](client-tracing.md) — a component, through its client wrapper, to the request.

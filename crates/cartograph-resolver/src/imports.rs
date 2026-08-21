@@ -106,6 +106,9 @@ impl Resolution {
 /// large repository is already the dominant allocation.
 pub struct ModuleIndex<'a> {
     by_path: HashMap<&'a str, &'a FileAnalysis>,
+    /// Module aliases the project's build configuration declares, each with
+    /// the directory its target is relative to.
+    aliases: Vec<(String, String, String)>,
 }
 
 /// How far a re-export chain is followed.
@@ -119,9 +122,70 @@ impl<'a> ModuleIndex<'a> {
     /// Indexes an analysed project.
     #[must_use]
     pub fn build(files: &'a [FileAnalysis]) -> Self {
+        let mut aliases: Vec<(String, String, String)> = Vec::new();
+        for file in files {
+            let dir = file
+                .path
+                .rsplit_once('/')
+                .map_or(String::new(), |(d, _)| d.to_owned());
+            for alias in &file.module_aliases {
+                aliases.push((alias.alias.clone(), alias.target.clone(), dir.clone()));
+            }
+        }
+        // Nearest configuration first, then longest alias. A monorepo has one
+        // build configuration per frontend — Airflow has five — and an alias
+        // named `src` or `openapi` means something different in each. Scoping
+        // by the configuration's own directory is what makes the right one
+        // win; a global list picks whichever happened to sort first and
+        // resolves imports into a different project entirely.
+        aliases.sort_by(|a, b| {
+            b.2.len()
+                .cmp(&a.2.len())
+                .then_with(|| b.0.len().cmp(&a.0.len()))
+                .then_with(|| a.0.cmp(&b.0))
+        });
+
         Self {
             by_path: files.iter().map(|f| (f.path.as_str(), f)).collect(),
+            aliases,
         }
+    }
+
+    /// Rewrites a bare specifier through a declared build alias.
+    ///
+    /// Returns the repository-relative path the specifier stands for, before
+    /// extension resolution. A target beginning `/` is relative to the
+    /// configuration file's own directory, which is how Vite reads it.
+    fn apply_alias(&self, specifier: &str, importing_file: &str) -> Option<String> {
+        for (alias, target, dir) in &self.aliases {
+            // The configuration only governs files beneath it.
+            if !dir.is_empty() && !importing_file.starts_with(&format!("{dir}/")) {
+                continue;
+            }
+            let rest = if specifier == alias {
+                ""
+            } else if let Some(rest) = specifier.strip_prefix(&format!("{alias}/")) {
+                rest
+            } else {
+                continue;
+            };
+            let base = target.strip_prefix('/').map_or_else(
+                || target.clone(),
+                |relative| {
+                    if dir.is_empty() {
+                        relative.to_owned()
+                    } else {
+                        format!("{dir}/{relative}")
+                    }
+                },
+            );
+            return Some(if rest.is_empty() {
+                base
+            } else {
+                format!("{base}/{rest}")
+            });
+        }
+        None
     }
 
     /// The analysis for a repository-relative path.
@@ -200,6 +264,208 @@ impl<'a> ModuleIndex<'a> {
             },
             other => other,
         }
+    }
+
+    /// Resolves a `TypeScript` name used in `from` to its declaration.
+    ///
+    /// Supports the forms the corpus uses: named, default and namespace
+    /// imports, and `export { X } from "./m"` re-exports. Only **relative**
+    /// specifiers are followed. A bare specifier is either a package or a
+    /// build-tool alias, and resolving an alias means reading a bundler
+    /// configuration — a different mechanism, declared out of scope, and
+    /// reported as [`Resolution::Unresolved`] rather than guessed at.
+    #[must_use]
+    pub fn resolve_typescript(&self, from: &FileAnalysis, name: &str) -> Resolution {
+        if let Some(symbol) = declaration_in(from, name) {
+            return Resolution::Local {
+                line: symbol.span.start_line,
+            };
+        }
+        self.follow_typescript(from, name, 0)
+    }
+
+    fn follow_typescript(&self, from: &FileAnalysis, name: &str, hop: usize) -> Resolution {
+        if hop >= MAX_REEXPORT_HOPS {
+            return Resolution::Unresolved {
+                module: from.path.clone(),
+                reason: format!("re-export chain exceeded {MAX_REEXPORT_HOPS} hops"),
+            };
+        }
+
+        for import in &from.imports {
+            let exported = if import
+                .named
+                .iter()
+                .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+            {
+                import
+                    .named
+                    .iter()
+                    .find(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+                    .map_or(name, |n| n.imported.as_str())
+            } else if import.default_name.as_deref() == Some(name) {
+                "default"
+            } else if import.namespace_name.as_deref() == Some(name) {
+                // `import * as m from "./m"` binds the module, not a symbol.
+                name
+            } else {
+                continue;
+            };
+
+            // A bare specifier is a package unless the build configuration
+            // says otherwise. `openapi/queries` is only followable because
+            // vite.config.ts declares `resolve: { alias: { openapi: … } }`.
+            let specifier = if import.specifier.starts_with('.') {
+                import.specifier.clone()
+            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                aliased
+            } else {
+                return Resolution::Unresolved {
+                    module: import.specifier.clone(),
+                    reason: "is a package, and no build configuration aliases it".to_owned(),
+                };
+            };
+            let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
+                return Resolution::Unresolved {
+                    module: import.specifier.clone(),
+                    reason: "does not resolve to a file this project contains".to_owned(),
+                };
+            };
+            let Some(module) = self.file(&target) else {
+                return Resolution::Unresolved {
+                    module: import.specifier.clone(),
+                    reason: "resolved to a file that was not analysed".to_owned(),
+                };
+            };
+            if let Some(symbol) = declaration_in(module, exported) {
+                return Resolution::Declared {
+                    file: module.path.clone(),
+                    line: symbol.span.start_line,
+                    route: format!("`import {{ {exported} }} from \"{}\"`", import.specifier),
+                };
+            }
+            let hop_taken = format!("`from \"{}\"`", import.specifier);
+            return match self.follow_typescript(module, exported, hop + 1) {
+                Resolution::Local { line } => Resolution::Declared {
+                    file: module.path.clone(),
+                    line,
+                    route: hop_taken,
+                },
+                Resolution::Declared { file, line, route } => Resolution::Declared {
+                    file,
+                    line,
+                    route: format!("{hop_taken} then {route}"),
+                },
+                other => other,
+            };
+        }
+
+        // No named binding. A barrel file forwards everything it re-exports,
+        // so each wildcard is tried and the answer must be unique: two barrels
+        // exporting the same name says nothing about which was meant.
+        self.follow_typescript_wildcards(from, name, hop)
+    }
+
+    fn follow_typescript_wildcards(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        hop: usize,
+    ) -> Resolution {
+        let mut found: Vec<Resolution> = Vec::new();
+        for import in &from.imports {
+            if import.namespace_name.as_deref() != Some("*") {
+                continue;
+            }
+            let specifier = if import.specifier.starts_with('.') {
+                import.specifier.clone()
+            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                aliased
+            } else {
+                continue;
+            };
+            let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
+                continue;
+            };
+            let Some(module) = self.file(&target) else {
+                continue;
+            };
+            if let Some(symbol) = declaration_in(module, name) {
+                found.push(Resolution::Declared {
+                    file: module.path.clone(),
+                    line: symbol.span.start_line,
+                    route: format!("`export * from \"{}\"`", import.specifier),
+                });
+                continue;
+            }
+            if hop + 1 < MAX_REEXPORT_HOPS {
+                match self.follow_typescript(module, name, hop + 1) {
+                    r @ Resolution::Declared { .. } => found.push(r),
+                    Resolution::Local { line } => found.push(Resolution::Declared {
+                        file: module.path.clone(),
+                        line,
+                        route: format!("`export * from \"{}\"`", import.specifier),
+                    }),
+                    _ => {}
+                }
+            }
+        }
+        match found.len() {
+            0 => Resolution::NotBound,
+            1 => found.remove(0),
+            _ => {
+                let mut candidates: Vec<String> = found
+                    .iter()
+                    .filter_map(|r| r.declared_in().map(ToOwned::to_owned))
+                    .collect();
+                candidates.sort();
+                candidates.dedup();
+                if candidates.len() == 1 {
+                    found.remove(0)
+                } else {
+                    Resolution::Ambiguous { candidates }
+                }
+            }
+        }
+    }
+
+    /// Resolves a relative `TypeScript` specifier to an analysed file.
+    ///
+    /// Extension and index resolution only — no `node_modules` walk, no
+    /// `tsconfig` path mapping, no conditional exports.
+    #[must_use]
+    pub fn resolve_relative_module(&self, specifier: &str, from: &str) -> Option<String> {
+        // An aliased specifier is already repository-relative; only a `.`-led
+        // one is relative to the importing file.
+        let dir = if specifier.starts_with('.') {
+            from.rsplit_once('/').map_or("", |(d, _)| d)
+        } else {
+            ""
+        };
+        let mut segments: Vec<&str> = if dir.is_empty() {
+            Vec::new()
+        } else {
+            dir.split('/').collect()
+        };
+        for part in specifier.split('/') {
+            match part {
+                "." | "" => {}
+                ".." => {
+                    segments.pop()?;
+                }
+                other => segments.push(other),
+            }
+        }
+        let base = segments.join("/");
+        [
+            format!("{base}.ts"),
+            format!("{base}.tsx"),
+            format!("{base}/index.ts"),
+            format!("{base}/index.tsx"),
+            base.clone(),
+        ]
+        .into_iter()
+        .find(|candidate| self.by_path.contains_key(candidate.as_str()))
     }
 
     /// Resolves a Python module specifier to an analysed file.

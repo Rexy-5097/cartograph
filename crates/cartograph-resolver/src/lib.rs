@@ -53,6 +53,7 @@
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
 
 pub mod canonical;
+pub mod client_trace;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
@@ -67,6 +68,7 @@ pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,
 };
+pub use client_trace::{ClientFunction, add_client_call_edges, client_functions};
 pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,

@@ -10,6 +10,46 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M07 remediation, accuracy-first cross-stack resolution
+
+**Three complete chains now run from a React component to a database table**,
+on Airflow, each verified line by line against source. `ParseDagButton.tsx:30`
+reaches `dag_priority_parsing_request`; `AddConnectionButton.tsx:29` reaches
+`connection`; `AddPoolButton.tsx:28` reaches `slot_pool`. Every edge carries
+confidence, provenance, evidence and a location, and the path traverses through
+shared node ids rather than matching names. Report:
+[docs/benchmarks/m07-remediation.md](docs/benchmarks/m07-remediation.md).
+
+- **Import resolution** — a name is walked through its file's own imports to a
+  declaration, for Python and TypeScript. Unresolvable modules, monorepo path
+  collisions, re-export cycles and two barrels exporting one name all refuse
+  with a reason. [docs/resolver/imports.md](docs/resolver/imports.md).
+- **Configuration-object requests** — `__request(OpenAPI, {method, url})` and
+  `client.get({url})` are read. `url` and `endpoint` only, never `path`, which
+  is how every router in the corpus describes a screen.
+- **Router prefix composition** — `@pools_router.post("")` under `/pools` under
+  `/api/v2` serves `/api/v2/pools`. Any constructor whose name ends in `Router`
+  counts. Composition can only make a path more complete: an unknown prefix
+  never becomes an empty one. [docs/resolver/routers.md](docs/resolver/routers.md).
+- **The client wrapper is a node** — an `HttpCall` edge is sourced at the
+  function issuing the request, and calls reaching it become `Call` edges
+  resolved through imports, never matched by name
+  ([ADR-0012](docs/adr/ADR-0012-the-client-wrapper-is-a-node.md)).
+
+### Fixed — 379 false ORM accesses, including five of M07's six chains
+
+Resolving model names without consulting imports attributed any symbol sharing
+a model's name to that model. Onyx's Airtable connector imports `Document` from
+`connectors/models.py`, a Pydantic `BaseModel`, while the SQLAlchemy `Document`
+lives in `db/models.py`. **Five of the six chains M07 reported were false**,
+all running through an Airflow response datamodel named `Job` rather than
+`airflow.jobs.job.Job`. The honest M07 baseline is one chain, not six — a
+correction that makes its negative finding stronger.
+
+Route and `Queries` metrics are unchanged at 1.000 precision and recall, all
+290 `Queries` edges remain source-confirmed, and no `must_not_produce`
+assertion is violated.
+
 ### Added — M07, full-stack verification on real repositories
 
 **A negative result, and it is the point.** Across seven pinned real

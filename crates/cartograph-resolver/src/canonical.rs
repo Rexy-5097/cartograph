@@ -242,6 +242,13 @@ pub struct RouteProvenance {
     /// The handler symbol, for route declarations that name one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handler: Option<String>,
+    /// For a client call, the function the call site sits inside.
+    ///
+    /// Keeps a generated client's wrapper function on the path: the graph can
+    /// then say `postPool` issues the request, rather than attributing it to
+    /// the whole file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enclosing: Option<String>,
 }
 
 /// Which side of the eventual join an observation came from.
