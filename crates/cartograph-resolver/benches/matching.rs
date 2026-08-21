@@ -27,6 +27,7 @@ fn span() -> Span {
 
 fn route(path: &str, method: HttpMethodHint, handler: &str) -> RouteObservation {
     RouteObservation {
+        receiver: None,
         style: RouteDeclarationStyle::VerbDecorator,
         methods: vec![method],
         path: UrlObservation::Literal {

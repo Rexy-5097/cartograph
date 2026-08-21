@@ -27,6 +27,7 @@ fn backend(routes: &[(&str, &[HttpMethodHint], &str)]) -> RouteIndex {
     RouteIndex::build(routes.iter().map(|(path, methods, handler)| {
         normalize_route_declaration(
             &RouteObservation {
+                receiver: None,
                 style: RouteDeclarationStyle::VerbDecorator,
                 methods: methods.to_vec(),
                 path: UrlObservation::Literal {
@@ -346,6 +347,7 @@ fn identical_endpoints_in_unrelated_services_are_ambiguous_not_joined() {
         .map(|(file, handler)| {
             normalize_route_declaration(
                 &RouteObservation {
+                    receiver: None,
                     style: RouteDeclarationStyle::VerbDecorator,
                     methods: vec![HttpMethodHint::Post],
                     path: UrlObservation::Literal {
@@ -447,6 +449,7 @@ fn a_client_path_that_could_not_be_canonicalised_is_refused() {
 fn an_unsupported_route_is_never_indexed() {
     let index = RouteIndex::build([normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::UrlConfEntry,
             methods: Vec::new(),
             path: UrlObservation::Literal {
@@ -629,6 +632,7 @@ fn indexing_does_not_change_results_at_scale() {
     let index = RouteIndex::build(routes.iter().map(|(p, m, h)| {
         normalize_route_declaration(
             &RouteObservation {
+                receiver: None,
                 style: RouteDeclarationStyle::VerbDecorator,
                 methods: m.clone(),
                 path: UrlObservation::Literal { value: p.clone() },

@@ -18,9 +18,10 @@ use cartograph_core::{EdgeKind, NodeKind, Provenance};
 use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
-    MatchResult, MatchStatus, OrmAnalysis, RouteIndex, add_edge_for_match, add_orm_edges,
-    collect_exported_constants, match_client, normalize_client_call, normalize_route_declaration,
-    resolve_url, scope_for_file, with_resolved_url,
+    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
+    add_edge_for_match, add_orm_edges, collect_exported_constants, match_client,
+    normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
+    with_composed_prefix, with_resolved_url,
 };
 use serde::Serialize;
 
@@ -43,6 +44,8 @@ struct Totals {
     orm_tables: usize,
     orm_edges: usize,
     orm_ambiguous: usize,
+    /// Routes whose served path was composed from enclosing router prefixes.
+    routes_composed: usize,
     /// Dynamic URLs the evaluator fully determined (M05).
     dynamic_resolved: usize,
     /// Dynamic URLs partly determined, with the gaps kept explicit.
@@ -180,14 +183,31 @@ fn analyse(path: &Path) -> Result<Outcome> {
         );
     }
     let exported = collect_exported_constants(&analyses);
+    // A route's served path is not the path its decorator states: the router
+    // it is registered on may carry a prefix, and that router may itself be
+    // included in another. Composing them is what lets a frontend asking for
+    // `/api/v2/pools` meet a decorator that says `""`.
+    let modules = ModuleIndex::build(&analyses);
+    let routers = RouterIndex::build(&analyses, &modules);
 
     for analysis in &analyses {
         totals.files += 1;
         let scope = scope_for_file(analysis, &exported);
 
         for route in &analysis.routes {
+            // An unresolved or ambiguous prefix leaves the route exactly as
+            // declared, so composition can only ever make a path more
+            // complete — never replace a known path with a guessed one.
+            let composed = route
+                .receiver
+                .as_ref()
+                .and_then(|r| routers.prefix_for(&analysis.path, r))
+                .and_then(|resolution| with_composed_prefix(route, resolution));
+            if composed.is_some() {
+                totals.routes_composed += 1;
+            }
             backend.push(normalize_route_declaration(
-                route,
+                composed.as_ref().unwrap_or(route),
                 &analysis.path,
                 analysis.language,
             ));
@@ -456,6 +476,10 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
     println!(
         "Dynamic URLs       {} fully resolved, {} partially",
         totals.dynamic_resolved, totals.dynamic_partial
+    );
+    println!(
+        "Routers            {} route(s) given a composed served path",
+        totals.routes_composed
     );
     println!("HttpCall edges     {}", totals.edges);
     println!(

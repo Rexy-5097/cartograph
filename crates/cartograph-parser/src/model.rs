@@ -130,6 +130,12 @@ pub struct FileAnalysis {
     /// [`RouteObservation`]. Empty for languages/files that declare none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub routes: Vec<RouteObservation>,
+    /// Router objects created in this file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub routers: Vec<RouterDeclaration>,
+    /// Routers mounted inside other routers in this file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub router_inclusions: Vec<RouterInclusion>,
     /// Parse problems, capped per file.
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -501,6 +507,55 @@ pub enum RouteDeclarationStyle {
     UrlConfEntry,
 }
 
+/// A router object created in source: `APIRouter(prefix="/pools")`.
+///
+/// An observation, not a mounted router. Whether it is ever included
+/// anywhere, and under what path, is a separate fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouterDeclaration {
+    /// The variable the router was bound to.
+    pub name: String,
+    /// The `prefix=` argument, when it is a string literal.
+    ///
+    /// `None` covers both "no prefix" and "a prefix this analysis cannot
+    /// read"; [`RouterDeclaration::prefix_is_literal`] separates them, because
+    /// a dynamic prefix must refuse rather than compose as empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Whether a `prefix=` argument was present but not a literal.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub prefix_unresolved: bool,
+    /// The constructor as written — `APIRouter`, `AirflowRouter`.
+    pub constructor: String,
+    /// Where the declaration is.
+    pub span: Span,
+}
+
+impl RouterDeclaration {
+    /// Whether the prefix is known exactly.
+    #[must_use]
+    pub fn prefix_is_literal(&self) -> bool {
+        !self.prefix_unresolved
+    }
+}
+
+/// One router being mounted inside another: `parent.include_router(child)`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouterInclusion {
+    /// The router being mounted into.
+    pub parent: String,
+    /// The router being mounted.
+    pub child: String,
+    /// A `prefix=` stated at the inclusion site, when it is a literal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Whether a `prefix=` was present at the inclusion site but not literal.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub prefix_unresolved: bool,
+    /// Where the inclusion is.
+    pub span: Span,
+}
+
 /// A route declaration found in source.
 ///
 /// # This is an observation, not an endpoint
@@ -535,6 +590,14 @@ pub struct RouteObservation {
     /// The declared path, exactly as written — `{id}`, `<int:id>` and regex
     /// syntax are all preserved verbatim for M03 to canonicalise.
     pub path: UrlObservation,
+    /// The object the decorator was bound to — `app`, `router`, `pools_router`.
+    ///
+    /// Recorded because a route's served path is not the path its decorator
+    /// states: the router it is registered on may carry a prefix, and that
+    /// router may itself be included in another. Composing them needs to know
+    /// which router this is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receiver: Option<String>,
     /// The handler symbol, when it is syntactically available.
     ///
     /// The decorated function's name for FastAPI/Flask; the referenced callable

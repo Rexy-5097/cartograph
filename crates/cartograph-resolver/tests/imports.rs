@@ -38,7 +38,10 @@ fn an_absolute_import_resolves_to_its_declaration() {
     let r = resolve(
         &[
             ("app/models.py", MODELS),
-            ("app/views.py", "from app.models import Order\n\ndef create():\n    return Order()\n"),
+            (
+                "app/views.py",
+                "from app.models import Order\n\ndef create():\n    return Order()\n",
+            ),
         ],
         "app/views.py",
         "Order",
@@ -55,7 +58,10 @@ fn a_relative_import_resolves_within_the_package() {
     let r = resolve(
         &[
             ("app/models.py", MODELS),
-            ("app/views.py", "from .models import Order\n\ndef create():\n    return Order()\n"),
+            (
+                "app/views.py",
+                "from .models import Order\n\ndef create():\n    return Order()\n",
+            ),
         ],
         "app/views.py",
         "Order",
@@ -68,7 +74,10 @@ fn a_parent_relative_import_climbs_one_package() {
     let r = resolve(
         &[
             ("app/models.py", MODELS),
-            ("app/api/views.py", "from ..models import Order\n\ndef create():\n    return Order()\n"),
+            (
+                "app/api/views.py",
+                "from ..models import Order\n\ndef create():\n    return Order()\n",
+            ),
         ],
         "app/api/views.py",
         "Order",
@@ -94,7 +103,10 @@ fn an_alias_resolves_to_the_exported_name() {
     let r = resolve(
         &[
             ("app/models.py", MODELS),
-            ("app/views.py", "from app.models import Order as OrderModel\n"),
+            (
+                "app/views.py",
+                "from app.models import Order as OrderModel\n",
+            ),
         ],
         "app/views.py",
         "OrderModel",
@@ -112,14 +124,24 @@ fn a_re_export_is_followed_to_the_real_declaration() {
     let r = resolve(
         &[
             ("backend/onyx/db/models.py", MODELS),
-            ("backend/onyx/db/search_settings.py", "from onyx.db.models import Order\n"),
-            ("backend/onyx/service.py", "from onyx.db.search_settings import Order\n"),
+            (
+                "backend/onyx/db/search_settings.py",
+                "from onyx.db.models import Order\n",
+            ),
+            (
+                "backend/onyx/service.py",
+                "from onyx.db.search_settings import Order\n",
+            ),
         ],
         "backend/onyx/service.py",
         "Order",
     );
     assert_eq!(r.declared_in(), Some("backend/onyx/db/models.py"), "{r:?}");
-    assert!(r.explain().contains("onyx.db.search_settings"), "{}", r.explain());
+    assert!(
+        r.explain().contains("onyx.db.search_settings"),
+        "{}",
+        r.explain()
+    );
 }
 
 #[test]
@@ -128,12 +150,19 @@ fn a_project_rooted_under_a_source_directory_still_resolves() {
     let r = resolve(
         &[
             ("airflow-core/src/airflow/models.py", MODELS),
-            ("airflow-core/src/airflow/api/routes.py", "from airflow.models import Order\n"),
+            (
+                "airflow-core/src/airflow/api/routes.py",
+                "from airflow.models import Order\n",
+            ),
         ],
         "airflow-core/src/airflow/api/routes.py",
         "Order",
     );
-    assert_eq!(r.declared_in(), Some("airflow-core/src/airflow/models.py"), "{r:?}");
+    assert_eq!(
+        r.declared_in(),
+        Some("airflow-core/src/airflow/models.py"),
+        "{r:?}"
+    );
 }
 
 // ── Negative ────────────────────────────────────────────────────────
@@ -147,7 +176,10 @@ fn a_third_party_module_is_unresolved_not_guessed() {
     let r = resolve(
         &[
             ("app/models.py", MODELS),
-            ("docs/diagram.py", "from diagrams.onprem.client import Order\n"),
+            (
+                "docs/diagram.py",
+                "from diagrams.onprem.client import Order\n",
+            ),
         ],
         "docs/diagram.py",
         "Order",
@@ -178,7 +210,10 @@ fn a_name_nothing_binds_is_reported_as_unbound() {
     // A star import, a conditional import or a builtin lands here. It is not
     // a refusal on its own — the caller decides.
     let r = resolve(
-        &[("app/views.py", "from app.models import *\n\ndef f():\n    return Order()\n")],
+        &[(
+            "app/views.py",
+            "from app.models import *\n\ndef f():\n    return Order()\n",
+        )],
         "app/views.py",
         "Order",
     );
@@ -216,7 +251,10 @@ fn a_dotted_path_matching_two_files_is_refused() {
         "Order",
     );
     assert!(matches!(r, Resolution::Unresolved { .. }), "{r:?}");
-    assert!(!r.is_definite(), "an unanswerable import must never be definite");
+    assert!(
+        !r.is_definite(),
+        "an unanswerable import must never be definite"
+    );
 }
 
 #[test]
@@ -246,7 +284,10 @@ fn a_re_export_cycle_terminates() {
         "app/views.py",
         "Order",
     );
-    assert!(!r.is_definite(), "a cycle must not produce a declaration: {r:?}");
+    assert!(
+        !r.is_definite(),
+        "a cycle must not produce a declaration: {r:?}"
+    );
 }
 
 // ── Evidence ────────────────────────────────────────────────────────
@@ -256,7 +297,10 @@ fn every_resolution_explains_itself_without_quoting_source() {
     let files = [
         ("app/models.py", MODELS),
         ("app/views.py", "from app.models import Order\n"),
-        ("docs/diagram.py", "from diagrams.onprem.client import Order\n"),
+        (
+            "docs/diagram.py",
+            "from diagrams.onprem.client import Order\n",
+        ),
     ];
     for (from, name) in [("app/views.py", "Order"), ("docs/diagram.py", "Order")] {
         let r = resolve(&files, from, name);

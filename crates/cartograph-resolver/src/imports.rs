@@ -217,9 +217,7 @@ impl<'a> ModuleIndex<'a> {
             let mut segments: Vec<&str> = from.split('/').collect();
             segments.pop(); // the file itself
             for _ in 0..dots.saturating_sub(1) {
-                if segments.pop().is_none() {
-                    return None;
-                }
+                segments.pop()?;
             }
             let mut base = segments.join("/");
             if !rest.is_empty() {

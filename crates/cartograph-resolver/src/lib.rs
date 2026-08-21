@@ -60,6 +60,7 @@ pub mod imports;
 pub mod matching;
 pub mod normalize;
 pub mod orm;
+pub mod routers;
 pub mod symbolic;
 
 pub use canonical::{
@@ -81,4 +82,5 @@ pub use normalize::{normalize_client_call, normalize_method, normalize_route_dec
 pub use orm::{
     AccessKind, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel, TableName, add_orm_edges,
 };
+pub use routers::{PrefixResolution, RouterIndex, with_composed_prefix};
 pub use symbolic::SymbolicValue;

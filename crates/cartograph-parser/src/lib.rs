@@ -183,6 +183,8 @@ fn failed_analysis(
         strings: Vec::new(),
         http_calls: Vec::new(),
         routes: Vec::new(),
+        routers: Vec::new(),
+        router_inclusions: Vec::new(),
         diagnostics: vec![Diagnostic {
             severity: Severity::Error,
             kind,

@@ -699,7 +699,7 @@ class Ambiguous(Model):
 /// Superset, `superset-frontend/packages/superset-core/src/theme/Theme.tsx:101`,
 /// and Zulip, `web/src/desktop_notifications.ts:41`.
 ///
-/// A Python ORM model cannot be constructed from TypeScript. Before the
+/// A Python ORM model cannot be constructed from `TypeScript`. Before the
 /// language filter, `new Theme({...})` in a .tsx file produced an `OrmAccess`
 /// edge to Superset's Python `Theme` model — 33 such edges across the corpus.
 #[test]
@@ -879,7 +879,7 @@ def create():
 /// Onyx, `backend/onyx/connectors/airtable/airtable_connector.py:483`, and
 /// Airflow, `providers/edge3/.../worker_api/routes/ui.py:135`.
 ///
-/// A Pydantic model and an ORM model sharing a name is the commonest shape of
+/// A `Pydantic` model and an ORM model sharing a name is the commonest shape of
 /// this defect. Onyx declares `Document(Base)` in db/models.py and
 /// `Document(DocumentBase)` — a Pydantic model — in connectors/models.py; the
 /// connector imports the second. Checking only that the module belongs to the
@@ -962,5 +962,8 @@ def create_group(name):
         ),
     ]);
     assert_eq!(analysis.accesses.len(), 1, "{:?}", analysis.accesses);
-    assert_eq!(analysis.accesses[0].handler.as_deref(), Some("create_group"));
+    assert_eq!(
+        analysis.accesses[0].handler.as_deref(),
+        Some("create_group")
+    );
 }

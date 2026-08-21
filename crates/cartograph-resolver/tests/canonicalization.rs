@@ -31,6 +31,7 @@ fn span() -> Span {
 fn declare(path: &str, methods: &[HttpMethodHint]) -> CanonicalRoute {
     normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: methods.to_vec(),
             path: UrlObservation::Literal {
@@ -48,6 +49,7 @@ fn declare(path: &str, methods: &[HttpMethodHint]) -> CanonicalRoute {
 fn url_conf(path: &str) -> CanonicalRoute {
     normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::UrlConfEntry,
             methods: Vec::new(),
             path: UrlObservation::Literal {
@@ -775,6 +777,7 @@ fn a_shared_shape_is_not_a_claim_that_two_routes_are_the_same_endpoint() {
     // same endpoint requires evidence M03 does not have and does not seek.
     let billing = normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: vec![HttpMethodHint::Get],
             path: UrlObservation::Literal {
@@ -788,6 +791,7 @@ fn a_shared_shape_is_not_a_claim_that_two_routes_are_the_same_endpoint() {
     );
     let shipping = normalize_route_declaration(
         &RouteObservation {
+            receiver: None,
             style: RouteDeclarationStyle::VerbDecorator,
             methods: vec![HttpMethodHint::Get],
             path: UrlObservation::Literal {
