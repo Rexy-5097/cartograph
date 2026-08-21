@@ -25,6 +25,8 @@ use std::collections::{HashMap, HashSet};
 
 use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance, SourceLocation};
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
+
+use crate::imports::{ModuleIndex, Resolution};
 use cartograph_parser::model::{
     Callee, FileAnalysis, SourceLanguage, Span, StringFact, Symbol, SymbolKind,
 };
@@ -202,8 +204,9 @@ impl OrmAnalysis {
             .iter()
             .filter(|f| f.language == SourceLanguage::Python)
             .collect();
-        // Which module specifiers name a file the project actually contains.
-        let project: HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        // Names at an access site are resolved through the project's imports,
+        // not matched against a global map of every model name.
+        let index = ModuleIndex::build(files);
 
         for file in &python {
             for model in discover_models(file) {
@@ -223,7 +226,7 @@ impl OrmAnalysis {
         for file in &python {
             analysis
                 .accesses
-                .extend(discover_accesses(file, &analysis.models, &project));
+                .extend(discover_accesses(file, &analysis.models, &index));
         }
         analysis
     }
@@ -413,10 +416,10 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
 /// Only calls whose receiver is a *known model name* are recorded, so an
 /// unrelated `Plain.objects.get()` produces nothing.
 #[must_use]
-pub fn discover_accesses<S: std::hash::BuildHasher, T: std::hash::BuildHasher>(
+pub fn discover_accesses<S: std::hash::BuildHasher>(
     file: &FileAnalysis,
     models: &HashMap<String, OrmModel, S>,
-    project: &HashSet<&str, T>,
+    index: &ModuleIndex<'_>,
 ) -> Vec<OrmAccessSite> {
     let mut sites = Vec::new();
 
@@ -429,12 +432,11 @@ pub fn discover_accesses<S: std::hash::BuildHasher, T: std::hash::BuildHasher>(
         if shadows_model(file, &model, call.span) {
             continue;
         }
-        // The name has to be *this* project's model, not a third party's
-        // symbol that happens to share its name. Airflow's architecture
-        // diagrams call `User("DAG Author")` having imported User from the
-        // `diagrams` package; matching on the name alone attributed 218 of
-        // those to the Flask-AppBuilder User model.
-        if !names_the_project_model(file, &model, models, project) {
+        // The name has to resolve to *this* model's declaration. Airflow's
+        // architecture diagrams call `User("DAG Author")` having imported User
+        // from the `diagrams` package; matching on the name alone attributed
+        // 218 of those to the Flask-AppBuilder User model.
+        if !resolves_to_the_model(file, &model, models, index) {
             continue;
         }
         sites.push(OrmAccessSite {
@@ -484,61 +486,36 @@ fn classify_access<S: std::hash::BuildHasher>(
     }
 }
 
-/// Does this file's binding of `model` actually refer to the project's model?
+/// Does the name at this access site resolve to this model's declaration?
 ///
-/// Answered from the file's own imports. A name imported from a module the
-/// project does not contain belongs to a third-party package, whatever it is
-/// called. A name with no import statement binding it is left alone: star
-/// imports, conditional imports and same-package references are all ordinary,
-/// and refusing them would trade these false positives for false negatives.
-fn names_the_project_model<S: std::hash::BuildHasher, T: std::hash::BuildHasher>(
+/// Answered by [`ModuleIndex::resolve_python`], which walks the file's own
+/// imports to a declaration rather than trusting that a matching name is a
+/// matching symbol.
+///
+/// The one permissive case is [`Resolution::NotBound`]: a star import, a
+/// conditional import or a name bound by machinery this analysis does not
+/// model. Refusing those would trade M07's false positives for false
+/// negatives, so they are allowed and the reason is recorded here.
+fn resolves_to_the_model<S: std::hash::BuildHasher>(
     file: &FileAnalysis,
     model: &str,
     models: &HashMap<String, OrmModel, S>,
-    project: &HashSet<&str, T>,
+    index: &ModuleIndex<'_>,
 ) -> bool {
     let Some(declared) = models.get(model) else {
         return false;
     };
-    if declared.file == file.path {
-        return true;
+    match index.resolve_python(file, model) {
+        // Declared here. Only this model if this is the file that declares it;
+        // otherwise the local declaration is a different symbol of the same
+        // name, and attributing the access would be exactly the M07 defect.
+        Resolution::Local { .. } => declared.file == file.path,
+        Resolution::Declared { file: at, .. } => at == declared.file,
+        // An unresolvable module, or several equally good ones. Neither
+        // answers which symbol was meant.
+        Resolution::Unresolved { .. } | Resolution::Ambiguous { .. } => false,
+        Resolution::NotBound => true,
     }
-    for import in &file.imports {
-        let binds = import
-            .named
-            .iter()
-            .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == model);
-        if binds {
-            return module_in_project(&import.specifier, project);
-        }
-    }
-    true
-}
-
-/// Does a Python module specifier name a file inside the analysed project?
-///
-/// Purely a path question, resolved against the files that were analysed. A
-/// relative specifier is project-local by definition. Matching is anchored to
-/// a path separator so `ics.models` cannot be satisfied by `analytics/models.py`.
-fn module_in_project<T: std::hash::BuildHasher>(
-    specifier: &str,
-    project: &HashSet<&str, T>,
-) -> bool {
-    let trimmed = specifier.trim_start_matches('.');
-    if trimmed.len() < specifier.len() || trimmed.is_empty() {
-        return true; // `from .models import X` — inside the package by construction
-    }
-    let base = trimmed.replace('.', "/");
-    let module = format!("{base}.py");
-    let package = format!("{base}/__init__.py");
-    project.iter().any(|path| {
-        for candidate in [&module, &package] {
-            if *path == candidate.as_str() || path.ends_with(&format!("/{candidate}")) {
-                return true;
-            }
-        }
-        false
-    })
 }
 
 /// Is a model name rebound as a local before this position?

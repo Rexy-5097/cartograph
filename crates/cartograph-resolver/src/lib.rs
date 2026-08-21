@@ -56,6 +56,7 @@ pub mod canonical;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
+pub mod imports;
 pub mod matching;
 pub mod normalize;
 pub mod orm;
@@ -71,6 +72,7 @@ pub use dynamic::{
 };
 pub use edge::add_edge_for_match;
 pub use evaluator::{Scope, evaluate_expression, evaluate_string_fact};
+pub use imports::{ModuleIndex, Resolution};
 pub use matching::{
     Candidate, MatchReason, MatchResult, MatchStatus, MethodCompatibility, PathCompatibility,
     RouteIndex, UnsupportedReason, match_client, priors,
