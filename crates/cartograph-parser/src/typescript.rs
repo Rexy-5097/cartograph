@@ -181,9 +181,23 @@ struct Walker<'a> {
 
 /// Is this argument a handler rather than a request option?
 ///
-/// A handler is a function written in place, or a reference to one. A request's
-/// trailing arguments are options — an object, a string, a number — never a
-/// bare reference.
+/// A handler is a function written in place, a reference to one, or a call
+/// that returns one. A request's trailing arguments are options — an object,
+/// a string, a number — never any of those.
+///
+/// # Why a call counts
+///
+/// The M07 acceptance audit found `PostHog`'s Node service registering
+/// `app.get('/_health', buildGetHealth(services))`, which was matched to a
+/// Python health endpoint in a different service. A factory that returns a
+/// handler is still passing a handler; how it was produced is not the
+/// question. This is the third shape of the same family, after the inline
+/// function and the named reference.
+///
+/// This predicate never decides anything on its own. It is consulted only
+/// where the extractor has already established that the callee is a verb-named
+/// member of a receiver that is **not** a known HTTP client, which is what
+/// keeps `http.get(url, makeCallback())` a request.
 fn is_handler_argument(node: &Node<'_>) -> bool {
     matches!(
         node.kind(),
@@ -193,6 +207,7 @@ fn is_handler_argument(node: &Node<'_>) -> bool {
             | "generator_function"
             | "identifier"
             | "member_expression"
+            | "call_expression"
     )
 }
 
@@ -696,29 +711,23 @@ impl Walker<'_> {
                 };
                 let known_client =
                     object.len() == 1 && HTTP_CLIENT_OBJECTS.contains(&object[0].as_str());
-                // `app.get("/_health", (c) => ...)` is Express and Hono
-                // declaring a route, not anything calling one. It is
-                // syntactically identical to a client call, and at M07 three
-                // such declarations in PostHog's Node services were matched to
-                // a Python health endpoint in an unrelated service.
-                //
-                // The handler argument is what separates them — but only for
-                // an unknown receiver. Node's own `http.get(url, callback)` is
-                // a real request that also passes a function, so a receiver
-                // that is a known HTTP client keeps its meaning.
-                // Express and Hono register a route by passing handlers:
+                // Express and Hono register a route by passing handlers,
+                // and the syntax is identical to a client call:
                 //
                 //     app.get('/_health', (c) => c.json({ok: true}))
                 //     app.get('/_metrics', getMetrics)
+                //     app.get('/_health', buildGetHealth(services))
                 //     app.get('/x', requireAuth, handleX)
                 //
-                // Every argument after the path is a handler — written inline
-                // or named — and none of them is a request option. A request,
-                // by contrast, passes options: an object, or nothing.
+                // Every argument after the path is a handler; none is a
+                // request option. A request passes options — an object, a
+                // string, a number — or nothing at all.
                 //
-                // The rule applies only to a receiver that is not a known HTTP
-                // client, because Node's own `http.get(url, callback)` passes a
-                // function and is a real request.
+                // The rule applies only to a receiver that is *not* a known
+                // HTTP client, because Node's own `http.get(url, callback)`
+                // passes a function and is a real request. That receiver
+                // check, not the argument shape alone, is what keeps this
+                // contextual.
                 let all_handlers =
                     arg_nodes.len() > 1 && arg_nodes.iter().skip(1).all(is_handler_argument);
                 if !known_client && all_handlers {
