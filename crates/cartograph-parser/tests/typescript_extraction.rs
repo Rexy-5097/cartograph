@@ -585,30 +585,47 @@ fetch('/api/items', { method: 'PUT' });
     assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
 }
 
+/// `PostHog`, `nodejs/src/common/api/router.ts:45`.
+///
+/// The M07 acceptance audit found one false positive in the whole corpus:
+/// `app.get('/_metrics', getMetrics)`, an Express registration with a *named*
+/// handler, matched to a Django view. A registration passes handlers —
+/// written inline or referenced by name — and never request options.
 #[test]
-fn a_route_registered_with_a_named_handler_is_still_indistinguishable() {
-    // The boundary of the rule above, asserted so it stays visible.
-    //
-    // `router.get("/items", handleItems)` and `client.get("/items", config)`
-    // are the same syntax; only resolving the identifier separates them, and
-    // no milestone has claimed interprocedural resolution. This is recorded
-    // as an observation and may still become an edge, so it is a known false
-    // positive rather than a solved case.
+fn a_route_registered_with_a_named_handler_is_not_a_request() {
     let mut analyzer = Analyzer::new().expect("grammars load");
     let analysis = analyzer
         .analyze_source(
             "services/proxy/src/routes.ts",
             r"
+app.get('/_metrics', getMetrics);
 router.get('/items', handleItems);
+app.get('/guarded', requireAuth, handleGuarded);
 ",
         )
         .expect("fixture parses");
-    assert_eq!(
-        analysis.http_calls.len(),
-        1,
-        "if this becomes 0, the named-handler case was solved and the \
-         limitation note in docs/benchmarks/m07-report.md should be removed"
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a named-handler registration became a request: {:?}",
+        analysis.http_calls
     );
+}
+
+#[test]
+fn a_request_passing_options_by_reference_is_unaffected_for_a_known_client() {
+    // The boundary. A known HTTP client keeps its meaning whatever it is
+    // passed, because `http.get(url, callback)` is a real Node request.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            r"
+http.get('/api/orders', onResponse);
+client.post('/api/orders', payload);
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
 }
 
 // ── M07 remediation: requests described by a configuration object ────
