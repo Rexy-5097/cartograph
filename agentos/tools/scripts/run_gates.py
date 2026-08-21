@@ -9,6 +9,8 @@ Definitions: agentos/gates/. This script is Cartograph-owned (not upstream
 AgentOS); it lives beside the framework tooling for discoverability.
 """
 
+import hashlib
+import json
 import os
 import re
 import subprocess
@@ -219,7 +221,7 @@ def qg007():
     return problems
 
 
-@gate("QG-008", "Milestone acceptance (M06)")
+@gate("QG-008", "Milestone acceptance (M07)")
 def qg008():
     problems = []
     resolver_src = os.path.join(ROOT, "crates/cartograph-resolver/src")
@@ -238,13 +240,23 @@ def qg008():
         "crates/cartograph-resolver/tests/orm.rs",
         "crates/cartograph-resolver/tests/full_stack.rs",
         "docs/resolver/orm.md",
+        # M07: the validation milestone's own artefacts. A benchmark whose
+        # corpus, scope or results are missing is not a benchmark.
+        "benchmarks/corpus.json",
+        "benchmarks/supported-subset.json",
+        "benchmarks/run_benchmark.py",
+        "benchmarks/evaluate.py",
+        "benchmarks/results/m07-pass1-evaluation.json",
+        "benchmarks/results/m07-pass2-evaluation.json",
+        "docs/benchmarks/m07-report.md",
     ):
         if not os.path.exists(os.path.join(ROOT, required)):
-            problems.append(f"M04 deliverable missing: {required}")
+            problems.append(f"milestone deliverable missing: {required}")
 
-    # M07+ capability must be absent. These names would each mean a later
+    # M08+ capability must be absent. These names would each mean a later
     # milestone had started: Git co-change, incremental invalidation, blast
-    # radius, structural diff, MCP.
+    # radius, structural diff, MCP. M07 adds no product capability at all —
+    # it measures the engine M06 accepted.
     forbidden = (
         "co_change",
         "git_history",
@@ -257,7 +269,7 @@ def qg008():
         for i, line in enumerate(read_text(path).splitlines(), 1):
             code = line.split("//")[0]
             if any(sym in code for sym in forbidden):
-                problems.append(f"M07+ capability in {os.path.basename(path)}:{i}")
+                problems.append(f"M08+ capability in {os.path.basename(path)}:{i}")
 
     # M05 must never read the analysed project's environment.
     for path in source_files(resolver_src, ".rs"):
@@ -322,6 +334,10 @@ MILESTONE_TESTS = {
         "crates/cartograph-resolver/tests/evaluator.rs",
         "crates/cartograph-resolver/tests/dynamic_resolution.rs",
     ],
+    # M07 is a validation milestone. Its regression fixtures live beside the
+    # tests of the milestones whose defects they pin, so the files it owns are
+    # the CLI's graph export and the benchmark harness itself.
+    "M07": ["crates/cartograph-cli/tests/cli.rs"],
 }
 
 # Milestones whose logic can silently produce wrong output, so synthetic
@@ -385,6 +401,120 @@ def checkpoint_entry(milestone):
     return m.group(0) if m else ""
 
 
+def benchmark_problems():
+    """Checks the real-repository benchmark artifacts, when a milestone has them.
+
+    A benchmark is only evidence if its parts agree with each other. These
+    checks are the ones an outside reader would run before believing a number:
+    that the corpus is pinned, that scope was declared rather than fitted, that
+    ground truth records refusals and not only successes, and that the results
+    on disk describe the corpus and ground truth now in the tree.
+
+    Runs whenever benchmarks/corpus.json exists, so it keeps applying after the
+    milestone that introduced it.
+    """
+    corpus_path = os.path.join(ROOT, "benchmarks/corpus.json")
+    if not os.path.exists(corpus_path):
+        return []
+
+    problems = []
+    try:
+        corpus = json.loads(read_text(corpus_path))
+        subset = json.loads(read_text(os.path.join(ROOT, "benchmarks/supported-subset.json")))
+    except (json.JSONDecodeError, OSError) as exc:
+        return [f"benchmark artifacts are not readable: {exc}"]
+
+    repositories = corpus.get("repositories", [])
+    if len(repositories) < 7:
+        problems.append(
+            f"the corpus declares {len(repositories)} repositories; M07 requires at least 7"
+        )
+    for entry in repositories:
+        if not re.fullmatch(r"[0-9a-f]{40}", entry.get("commit", "")):
+            problems.append(f"corpus entry {entry.get('name')} is not pinned to an exact commit")
+
+    # Scope has to be declared, and the gaps predicted in advance have to still
+    # be there — deleting one after a pass is how a miss becomes "out of scope".
+    for section in ("in_scope", "out_of_scope", "safe_refusal", "known_implementation_gaps"):
+        if not subset.get(section):
+            problems.append(f"supported-subset.json has no {section} section")
+    if len(subset.get("known_implementation_gaps", {}).get("entries", [])) < 1:
+        problems.append("supported-subset.json predicts no implementation gaps")
+
+    # Ground truth exists for every corpus entry, was reviewed, and was not
+    # authored from the analyser's own output.
+    for entry in repositories:
+        name = entry.get("name")
+        path = os.path.join(ROOT, f"benchmarks/ground-truth/{name}.json")
+        if not os.path.exists(path):
+            problems.append(f"no ground truth for corpus entry {name}")
+            continue
+        gt = json.loads(read_text(path))
+        if gt.get("commit") != entry.get("commit"):
+            problems.append(f"ground truth for {name} names a different commit than the corpus")
+        if gt.get("verification", {}).get("cartograph_output_consulted") is not False:
+            problems.append(f"ground truth for {name} does not assert independence from output")
+        records = gt.get("route_declarations", []) + gt.get("orm_declarations", [])
+        if not any(r.get("classification") in ("UNSUPPORTED", "SAFE_REFUSAL") for r in records):
+            problems.append(
+                f"ground truth for {name} records no refusal and no unsupported case; "
+                "a corpus entry that only contains what works is not evidence"
+            )
+
+    # Results describe the corpus that is in the tree, not an earlier one.
+    for pass_number in (1, 2):
+        path = os.path.join(ROOT, f"benchmarks/results/m07-pass{pass_number}-evaluation.json")
+        if not os.path.exists(path):
+            problems.append(f"no evaluation recorded for pass {pass_number}")
+            continue
+        result = json.loads(read_text(path))
+        if result.get("corpus_sha256") != sha256_of(corpus_path):
+            problems.append(
+                f"pass {pass_number} results were produced against a different corpus "
+                "than the one committed"
+            )
+        if not result.get("adversarial_checks"):
+            problems.append(f"pass {pass_number} results record no adversarial checks")
+        # Deleting a ground-truth record shrinks both sides of the recall
+        # ratio, so the denominator check alone cannot see it — that attack
+        # was the one this suite initially missed. Binding the results to the
+        # digest of the ground truth they were computed from closes it: an
+        # edited record forces a re-evaluation, which is the point.
+        for name, recorded in (result.get("ground_truth_sha256") or {}).items():
+            path = os.path.join(ROOT, f"benchmarks/ground-truth/{name}.json")
+            if not os.path.exists(path):
+                problems.append(f"pass {pass_number} scored {name}, whose ground truth is gone")
+            elif sha256_of(path) != recorded:
+                problems.append(
+                    f"pass {pass_number} was scored against a different version of "
+                    f"{name}'s ground truth than the one committed"
+                )
+        # The recall denominator must equal the in-scope record count, which is
+        # what stops a denominator being trimmed after the fact.
+        for name, repo in result.get("repositories", {}).items():
+            if repo.get("status") != "OK":
+                continue
+            gt = json.loads(read_text(os.path.join(ROOT, f"benchmarks/ground-truth/{name}.json")))
+            declared = sum(
+                1 for r in gt["route_declarations"] if r["classification"] == "IN_SCOPE"
+            )
+            scored = repo["routes"]["metrics"]["recall_denominator"]
+            if declared != scored:
+                problems.append(
+                    f"pass {pass_number} {name}: recall denominator {scored} does not "
+                    f"match {declared} in-scope ground-truth records"
+                )
+    return problems
+
+
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 @gate("QG-009", "Continuous verification")
 def qg009():
     problems = []
@@ -394,6 +524,7 @@ def qg009():
 
     sources = milestone_test_sources(milestone)
     entry = checkpoint_entry(milestone)
+    problems += benchmark_problems()
 
     # A milestone that has been unlocked but not started has neither
     # registered tests nor a checkpoint entry. Demanding verification findings

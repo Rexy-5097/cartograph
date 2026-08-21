@@ -450,7 +450,18 @@ async def create_order(payload: dict):
     let target = fixture.graph.node(edge.target()).unwrap();
 
     // The hop the whole product exists to produce.
-    assert_eq!(source.name(), "web/src/CheckoutButton.tsx");
+    //
+    // The source is the function that issues the request, not the file that
+    // contains it. M04 named the file because the enclosing scope of a call
+    // site was not resolved; it is now, and a generated client's wrapper
+    // function has to be a node in its own right or a component cannot be
+    // linked through it to a backend handler.
+    assert_eq!(source.name(), "onSubmit");
+    assert_eq!(
+        source.location().map(cartograph_core::SourceLocation::file),
+        Some("web/src/CheckoutButton.tsx"),
+        "the calling file is still recorded, on the node's location"
+    );
     assert_eq!(target.name(), "create_order");
     assert_eq!(edge.kind(), EdgeKind::HttpCall);
     assert_eq!(edge.provenance(), Provenance::RouteMatcher);

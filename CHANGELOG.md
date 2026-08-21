@@ -10,6 +10,99 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M07 remediation, accuracy-first cross-stack resolution
+
+**Three complete chains now run from a React component to a database table**,
+on Airflow, each verified line by line against source. `ParseDagButton.tsx:30`
+reaches `dag_priority_parsing_request`; `AddConnectionButton.tsx:29` reaches
+`connection`; `AddPoolButton.tsx:28` reaches `slot_pool`. Every edge carries
+confidence, provenance, evidence and a location, and the path traverses through
+shared node ids rather than matching names. Report:
+[docs/benchmarks/m07-remediation.md](docs/benchmarks/m07-remediation.md).
+
+- **Import resolution** — a name is walked through its file's own imports to a
+  declaration, for Python and TypeScript. Unresolvable modules, monorepo path
+  collisions, re-export cycles and two barrels exporting one name all refuse
+  with a reason. [docs/resolver/imports.md](docs/resolver/imports.md).
+- **Configuration-object requests** — `__request(OpenAPI, {method, url})` and
+  `client.get({url})` are read. `url` and `endpoint` only, never `path`, which
+  is how every router in the corpus describes a screen.
+- **Router prefix composition** — `@pools_router.post("")` under `/pools` under
+  `/api/v2` serves `/api/v2/pools`. Any constructor whose name ends in `Router`
+  counts. Composition can only make a path more complete: an unknown prefix
+  never becomes an empty one. [docs/resolver/routers.md](docs/resolver/routers.md).
+- **The client wrapper is a node** — an `HttpCall` edge is sourced at the
+  function issuing the request, and calls reaching it become `Call` edges
+  resolved through imports, never matched by name
+  ([ADR-0012](docs/adr/ADR-0012-the-client-wrapper-is-a-node.md)).
+
+### Fixed — 379 false ORM accesses, including five of M07's six chains
+
+Resolving model names without consulting imports attributed any symbol sharing
+a model's name to that model. Onyx's Airtable connector imports `Document` from
+`connectors/models.py`, a Pydantic `BaseModel`, while the SQLAlchemy `Document`
+lives in `db/models.py`. **Five of the six chains M07 reported were false**,
+all running through an Airflow response datamodel named `Job` rather than
+`airflow.jobs.job.Job`. The honest M07 baseline is one chain, not six — a
+correction that makes its negative finding stronger.
+
+Route and `Queries` metrics are unchanged at 1.000 precision and recall, all
+290 `Queries` edges remain source-confirmed, and no `must_not_produce`
+assertion is violated.
+
+### Added — M07, full-stack verification on real repositories
+
+**A negative result, and it is the point.** Across seven pinned real
+repositories and 58,225 files, Cartograph produced six fully verified
+frontend-to-table chains and **none of them begins at a frontend file**. Of
+1,458 `HttpCall` edges, 12 have a TypeScript client. The rest are Python test
+suites calling their own API. Real frontends reach their backend through
+generated client wrappers, so no URL appears at the call site — the single
+largest obstacle to the product's central claim, now measured rather than
+suspected. Full report: [docs/benchmarks/m07-report.md](docs/benchmarks/m07-report.md).
+
+- **A pinned corpus** — `benchmarks/corpus.json`: Superset, full-stack-fastapi,
+  Onyx, PostHog, Zulip, Airflow, AutoGPT, at exact commits, analysed at their
+  repository root so scope cannot be tuned against results. No corpus source
+  enters this repository.
+- **Scope declared before measuring** — `benchmarks/supported-subset.json`,
+  committed before the analyser had run against anything. It predicts seven
+  specific implementation gaps in advance so a miss found later cannot be
+  reclassified as out of scope.
+- **Ground truth independent of output** — drafted from source by an instrument
+  that is handed a filesystem path, cannot import the analyser, and never reads
+  its output. Its patterns describe what the frameworks serve, not what
+  Cartograph recognises.
+- **Graph export** — `cartograph match --json` now emits the graph it built, so
+  a chain is verified by traversing shared nodes rather than inferred from
+  matching names.
+- **A benchmark that resists its author** — `benchmarks/evaluate.py` runs ten
+  checks against the ways these numbers could be flattered, and QG-009 now
+  enforces the artefacts: pinned commits, declared scope, refusal records,
+  denominators equal to the in-scope record count, and results bound to the
+  digest of the ground truth they were scored against. Eleven attacks were
+  written against that gate; all eleven are detected.
+
+### Fixed — five defects the corpus exposed
+
+- **`Model` read as Django.** Django, Flask-SQLAlchemy and Flask-AppBuilder all
+  use a base named `Model`. Testing Django first meant every Superset and
+  Airflow model was searched for a `Meta.db_table` it does not have while its
+  `__tablename__` sat a line below; Superset resolved 3 tables out of 33.
+  Flavour is now read from what the class declares. `Queries` recall 0.729 → 1.000.
+- **ORM discovery ran over TypeScript.** `new Theme({config})` in a `.tsx` file
+  produced an `OrmAccess` edge to a Python model of the same name — 33 across
+  the corpus, now zero.
+- **Model names resolved without imports.** Airflow's architecture diagrams call
+  `User("DAG Author")` having imported `User` from the `diagrams` package; 218
+  were attributed to the Flask-AppBuilder model.
+- **Route decorators required a listed receiver.** Superset's four
+  `@health_blueprint.route(...)` declarations were invisible. A blueprint may be
+  bound to any name; the evidence is a literal URL path in the first argument.
+- **TypeScript route declarations read as client calls.** `app.get('/_health',
+  (c) => …)` is Express and Hono declaring a route; three in PostHog's Node
+  services were matched to a Python endpoint in a different service.
+
 ### Added — M06, ORM and database resolution
 
 **The chain is complete.** `CheckoutButton.tsx → POST /api/orders →

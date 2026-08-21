@@ -1,8 +1,10 @@
 # Benchmarks
 
-**No Cartograph performance or accuracy number has been measured yet. Nothing
-is published.** This page defines what will be measured and the standard for
-publishing it.
+**Nothing is published.** M07 measured the engine against seven real
+repositories; those numbers are INTERNAL, their methodology is
+first-generation, and none of them may be quoted outside the project. See
+[m07-report.md](m07-report.md). This page defines the standard that has to be
+met before any number leaves the repository.
 
 ## Publishing standard
 
@@ -23,6 +25,20 @@ at all.
 Criterion harness exists from M00 (`cargo bench`, graph construction +
 traversal) so M10 has a baseline; its numbers are internal until methodology is
 documented.
+
+## What M07 measured
+
+Seven pinned repositories, 58,225 files, ground truth authored from source by
+an instrument with no access to analyser output, two full passes, and eleven
+attacks on the benchmark's own machinery. Route extraction and model-to-table
+resolution reached precision 1.000 and recall 1.000 on their in-scope ground
+truth; six chains were verified end to end and none began at a frontend file.
+`HttpCall` recall, `OrmAccess` recall and chain recall are **unmeasured**, which
+is stated in the report rather than left to be inferred from their absence.
+
+Harness: `benchmarks/run_benchmark.py` measures, `benchmarks/evaluate.py`
+scores, and the two never share a judgement — a change to one cannot alter what
+the other recorded.
 
 ## CrossStack-Bench (M08)
 

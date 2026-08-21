@@ -525,3 +525,248 @@ fn analysis_round_trips_through_json() {
     let back: FileAnalysis = serde_json::from_str(&json).unwrap();
     assert_eq!(analysis, back);
 }
+
+// ── M07 regression: a server route declaration is not a client call ──
+
+/// `PostHog`, `services/agent-proxy/src/hono/public-routes.ts:30` and two more.
+///
+/// `Express` and `Hono` declare routes with the same syntax a client uses to call
+/// one. At M07 three such declarations in `PostHog`'s Node services produced
+/// `HttpCall` edges to a Python `/_health` endpoint in an unrelated service.
+#[test]
+fn an_express_or_hono_route_declaration_is_not_an_http_call() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "services/proxy/src/routes.ts",
+            r"
+export function registerPublicRoutes(app) {
+  app.get('/_health', (c) => c.json({ status: 'ok' }));
+  app.post('/_reload', function (req, res) { res.end(); });
+}
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "route declarations were recorded as client calls: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_known_client_passing_a_callback_is_still_a_request() {
+    // Node's own `http.get(url, callback)` passes a function and is a real
+    // request. The rule must not confuse it with a route registration.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/fetchData.ts",
+            r"
+http.get('/api/orders', (res) => { res.resume(); });
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 1, "{:?}", analysis.http_calls);
+}
+
+#[test]
+fn an_ordinary_client_call_with_options_is_unaffected() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            r"
+apiClient.post('/api/orders', { body: payload });
+fetch('/api/items', { method: 'PUT' });
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
+}
+
+#[test]
+fn a_route_registered_with_a_named_handler_is_still_indistinguishable() {
+    // The boundary of the rule above, asserted so it stays visible.
+    //
+    // `router.get("/items", handleItems)` and `client.get("/items", config)`
+    // are the same syntax; only resolving the identifier separates them, and
+    // no milestone has claimed interprocedural resolution. This is recorded
+    // as an observation and may still become an edge, so it is a known false
+    // positive rather than a solved case.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "services/proxy/src/routes.ts",
+            r"
+router.get('/items', handleItems);
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(
+        analysis.http_calls.len(),
+        1,
+        "if this becomes 0, the named-handler case was solved and the \
+         limitation note in docs/benchmarks/m07-report.md should be removed"
+    );
+}
+
+// ── M07 remediation: requests described by a configuration object ────
+
+/// Airflow, `ui/openapi-gen/requests/services.gen.ts:3667`.
+///
+/// The shape every generated client in the M07 corpus uses, and the reason
+/// only twelve of 1,458 `HttpCall` edges had a TypeScript client.
+#[test]
+fn a_request_configuration_object_is_an_http_observation() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "ui/openapi-gen/requests/services.gen.ts",
+            r"
+export class PoolService {
+    public static postPool(data) {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v2/pools',
+            body: data.requestBody,
+        });
+    }
+}
+",
+        )
+        .expect("fixture parses");
+
+    assert_eq!(analysis.http_calls.len(), 1, "{:?}", analysis.http_calls);
+    let call = &analysis.http_calls[0];
+    assert_eq!(call.method_hint, Some(HttpMethodHint::Post));
+    assert_eq!(
+        call.url,
+        UrlObservation::Literal {
+            value: "/api/v2/pools".to_owned()
+        }
+    );
+}
+
+/// full-stack-fastapi, `frontend/src/client/sdk.gen.ts`.
+///
+/// A parenthesised callee the shape rules cannot name, whose URL is still
+/// stated literally in the options object.
+#[test]
+fn a_configuration_object_is_read_whatever_the_callee_looks_like() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/client/sdk.gen.ts",
+            r"
+export class ItemsService {
+    public static readItems(options) {
+        return (options?.client ?? client).get({
+            url: '/api/v1/items/',
+            responseType: 'json',
+        });
+    }
+}
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 1, "{:?}", analysis.http_calls);
+    assert_eq!(
+        analysis.http_calls[0].url,
+        UrlObservation::Literal {
+            value: "/api/v1/items/".to_owned()
+        }
+    );
+    // The object states no `method`, but the callee spells one. `.get` is a
+    // GET — written down, not inferred.
+    assert_eq!(
+        analysis.http_calls[0].method_hint,
+        Some(HttpMethodHint::Get)
+    );
+}
+
+/// Superset, `superset-frontend/src/**`.
+#[test]
+fn an_endpoint_property_is_read_like_a_url() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/actions.ts",
+            r"
+export function fetchCharts() {
+  return SupersetClient.get({ endpoint: '/api/v1/chart/' });
+}
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 1, "{:?}", analysis.http_calls);
+    assert_eq!(
+        analysis.http_calls[0].url,
+        UrlObservation::Literal {
+            value: "/api/v1/chart/".to_owned()
+        }
+    );
+}
+
+#[test]
+fn a_routing_table_is_never_read_as_an_http_call() {
+    // The false-positive class this rule is shaped around. React Router, Vue
+    // Router and TanStack all describe screens with `{ path: "/orders" }`.
+    // Accepting `path` as a URL key would turn a frontend's own route table
+    // into outbound requests — more false positives than the rule finds true
+    // ones.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/routes.tsx",
+            r"
+export const routes = [
+  { path: '/orders', element: Orders },
+  { path: '/orders/:id', element: OrderDetail },
+];
+createBrowserRouter([{ path: '/settings', element: Settings }]);
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a routing table became HTTP calls: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_configuration_object_without_a_path_like_url_is_refused() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/config.ts",
+            r"
+configure({ url: baseUrl, method: 'POST' });
+track({ url: 'analytics-event', name: 'click' });
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a non-literal or non-path url became an observation: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_templated_configuration_url_keeps_its_unknown_parts() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/client.ts",
+            "export function get(id) { return request({ method: 'GET', url: `/api/v2/pools/${id}` }); }\n",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 1, "{:?}", analysis.http_calls);
+    assert!(
+        matches!(analysis.http_calls[0].url, UrlObservation::Template { .. }),
+        "an interpolated URL must stay a template: {:?}",
+        analysis.http_calls[0].url
+    );
+}

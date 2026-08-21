@@ -297,3 +297,126 @@ fn match_still_refuses_an_environment_backed_url() {
         "an environment-backed prefix must still be refused after M05"
     );
 }
+
+// ── Graph export (M07) ───────────────────────────────────────────────
+//
+// The M07 benchmark evaluates the graph Cartograph builds. If it rebuilt the
+// graph itself it would be validating a copy, so `match --json` exports the
+// real one and these tests hold that export to the domain model's guarantees.
+
+#[test]
+fn match_json_exports_the_graph_it_built() {
+    let output = cartograph()
+        .args(["match", "--json"])
+        .arg(dynamic_project())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let graph = &value["graph"];
+    let nodes = graph["nodes"].as_array().expect("nodes array");
+    let edges = graph["edges"].as_array().expect("edges array");
+
+    assert_eq!(
+        graph["node_count"].as_u64().unwrap(),
+        nodes.len() as u64,
+        "the exported node list must be the whole graph"
+    );
+    assert_eq!(
+        graph["edge_count"].as_u64().unwrap(),
+        edges.len() as u64,
+        "the exported edge list must be the whole graph"
+    );
+    assert_eq!(
+        edges.len() as u64,
+        value["totals"]["edges"].as_u64().unwrap()
+            + value["totals"]["orm_edges"].as_u64().unwrap()
+            + value["totals"]["client_call_edges"].as_u64().unwrap(),
+        "the graph must hold exactly the edges the run reported"
+    );
+    assert!(!edges.is_empty(), "this fixture produces edges");
+}
+
+#[test]
+fn every_exported_edge_carries_its_four_attributes() {
+    // The domain model refuses an edge without confidence, provenance,
+    // evidence and a location. An export that dropped one would let a
+    // benchmark score edges that could not exist.
+    let output = cartograph()
+        .args(["match", "--json"])
+        .arg(dynamic_project())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    for edge in value["graph"]["edges"].as_array().unwrap() {
+        let confidence = edge["confidence"].as_f64().expect("confidence is a number");
+        assert!(
+            (0.0..=1.0).contains(&confidence),
+            "confidence out of range: {edge}"
+        );
+        assert!(
+            edge["provenance"].as_str().is_some_and(|p| !p.is_empty()),
+            "missing provenance: {edge}"
+        );
+        assert!(
+            edge["evidence"]
+                .as_str()
+                .is_some_and(|e| !e.trim().is_empty()),
+            "missing evidence: {edge}"
+        );
+        assert!(
+            edge["file"].as_str().is_some_and(|f| !f.is_empty()),
+            "missing source file: {edge}"
+        );
+        assert!(edge["line"].as_u64().unwrap() >= 1, "missing line: {edge}");
+        // No language model is ever a provenance (RULE 007).
+        assert_ne!(edge["provenance"].as_str(), Some("model-inference"));
+    }
+}
+
+#[test]
+fn exported_edges_reference_exported_nodes() {
+    // A dangling endpoint would make a chain look traversable when it is not.
+    let output = cartograph()
+        .args(["match", "--json"])
+        .arg(dynamic_project())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let ids: std::collections::HashSet<u64> = value["graph"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["id"].as_u64().unwrap())
+        .collect();
+    for edge in value["graph"]["edges"].as_array().unwrap() {
+        assert!(
+            ids.contains(&edge["source"].as_u64().unwrap()),
+            "dangling source: {edge}"
+        );
+        assert!(
+            ids.contains(&edge["target"].as_u64().unwrap()),
+            "dangling target: {edge}"
+        );
+    }
+}
+
+#[test]
+fn the_export_is_stable_across_runs() {
+    // A benchmark compares pass 1 against pass 2. If the same tree produced a
+    // different serialisation each run, every comparison would be noise.
+    let run = || {
+        let output = cartograph()
+            .args(["match", "--json"])
+            .arg(dynamic_project())
+            .output()
+            .expect("binary runs");
+        let mut value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        // Wall-clock time is expected to differ; nothing else may.
+        value["elapsed_ms"] = serde_json::Value::Null;
+        value
+    };
+    assert_eq!(run(), run(), "analysis output must be deterministic");
+}

@@ -27,6 +27,7 @@ fn span() -> Span {
 
 fn route(path: &str, method: HttpMethodHint, handler: &str) -> RouteObservation {
     RouteObservation {
+        receiver: None,
         style: RouteDeclarationStyle::VerbDecorator,
         methods: vec![method],
         path: UrlObservation::Literal {
@@ -39,6 +40,7 @@ fn route(path: &str, method: HttpMethodHint, handler: &str) -> RouteObservation 
 
 fn call(url: &str, method: Option<HttpMethodHint>) -> HttpCallObservation {
     HttpCallObservation {
+        enclosing: None,
         callee: "axios.post".into(),
         method_hint: method,
         url: UrlObservation::Literal {

@@ -25,7 +25,11 @@ use std::collections::{HashMap, HashSet};
 
 use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance, SourceLocation};
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
-use cartograph_parser::model::{Callee, FileAnalysis, Span, StringFact, Symbol, SymbolKind};
+
+use crate::imports::{ModuleIndex, Resolution};
+use cartograph_parser::model::{
+    Callee, FileAnalysis, SourceLanguage, Span, StringFact, Symbol, SymbolKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Which ORM a model was recognised from.
@@ -37,13 +41,32 @@ pub enum OrmFlavor {
     SqlAlchemy,
     /// A `Django` model.
     Django,
+    /// A model whose base is used by more than one ORM, declaring neither
+    /// ORM's table attribute.
+    ///
+    /// `Model` is the base name used by `Django`, `Flask-SQLAlchemy` and
+    /// `Flask-AppBuilder`. When a class inheriting it declares neither
+    /// `__tablename__` nor `Meta.db_table`, the source does not say which ORM
+    /// it belongs to, and naming one would be a guess.
+    Unspecified,
 }
 
-/// Base classes that mark a `SQLAlchemy` declarative model.
+/// Base classes that mark a `SQLAlchemy` declarative model and nothing else.
 ///
 /// `Base` is the near-universal convention for `declarative_base()`'s result;
-/// `DeclarativeBase` and `Model` cover the 2.0 and `Flask-SQLAlchemy` styles.
-const SQLALCHEMY_BASES: [&str; 4] = ["Base", "DeclarativeBase", "db.Model", "Model"];
+/// `DeclarativeBase` is the 2.0 style and `db.Model` the `Flask-SQLAlchemy`
+/// one. A bare `Model` is deliberately absent — see [`SHARED_BASES`].
+const SQLALCHEMY_BASES: [&str; 3] = ["Base", "DeclarativeBase", "db.Model"];
+
+/// Base classes more than one ORM uses, so the name alone decides nothing.
+///
+/// `Model` is `Django`'s conventional import (`from django.db.models import
+/// Model`) and equally `Flask-SQLAlchemy`'s and `Flask-AppBuilder`'s. Reading
+/// it as `Django` cost every Superset and Airflow model its table at M07: the
+/// class was searched for a `Meta.db_table` it does not have while its
+/// `__tablename__` sat one line below. Which ORM it is has to be read from
+/// what the class declares, not from what the base is called.
+const SHARED_BASES: [&str; 1] = ["Model"];
 
 /// How a model's table name was determined.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,7 +196,19 @@ impl OrmAnalysis {
         let mut analysis = Self::default();
         let mut seen: HashMap<String, usize> = HashMap::new();
 
-        for file in files {
+        // A Python ORM model cannot be declared in, or used from, a
+        // TypeScript file. Before this filter `new Theme({...})` in a Superset
+        // .tsx file and `new Event(...)` in a Zulip web module produced
+        // OrmAccess edges to Python models that share the name.
+        let python: Vec<&FileAnalysis> = files
+            .iter()
+            .filter(|f| f.language == SourceLanguage::Python)
+            .collect();
+        // Names at an access site are resolved through the project's imports,
+        // not matched against a global map of every model name.
+        let index = ModuleIndex::build(files);
+
+        for file in &python {
             for model in discover_models(file) {
                 *seen.entry(model.name.clone()).or_insert(0) += 1;
                 analysis.models.insert(model.name.clone(), model);
@@ -188,10 +223,10 @@ impl OrmAnalysis {
         }
         analysis.ambiguous.sort();
 
-        for file in files {
+        for file in &python {
             analysis
                 .accesses
-                .extend(discover_accesses(file, &analysis.models));
+                .extend(discover_accesses(file, &analysis.models, &index));
         }
         analysis
     }
@@ -204,9 +239,18 @@ pub fn discover_models(file: &FileAnalysis) -> Vec<OrmModel> {
         .iter()
         .filter(|s| s.kind == SymbolKind::Class && s.enclosing.is_none())
         .filter_map(|class| {
-            let base = model_base(class)?;
-            let (flavor, base_name) = base;
-            let table = resolve_table(file, class, flavor);
+            let (evidence, base_name) = model_base(class)?;
+            let (flavor, table) = match evidence {
+                BaseEvidence::Django => (
+                    OrmFlavor::Django,
+                    resolve_table(file, class, OrmFlavor::Django),
+                ),
+                BaseEvidence::SqlAlchemy => (
+                    OrmFlavor::SqlAlchemy,
+                    resolve_table(file, class, OrmFlavor::SqlAlchemy),
+                ),
+                BaseEvidence::Either => resolve_shared_base(file, class),
+            };
             Some(OrmModel {
                 name: class.name.clone(),
                 flavor,
@@ -219,22 +263,61 @@ pub fn discover_models(file: &FileAnalysis) -> Vec<OrmModel> {
         .collect()
 }
 
+/// What a recognised base tells us about which ORM a class belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaseEvidence {
+    /// The base belongs to `Django` alone.
+    Django,
+    /// The base belongs to `SQLAlchemy` alone.
+    SqlAlchemy,
+    /// The base name is shared; the class's own declarations decide.
+    Either,
+}
+
 /// The ORM base a class inherits from, if any.
 ///
 /// Only an exact base name counts: a class named `OrderBase` is not a model,
 /// and neither is one inheriting from an unrelated class.
-fn model_base(class: &Symbol) -> Option<(OrmFlavor, String)> {
+fn model_base(class: &Symbol) -> Option<(BaseEvidence, String)> {
     for base in &class.bases {
-        if base == "models.Model" || base == "Model" {
-            return Some((OrmFlavor::Django, base.clone()));
+        if base == "models.Model" {
+            return Some((BaseEvidence::Django, base.clone()));
         }
     }
     for base in &class.bases {
         if SQLALCHEMY_BASES.contains(&base.as_str()) {
-            return Some((OrmFlavor::SqlAlchemy, base.clone()));
+            return Some((BaseEvidence::SqlAlchemy, base.clone()));
+        }
+    }
+    for base in &class.bases {
+        if SHARED_BASES.contains(&base.as_str()) {
+            return Some((BaseEvidence::Either, base.clone()));
         }
     }
     None
+}
+
+/// Decides a shared-base class's ORM from what it declares.
+///
+/// `__tablename__` is `SQLAlchemy`'s and `Meta.db_table` is Django's, so either
+/// one settles the question the base name left open. When the class declares
+/// neither, the flavour stays [`OrmFlavor::Unspecified`] rather than being
+/// guessed, and the table is unresolved either way.
+fn resolve_shared_base(file: &FileAnalysis, class: &Symbol) -> (OrmFlavor, TableName) {
+    if let Some(table) = declared_table(file, class, OrmFlavor::SqlAlchemy) {
+        return (OrmFlavor::SqlAlchemy, table);
+    }
+    if let Some(table) = declared_table(file, class, OrmFlavor::Django) {
+        return (OrmFlavor::Django, table);
+    }
+    (
+        OrmFlavor::Unspecified,
+        TableName::Unresolved {
+            reason: "base `Model` is used by Django and SQLAlchemy alike, and the class \
+                     declares neither __tablename__ nor Meta.db_table"
+                .into(),
+        },
+    )
 }
 
 /// Resolves a model's table name (slices 2 and 4).
@@ -256,6 +339,9 @@ fn resolve_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Tabl
         OrmFlavor::Django => TableName::Unresolved {
             reason: "no Meta.db_table; Django's default needs the app label".into(),
         },
+        OrmFlavor::Unspecified => TableName::Unresolved {
+            reason: "the ORM this class belongs to is not determined".into(),
+        },
     }
 }
 
@@ -264,6 +350,7 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
     let attribute = match flavor {
         OrmFlavor::SqlAlchemy => "__tablename__",
         OrmFlavor::Django => "db_table",
+        OrmFlavor::Unspecified => return None,
     };
 
     // SQLAlchemy declares on the class; Django declares inside a nested Meta.
@@ -277,7 +364,7 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
         s.span.start_line >= class.span.start_line && s.span.end_line <= class.span.end_line
     };
     let owner_names: Vec<String> = match flavor {
-        OrmFlavor::SqlAlchemy => vec![class.name.clone()],
+        OrmFlavor::SqlAlchemy | OrmFlavor::Unspecified => vec![class.name.clone()],
         OrmFlavor::Django => file
             .symbols
             .iter()
@@ -332,6 +419,7 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
 pub fn discover_accesses<S: std::hash::BuildHasher>(
     file: &FileAnalysis,
     models: &HashMap<String, OrmModel, S>,
+    index: &ModuleIndex<'_>,
 ) -> Vec<OrmAccessSite> {
     let mut sites = Vec::new();
 
@@ -342,6 +430,13 @@ pub fn discover_accesses<S: std::hash::BuildHasher>(
         // A local binding of the same name shadows the model; the access can no
         // longer be attributed to it safely.
         if shadows_model(file, &model, call.span) {
+            continue;
+        }
+        // The name has to resolve to *this* model's declaration. Airflow's
+        // architecture diagrams call `User("DAG Author")` having imported User
+        // from the `diagrams` package; matching on the name alone attributed
+        // 218 of those to the Flask-AppBuilder User model.
+        if !resolves_to_the_model(file, &model, models, index) {
             continue;
         }
         sites.push(OrmAccessSite {
@@ -388,6 +483,38 @@ fn classify_access<S: std::hash::BuildHasher>(
             let _ = (object, property, SQLALCHEMY_SESSION_METHODS);
             None
         }
+    }
+}
+
+/// Does the name at this access site resolve to this model's declaration?
+///
+/// Answered by [`ModuleIndex::resolve_python`], which walks the file's own
+/// imports to a declaration rather than trusting that a matching name is a
+/// matching symbol.
+///
+/// The one permissive case is [`Resolution::NotBound`]: a star import, a
+/// conditional import or a name bound by machinery this analysis does not
+/// model. Refusing those would trade M07's false positives for false
+/// negatives, so they are allowed and the reason is recorded here.
+fn resolves_to_the_model<S: std::hash::BuildHasher>(
+    file: &FileAnalysis,
+    model: &str,
+    models: &HashMap<String, OrmModel, S>,
+    index: &ModuleIndex<'_>,
+) -> bool {
+    let Some(declared) = models.get(model) else {
+        return false;
+    };
+    match index.resolve_python(file, model) {
+        // Declared here. Only this model if this is the file that declares it;
+        // otherwise the local declaration is a different symbol of the same
+        // name, and attributing the access would be exactly the M07 defect.
+        Resolution::Local { .. } => declared.file == file.path,
+        Resolution::Declared { file: at, .. } => at == declared.file,
+        // An unresolvable module, or several equally good ones. Neither
+        // answers which symbol was meant.
+        Resolution::Unresolved { .. } | Resolution::Ambiguous { .. } => false,
+        Resolution::NotBound => true,
     }
 }
 

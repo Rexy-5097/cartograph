@@ -1,0 +1,146 @@
+{
+  "schema": "cartograph.corpus/1",
+  "milestone": "M07",
+  "status": "INTERNAL",
+  "policy": {
+    "source_code": "No corpus source is copied into this repository. Each entry is a pinned commit fetched into a local mirror outside the working tree; only measurements, ground-truth records and cited file:line references are stored here.",
+    "pinning": "Every entry names an exact commit. A moving branch is never benchmarked: run_benchmark.py verifies the checkout's HEAD against `commit` and refuses the repository otherwise.",
+    "analysis_root": "The repository root in every case. Restricting analysis to a hand-picked subtree would let scope be tuned against results (PART 17), so the analyser sees the whole repository and its own SKIP_DIRS rule decides what to descend into.",
+    "selection": "Chosen for production-style code across the four frontend/backend combinations M07 must cover, plus three entries selected specifically because they contain patterns known to fall outside the supported subset. No entry was added or removed after any result was seen."
+  },
+  "coverage_requirements": {
+    "react_ts_fastapi": ["full-stack-fastapi"],
+    "react_ts_flask": ["superset"],
+    "react_ts_django": ["posthog", "zulip"],
+    "nextjs_ts_python": ["onyx", "autogpt"],
+    "sqlalchemy": ["superset", "onyx", "airflow"],
+    "django_orm": ["posthog", "zulip"],
+    "known_difficult_or_unsupported": ["full-stack-fastapi", "autogpt", "airflow"]
+  },
+  "repositories": [
+    {
+      "name": "superset",
+      "repository": "apache/superset",
+      "commit": "8222db334054172bf44789c58ab3857e4567b952",
+      "license": "Apache-2.0",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "React + TypeScript (superset-frontend/)",
+      "backend": "Flask, with Flask-AppBuilder's class-based `expose` API",
+      "orm": "SQLAlchemy via Flask-AppBuilder's `Model` base",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/superset",
+      "expected_supported_scope": "SQLAlchemy models inheriting `Model`; any `@app.route`/verb decorator bound to a recognised receiver; frontend calls through SupersetClient and fetch with literal paths.",
+      "known_limitations": [
+        "Flask-AppBuilder registers most API routes with `@expose(...)` inside `ModelRestApi` subclasses — a class-based form outside the supported subset (BE-U4).",
+        "SupersetClient is a wrapped client; call sites pass an options object rather than a positional URL (FE-U1/FE-U3).",
+        "Most SQLAlchemy models declare `__tablename__`, but several inherit project-local abstract bases (ORM-U3)."
+      ]
+    },
+    {
+      "name": "full-stack-fastapi",
+      "repository": "fastapi/full-stack-fastapi-template",
+      "commit": "162344da111e833b30892728372ab95331f06873",
+      "license": "MIT",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "React + TypeScript (Vite), with a generated OpenAPI client",
+      "backend": "FastAPI, APIRouter per resource",
+      "orm": "SQLModel",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/full-stack-fastapi",
+      "expected_supported_scope": "FastAPI verb decorators on `router`. The ORM layer is expected to be entirely unsupported.",
+      "known_limitations": [
+        "SQLModel is not a recognised ORM base (ORM-U1): no model, table or access is expected, and none may be claimed.",
+        "The frontend calls a generated client (`OrdersService.createOrder()`), so no URL appears at the call site (FE-U3).",
+        "APIRouter prefixes are applied at include time, so a decorator's path is not the served path (BE-U6)."
+      ]
+    },
+    {
+      "name": "onyx",
+      "repository": "onyx-dot-app/onyx",
+      "commit": "8ee706ebaa32804ae7d674bfb779f1b43609b1e4",
+      "license": "See repository LICENSE (MIT core with an enterprise directory)",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "Next.js + TypeScript (web/)",
+      "backend": "FastAPI, APIRouter per module",
+      "orm": "SQLAlchemy 2.0 (`class Base(DeclarativeBase)`)",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/onyx",
+      "expected_supported_scope": "SQLAlchemy models inheriting `Base` with `__tablename__`; FastAPI verb decorators on `router`; frontend `fetch(\"/api/...\")` calls with literal paths.",
+      "known_limitations": [
+        "`APIRouter(prefix=\"/manage\")` means the decorator path is a suffix of the served path (BE-U6); frontend and backend paths are expected to disagree for those routes.",
+        "SQLAlchemy access is through `db_session.execute(select(Model))`, where the model is a call argument (ORM-U2)."
+      ]
+    },
+    {
+      "name": "posthog",
+      "repository": "PostHog/posthog",
+      "commit": "2dd790a6e7c3d3ab25ff8f45f07b0d0250de4c25",
+      "license": "See repository LICENSE (MIT core with a proprietary ee/ directory)",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "React + TypeScript (frontend/src)",
+      "backend": "Django, with Django REST Framework routers",
+      "orm": "Django ORM",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/posthog",
+      "expected_supported_scope": "Django models inheriting `models.Model`; `path(...)` URL conf entries; frontend calls with literal paths.",
+      "known_limitations": [
+        "Most API routes are registered on DRF routers from ViewSets (BE-U4), not `path(...)` entries.",
+        "Django default table names cannot be derived without the app label (ORM-U4), so most models resolve to no table.",
+        "URL conf entries live in urls.py while handlers live in views — the route declaration file and the handler file differ."
+      ]
+    },
+    {
+      "name": "zulip",
+      "repository": "zulip/zulip",
+      "commit": "0ce8f6278cdeacdc9b26dba6b08a63e567df87ac",
+      "license": "Apache-2.0",
+      "languages": ["TypeScript", "Python"],
+      "frontend": "TypeScript (web/src)",
+      "backend": "Django, with a hand-written URL conf",
+      "orm": "Django ORM",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/zulip",
+      "expected_supported_scope": "Django models inheriting `models.Model`; `path(...)` URL conf entries in zproject/urls.py and zerver/.",
+      "known_limitations": [
+        "Zulip wraps views in `rest_path(...)`, a project-local helper rather than `path(...)` (BE-U5-adjacent: the callee name is not recognised).",
+        "Frontend requests go through a `channel.get/post` wrapper taking an options object (FE-U1).",
+        "Django default table names are underivable (ORM-U4)."
+      ]
+    },
+    {
+      "name": "airflow",
+      "repository": "apache/airflow",
+      "commit": "9b43d6abc0fc0766b1b1a886657bb6befc33ee1d",
+      "license": "Apache-2.0",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "React + TypeScript (airflow-core/src/airflow/ui)",
+      "backend": "FastAPI (current) alongside legacy Flask blueprints",
+      "orm": "SQLAlchemy",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/airflow",
+      "expected_supported_scope": "SQLAlchemy models with `__tablename__`; FastAPI verb decorators on recognised receivers.",
+      "known_limitations": [
+        "Included as the largest and least uniform entry: a monorepo of providers, a generated OpenAPI frontend client, and two coexisting web frameworks. Chosen to test behaviour under scale and heterogeneity, not to produce a favourable score.",
+        "The frontend uses a generated client from openapi-typescript (FE-U3).",
+        "Provider packages contain thousands of Python files unrelated to the web layer."
+      ]
+    },
+    {
+      "name": "autogpt",
+      "repository": "Significant-Gravitas/AutoGPT",
+      "commit": "601093ddfe23a3d58a9c8f4a208bd49b203ee612",
+      "license": "See repository LICENSE (Polyform Shield for the platform, MIT for classic)",
+      "languages": ["TypeScript", "TSX", "Python"],
+      "frontend": "Next.js + TypeScript (autogpt_platform/frontend)",
+      "backend": "FastAPI (autogpt_platform/backend)",
+      "orm": "Prisma (Python client)",
+      "analysis_root": ".",
+      "analysis_command": "cartograph match --json <mirror>/autogpt",
+      "expected_supported_scope": "FastAPI verb decorators on recognised receivers. The ORM layer is expected to be entirely unsupported.",
+      "known_limitations": [
+        "Prisma is not a recognised ORM (ORM-U1): no model, table or access may be claimed.",
+        "Included specifically as a supported-HTTP / unsupported-ORM case, to check that an unsupported data layer does not corrupt the HTTP layer or produce invented tables."
+      ]
+    }
+  ]
+}

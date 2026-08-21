@@ -771,3 +771,85 @@ fn declaration_styles_serialise_as_the_syntax_they_name() {
         serde_json::json!("url-conf-entry")
     );
 }
+
+// ── M07 regression: a blueprint may be bound to any name ─────────────
+
+fn analyze_source(source: &str) -> FileAnalysis {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    analyzer
+        .analyze_source("app/views.py", source)
+        .expect("fixture parses")
+}
+
+/// Superset, `superset/views/health.py:26-36`.
+///
+/// Four Flask routes registered on a blueprint named `health_blueprint`. The
+/// receiver-name list recognised `bp`, `app`, `router`, `api`, `blueprint` and
+/// anything ending `_router`/`_app`, so all four were invisible at M07 — the
+/// only route misses left in the corpus.
+#[test]
+fn a_blueprint_bound_to_any_name_still_declares_routes() {
+    let analysis = analyze_source(
+        r#"
+health_blueprint = Blueprint("health", __name__)
+
+@health_blueprint.route("/health")
+def health():
+    return "OK"
+
+@health_blueprint.route("/ping")
+def ping():
+    return "OK"
+"#,
+    );
+    let paths: Vec<String> = analysis
+        .routes
+        .iter()
+        .map(|r| match &r.path {
+            UrlObservation::Literal { value } => value.clone(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(paths, vec!["/health", "/ping"], "{:?}", analysis.routes);
+    assert_eq!(analysis.routes[0].handler.as_deref(), Some("health"));
+}
+
+#[test]
+fn an_unnamed_receiver_still_needs_a_path_argument() {
+    // The evidence that makes an unknown receiver acceptable is the literal
+    // path. `@mock.patch("app.core.settings")` is a decorator named for an
+    // HTTP verb whose argument is a dotted import path, and it declares no
+    // route. Without this the corpus would gain thousands of phantom routes:
+    // PostHog alone contains 6,844 `@patch(...)` decorators.
+    let analysis = analyze_source(
+        r#"
+@mock.patch("app.core.config.settings")
+def test_something(mocked):
+    pass
+
+@some_object.get(timeout)
+def not_a_route():
+    pass
+"#,
+    );
+    assert!(
+        analysis.routes.is_empty(),
+        "a non-path argument must not declare a route: {:?}",
+        analysis.routes
+    );
+}
+
+#[test]
+fn a_known_registrar_still_works_without_a_literal_path() {
+    // A recognised receiver is evidence in its own right, so a router whose
+    // path is built elsewhere is still observed — the previous behaviour is
+    // widened, never narrowed.
+    let analysis = analyze_source(
+        r"
+@router.get(SOME_PATH)
+def listing():
+    pass
+",
+    );
+    assert_eq!(analysis.routes.len(), 1, "{:?}", analysis.routes);
+}

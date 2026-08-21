@@ -1,0 +1,95 @@
+{
+  "schema": "cartograph.supported-subset/2",
+  "milestone": "M07",
+  "status": "INTERNAL",
+  "base_commit": "ef26ae27143ff8a8f1e49b5a618ad5a615092cc8",
+  "base_tag": "cartograph-m06",
+
+  "why_this_file_is_shaped_this_way": [
+    "Version 1 of this file defined 'supported' as the set of patterns cartograph-parser recognises. That is circular: recall computed against it is 1.0 by construction, because a pattern the analyser misses would have been defined out of the denominator. It was rewritten before any corpus was analysed.",
+    "Scope is therefore declared at the level of framework capability families — 'Flask route decorators', 'Django models' — not at the level of the analyser's internal predicates. A Flask route decorator the analyser fails to see is a FALSE NEGATIVE, however it is bound.",
+    "Restrictions that come from the implementation rather than from the declared scope are listed under known_implementation_gaps. They are predictions made before the first evaluation pass, and their misses count against recall."
+  ],
+
+  "in_scope": {
+    "note": "A relationship of one of these kinds, present in a corpus repository, must be produced. If it is not, that is a FALSE NEGATIVE.",
+    "frontend": [
+      {"id": "IN-FE-1", "capability": "A call through fetch, axios, or a named HTTP client where the request URL appears at the call site as a string literal, a template literal, or an identifier bound to a module-scope string constant (including one imported across files)."}
+    ],
+    "backend": [
+      {"id": "IN-BE-1", "capability": "FastAPI route declarations by verb decorator on an APIRouter or app object."},
+      {"id": "IN-BE-2", "capability": "Flask route declarations, both @x.route(..., methods=[...]) and the 2.x verb shortcuts, on an app or blueprint object."},
+      {"id": "IN-BE-3", "capability": "Django URL configuration entries declared with path(), where the pattern is a string literal."}
+    ],
+    "orm": [
+      {"id": "IN-ORM-1", "capability": "SQLAlchemy declarative models and the table each maps to when the source declares it."},
+      {"id": "IN-ORM-2", "capability": "Django models and the table each maps to when Meta.db_table declares it."},
+      {"id": "IN-ORM-3", "capability": "A handler's use of a model: Django manager calls, model construction, and SQLAlchemy session/select access."}
+    ],
+    "chain": [
+      {"id": "IN-CH-1", "capability": "The composed chain frontend file -> handler -> model -> table, traversable through shared graph nodes."}
+    ]
+  },
+
+  "out_of_scope": {
+    "note": "Declared before the first evaluation pass. A relationship here is UNSUPPORTED. It is never counted as a false negative, and its count is reported so the size of each exclusion is visible rather than hidden in a denominator.",
+    "entries": [
+      {"id": "OUT-1", "pattern": "ORMs other than SQLAlchemy and Django — SQLModel, Peewee, Tortoise, Prisma, MongoEngine, raw drivers", "reason": "M06 declared two ORMs. Recognising a third is new capability, not a defect in the two."},
+      {"id": "OUT-2", "pattern": "Class-based views and router registration — DRF ViewSets, APIView, Flask-AppBuilder @expose, FastAPI class routers", "reason": "The route is bound by a registry at import time rather than declared at a syntactic site. Recovering it is a different mechanism from reading a decorator, and no milestone has claimed it."},
+      {"id": "OUT-3", "pattern": "Imperative registration — add_url_rule, add_api_route, router.register", "reason": "As OUT-2: the declaration is a call made during startup, not a decorated definition."},
+      {"id": "OUT-4", "pattern": "Regular-expression routes — Django re_path", "reason": "Deliberately refused by M03, which records NormalizationStatus::Unsupported and keeps the raw form. Interpreting a regex is a documented non-goal."},
+      {"id": "OUT-5", "pattern": "Prefix composition — APIRouter(prefix=...), Blueprint(url_prefix=...), include(), FastAPI's root_path", "reason": "The served path is assembled at registration. M07 evaluates the path each site declares. The number of routes affected is reported per repository so this exclusion can be weighed."},
+      {"id": "OUT-6", "pattern": "Calls through a generated or hand-written client wrapper where no URL appears at the call site", "reason": "The URL is inside the wrapper; connecting the two requires interprocedural resolution no milestone has claimed."},
+      {"id": "OUT-7", "pattern": "Column-level mapping, migrations, raw SQL, and any database connection", "reason": "M06 declared table-level static mapping only."},
+      {"id": "OUT-8", "pattern": "Languages other than TypeScript, TSX and Python", "reason": "No extractor exists for them."}
+    ]
+  },
+
+  "safe_refusal": {
+    "note": "Cartograph saw the evidence and correctly declined to assert a relationship. This is desired behaviour, counted separately, and never a false negative. It is a FALSE POSITIVE if an edge is produced anyway.",
+    "entries": [
+      {"id": "SR-1", "pattern": "A URL whose prefix comes from an environment variable or runtime configuration", "required_behaviour": "no edge; the unresolved part stays unresolved"},
+      {"id": "SR-2", "pattern": "A table name that is not a string literal — an f-string, a settings lookup, declared_attr", "required_behaviour": "TableName::Unresolved and no Queries edge"},
+      {"id": "SR-3", "pattern": "A model class name declared by more than one class in the project", "required_behaviour": "the name resolves to nothing; no OrmAccess or Queries edge"},
+      {"id": "SR-4", "pattern": "A client URL matching several routes with no discriminating evidence", "required_behaviour": "Ambiguous; candidates retained; no edge"},
+      {"id": "SR-5", "pattern": "A client path with no shared static segment against any route", "required_behaviour": "no edge (the M04 discriminating-evidence rule)"},
+      {"id": "SR-6", "pattern": "A Django model with no Meta.db_table", "required_behaviour": "Unresolved — the app label is not in the model file, so no table name is derived"},
+      {"id": "SR-7", "pattern": "A model name also bound as a local or module variable in the same file", "required_behaviour": "accesses in that file are not attributed"}
+    ]
+  },
+
+  "known_implementation_gaps": {
+    "note": "Predicted BEFORE the first evaluation pass, from reading the M06 implementation. These are inside in_scope, so every one of them costs recall. They are written down here so that a miss found later cannot be reclassified as out of scope (PART 17).",
+    "entries": [
+      {"id": "GAP-1", "prediction": "Flask/FastAPI decorators bound to a receiver outside {app, router, api, blueprint, bp, *_router, *_app} are not observed — e.g. @orders_bp.route(...) or @admin_views.get(...).", "expected_effect": "FALSE NEGATIVE on IN-BE-1/IN-BE-2", "authority": "python.rs receiver_ok"},
+      {"id": "GAP-2", "prediction": "SQLAlchemy access through session.query(Model), db.session.execute(select(Model)) is not recognised, because the model is a call argument and M02 records argument counts rather than identities.", "expected_effect": "FALSE NEGATIVE on IN-ORM-3", "authority": "orm.rs classify_access"},
+      {"id": "GAP-3", "prediction": "A model inheriting a project-local abstract base — class Order(TimestampedModel) where TimestampedModel(models.Model) — is not recognised, because inheritance chains are not followed.", "expected_effect": "FALSE NEGATIVE on IN-ORM-1/IN-ORM-2", "authority": "orm.rs model_base"},
+      {"id": "GAP-4", "prediction": "A Django chain cannot be traversed end to end: the HttpCall edge targets a Function node located in the URL-conf file, while the OrmAccess edge sources a Function node located in the view file. Node identity is (kind, name, file) under ADR-0011, so the two are different nodes even when the handler is the same function.", "expected_effect": "FALSE NEGATIVE on IN-CH-1 for every Django repository", "authority": "edge.rs backend_node, orm.rs add_access_edges, ADR-0011"},
+      {"id": "GAP-5", "prediction": "A Django URL conf naming its view as an attribute — path(\"x/\", views.create_order) — produces a handler symbol 'views.create_order', which cannot equal the defining function's own name 'create_order'.", "expected_effect": "FALSE NEGATIVE on IN-CH-1", "authority": "python.rs extract_django_route"},
+      {"id": "GAP-6", "prediction": "A model whose class name is not unique across the project is dropped entirely, including in repositories where the two classes live in unrelated apps.", "expected_effect": "conservative; counted as SAFE_REFUSAL SR-3, but reported because it may be over-broad", "authority": "orm.rs OrmAnalysis::build"},
+      {"id": "GAP-7", "prediction": "Custom Django managers — Model.active.filter(...) — are not recognised; only the literal `objects` attribute is.", "expected_effect": "FALSE NEGATIVE on IN-ORM-3", "authority": "orm.rs classify_access"}
+    ]
+  },
+
+  "chain": {
+    "definition": "frontend file -> HttpCall -> handler Function -> OrmAccess -> model Class -> Queries -> Table",
+    "identity_rule": "ADR-0011: a node is identified within one graph by (kind, name, file). A chain is FULLY_VERIFIED only when consecutive edges share a node id, never merely a name.",
+    "required_edge_attributes": ["confidence", "provenance", "evidence", "location"]
+  },
+
+  "labels": {
+    "TRUE_POSITIVE": "Cartograph produced a relationship that source inspection confirms.",
+    "FALSE_POSITIVE": "Cartograph produced a relationship that source inspection contradicts, or produced one where a safe refusal was required.",
+    "FALSE_NEGATIVE": "An in_scope relationship exists in source and Cartograph did not produce it. Every known_implementation_gap miss lands here.",
+    "SAFE_REFUSAL": "Cartograph correctly produced nothing because the evidence is insufficient.",
+    "UNSUPPORTED": "The pattern is listed in out_of_scope.",
+    "AMBIGUOUS": "Several candidates are equally plausible and no deterministic rule separates them; no edge is produced."
+  },
+
+  "denominators": {
+    "precision": "TP / (TP + FP), over relationships Cartograph produced and ground truth classifies. Safe refusals and unsupported patterns produce no relationship, so they cannot enter this ratio.",
+    "recall": "TP / (TP + FN), over in_scope ground-truth relationships only. UNSUPPORTED, SAFE_REFUSAL and AMBIGUOUS records are excluded from the denominator and their counts are reported alongside, so the exclusion is visible and can be checked.",
+    "chain_success": "chains fully verified by graph traversal / in_scope ground-truth chains.",
+    "explicitly_not_done": "No relationship is moved between in_scope and out_of_scope after an evaluation pass. The evaluator records the sha256 of this file with every result set."
+  }
+}

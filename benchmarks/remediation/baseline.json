@@ -1,0 +1,54 @@
+{
+  "base_checkpoint": {
+    "commit": "ef26ae27143ff8a8f1e49b5a618ad5a615092cc8",
+    "tag": "cartograph-m06"
+  },
+  "baseline_metrics": {
+    "chain_recall": "UNMEASURED",
+    "chains_from_frontend_file": 0,
+    "chains_fully_verified": 6,
+    "http_call_edges": 1458,
+    "http_call_recall": "UNMEASURED",
+    "orm_access_edges": 11843,
+    "orm_access_recall": "UNMEASURED",
+    "orm_access_unconfirmable": 286,
+    "queries": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 48
+    },
+    "routes": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 101
+    }
+  },
+  "cartograph_commit": "5cdafca3bd20dd5dc93bb88609971ac8717b8171",
+  "corpus_sha256": "ca61401e77e250a11840aa625fb0caf4a6788d94c7add1d04c4acd17926b4a01",
+  "frozen_at": "2026-08-21",
+  "ground_truth_sha256": {
+    "airflow": "b7625468cb8ad25165b33aaefc0139cdd4218277c2f4046a549a6e6354b79b44",
+    "autogpt": "80bfdcac2095f777acc0c7f16a64694ce0b706028057fc06638ace7a129cdff2",
+    "full-stack-fastapi": "f54941c7445beb8dd537827e00dbd3bab5fefaeea3f7260eb80c232146931e08",
+    "onyx": "fcd455d0c7db44e0a881fba36d847d77d285d011d30f85ccae3c8f55a124bb5e",
+    "posthog": "970f91ee920cf90ef3523987280ef43647abbc70e997f4749d6fc34f841e018e",
+    "superset": "644bfd4add12bc0130b5507845a717df9065316f33b2c0df3949305e854e51f7",
+    "zulip": "3162a1eeaf05386ab2b30ef7ce24ca45a1d0eef6ab45c784073d37b1e3a4499d"
+  },
+  "m07_branch": "feature/m07-real-validation",
+  "m07_branch_commit": "5cdafca3bd20dd5dc93bb88609971ac8717b8171",
+  "m07_pull_request": 10,
+  "purpose": "The exact state the M07 remediation is measured against. The original M07 result is immutable; nothing under benchmarks/results/ may be edited by this work.",
+  "result_sha256": {
+    "m07-pass1-evaluation": "cfeb344d9350653adb9bba392e1ceb562aaa01852fb0365e43c5104e58c63b87",
+    "m07-pass1-measurements": "f8230ff9ff231be13140cbe4050bb7b42b5159b8c06803469dc9b5652dc1efda",
+    "m07-pass2-evaluation": "8523f0e4db94682ece248bee12d89c0525ab6e07ab35c4142489b71e63ed5b36",
+    "m07-pass2-measurements": "1348557f2023878dae91401c8c081a60fe39c9963c5cd15a9908faa829f45c0b"
+  },
+  "schema": "cartograph.remediation-baseline/1",
+  "supported_subset_sha256": "1410a01ffc729421b41da16daf36a91005cece987b9716eefb476f42385db2f9"
+}

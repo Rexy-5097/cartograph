@@ -7,15 +7,29 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M07 — Verified full-stack chain** (unlocked, not started) |
-| Status | M00–M06 **ACCEPTED**; M07 unlocked, no code written |
-| Branch | `main` |
+| Active milestone | **M07 — Verified full-stack chain** (awaiting review) |
+| Status | M00–M06 **ACCEPTED**; M07 validation PR #10 and remediation PR #11 open, neither merged |
+| Branch | `feature/m07-remediation-accuracy` |
 | Next permitted milestone | M07 — **unlocked**; M08 locked until M07 is accepted |
 | Last accepted checkpoint | `cartograph-m06` (immutable, commit `ef26ae2`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
 
+- **M07 remediation** — import resolution, configuration-object requests,
+  router prefix composition and client-wrapper call edges. Three complete
+  chains now run from a hand-written React component to a database table on
+  Airflow. 379 false ORM accesses removed, including five of M07's six
+  reported chains. Route and Queries metrics unchanged at 1.000.
+- **M07: real-repository validation** — a pinned seven-repository corpus,
+  scope declared before measuring, ground truth authored by an instrument that
+  never sees analyser output, two full passes, and eleven attacks on the
+  benchmark's own machinery. Route extraction and model-to-table resolution
+  both reach precision 1.000 and recall 1.000 on their in-scope ground truth.
+  **Six fully verified chains across seven repositories, none beginning at a
+  frontend file** — real frontends call through generated client wrappers, so
+  no URL appears at the call site. Five engine defects found by reading output;
+  ten future-work items recorded and none built.
 - Rust workspace, six crates. Domain model (evidence/provenance/confidence
   enforced by construction), architecture graph over petgraph, testkit with
   the spec's worked cross-stack chain as fixtures.

@@ -14,12 +14,14 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use cartograph_core::{EdgeKind, NodeKind, Provenance};
 use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_resolver::{
-    MatchResult, MatchStatus, OrmAnalysis, RouteIndex, add_edge_for_match, add_orm_edges,
-    collect_exported_constants, match_client, normalize_client_call, normalize_route_declaration,
-    resolve_url, scope_for_file, with_resolved_url,
+    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
+    add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
+    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
+    with_composed_prefix, with_resolved_url,
 };
 use serde::Serialize;
 
@@ -42,6 +44,10 @@ struct Totals {
     orm_tables: usize,
     orm_edges: usize,
     orm_ambiguous: usize,
+    /// Routes whose served path was composed from enclosing router prefixes.
+    routes_composed: usize,
+    /// Calls from a caller into a client wrapper that issues a request.
+    client_call_edges: usize,
     /// Dynamic URLs the evaluator fully determined (M05).
     dynamic_resolved: usize,
     /// Dynamic URLs partly determined, with the gaps kept explicit.
@@ -88,10 +94,53 @@ struct JsonOrm {
     accessed_by: Vec<String>,
 }
 
+/// One graph node, in the shape `--json` promises.
+///
+/// Exported so a reader — or the M07 benchmark — can verify **node identity**
+/// rather than infer it. Two edges that name the same handler are only part of
+/// one chain if they share a node id, and no summary can show that.
+#[derive(Debug, Serialize)]
+struct JsonNode {
+    id: u64,
+    kind: NodeKind,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+}
+
+/// One graph edge, with the four attributes the domain model requires.
+#[derive(Debug, Serialize)]
+struct JsonEdge {
+    id: u64,
+    source: u64,
+    target: u64,
+    kind: EdgeKind,
+    confidence: f32,
+    provenance: Provenance,
+    evidence: String,
+    file: String,
+    line: u32,
+}
+
+/// The graph a run produced, as built — not a re-derivation.
+#[derive(Debug, Serialize)]
+struct JsonGraph {
+    node_count: usize,
+    edge_count: usize,
+    nodes: Vec<JsonNode>,
+    edges: Vec<JsonEdge>,
+}
+
 #[derive(Debug, Serialize)]
 struct JsonReport {
     root: String,
+    /// Wall-clock time for extraction, resolution and graph construction.
+    elapsed_ms: u128,
     totals: Totals,
+    /// The graph itself, so traversal can be checked rather than assumed.
+    graph: JsonGraph,
     matches: Vec<JsonMatch>,
     orm: Vec<JsonOrm>,
     /// Model names claimed by more than one class, which resolve to nothing.
@@ -109,6 +158,9 @@ struct Outcome {
     totals: Totals,
     results: Vec<MatchResult>,
     orm: OrmAnalysis,
+    /// Kept rather than dropped: the graph is the deliverable, and the
+    /// decisions above are only the reasoning that produced it.
+    graph: ArchitectureGraph,
     elapsed: std::time::Duration,
 }
 
@@ -133,14 +185,31 @@ fn analyse(path: &Path) -> Result<Outcome> {
         );
     }
     let exported = collect_exported_constants(&analyses);
+    // A route's served path is not the path its decorator states: the router
+    // it is registered on may carry a prefix, and that router may itself be
+    // included in another. Composing them is what lets a frontend asking for
+    // `/api/v2/pools` meet a decorator that says `""`.
+    let modules = ModuleIndex::build(&analyses);
+    let routers = RouterIndex::build(&analyses, &modules);
 
     for analysis in &analyses {
         totals.files += 1;
         let scope = scope_for_file(analysis, &exported);
 
         for route in &analysis.routes {
+            // An unresolved or ambiguous prefix leaves the route exactly as
+            // declared, so composition can only ever make a path more
+            // complete — never replace a known path with a guessed one.
+            let composed = route
+                .receiver
+                .as_ref()
+                .and_then(|r| routers.prefix_for(&analysis.path, r))
+                .and_then(|resolution| with_composed_prefix(route, resolution));
+            if composed.is_some() {
+                totals.routes_composed += 1;
+            }
             backend.push(normalize_route_declaration(
-                route,
+                composed.as_ref().unwrap_or(route),
                 &analysis.path,
                 analysis.language,
             ));
@@ -189,6 +258,10 @@ fn analyse(path: &Path) -> Result<Outcome> {
             totals.edges += 1;
         }
     }
+    // The client wrapper stays on the path: a component calls a generated
+    // client function, and that function issues the request.
+    totals.client_call_edges = add_client_call_edges(&mut graph, &analyses, &modules, None)?;
+
     // M06: handler → model → table, over the same graph so the cross-stack
     // chain stays connected (ADR-0011).
     let orm = OrmAnalysis::build(&analyses);
@@ -207,6 +280,7 @@ fn analyse(path: &Path) -> Result<Outcome> {
         totals,
         results,
         orm,
+        graph,
         elapsed,
     })
 }
@@ -216,6 +290,7 @@ fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
         totals,
         results,
         orm,
+        graph,
         elapsed,
     } = outcome;
 
@@ -250,7 +325,9 @@ fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
 
         let report = JsonReport {
             root: path.display().to_string(),
+            elapsed_ms: elapsed.as_millis(),
             totals,
+            graph: json_graph(&graph),
             matches: results.iter().map(json_match).collect(),
             orm: orm_rows,
             orm_ambiguous: orm.ambiguous.clone(),
@@ -294,6 +371,48 @@ fn json_match(result: &MatchResult) -> JsonMatch {
                 reasons: c.reasons.iter().map(|r| format!("{r:?}")).collect(),
             })
             .collect(),
+    }
+}
+
+/// Serialises the graph exactly as it was built.
+///
+/// Nodes and edges are emitted in id order so two runs over the same tree
+/// produce byte-identical output, which is what makes a benchmark result
+/// comparable between passes.
+fn json_graph(graph: &ArchitectureGraph) -> JsonGraph {
+    let mut nodes: Vec<JsonNode> = graph
+        .nodes()
+        .map(|n| JsonNode {
+            id: n.id().as_u64(),
+            kind: n.kind(),
+            name: n.name().to_owned(),
+            file: n.location().map(|l| l.file().to_owned()),
+            line: n.location().map(cartograph_core::SourceLocation::line),
+        })
+        .collect();
+    nodes.sort_by_key(|n| n.id);
+
+    let mut edges: Vec<JsonEdge> = graph
+        .edges()
+        .map(|e| JsonEdge {
+            id: e.id().as_u64(),
+            source: e.source().as_u64(),
+            target: e.target().as_u64(),
+            kind: e.kind(),
+            confidence: e.confidence().get(),
+            provenance: e.provenance(),
+            evidence: e.evidence().as_str().to_owned(),
+            file: e.location().file().to_owned(),
+            line: e.location().line(),
+        })
+        .collect();
+    edges.sort_by_key(|e| e.id);
+
+    JsonGraph {
+        node_count: graph.node_count(),
+        edge_count: graph.edge_count(),
+        nodes,
+        edges,
     }
 }
 
@@ -363,6 +482,14 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
     println!(
         "Dynamic URLs       {} fully resolved, {} partially",
         totals.dynamic_resolved, totals.dynamic_partial
+    );
+    println!(
+        "Routers            {} route(s) given a composed served path",
+        totals.routes_composed
+    );
+    println!(
+        "Client wrappers    {} call edge(s) into a function that issues a request",
+        totals.client_call_edges
     );
     println!("HttpCall edges     {}", totals.edges);
     println!(
