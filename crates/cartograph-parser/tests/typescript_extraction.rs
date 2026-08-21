@@ -787,3 +787,125 @@ fn a_templated_configuration_url_keeps_its_unknown_parts() {
         analysis.http_calls[0].url
     );
 }
+
+// ── M07 acceptance: a handler is a handler however it is produced ────
+//
+// Three shapes of the same family, found one at a time on real repositories:
+// an inline function (M07 remediation), a named reference (PR #12), and a
+// factory call (this). Each was a server route registration matched to an
+// unrelated Python endpoint. They are asserted together so the family cannot
+// be closed a third of the way again.
+
+/// The exact shape the M07 acceptance audit halted on.
+///
+/// `PostHog`, `nodejs/src/common/api/router.ts:43`. Matched to
+/// `services/stripe-mock/src/stripe_mock/main.py:76` — a different service.
+#[test]
+fn a_factory_call_handler_is_not_an_http_request() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "nodejs/src/common/api/router.ts",
+            r"
+export function setupCommonRoutes(app, services) {
+    app.get('/_health', buildGetHealth(services));
+    app.get('/_ready', buildGetHealth(services));
+    return app;
+}
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a factory-call route handler became a request: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn every_route_registration_shape_is_refused() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "services/proxy/src/routes.ts",
+            r"
+export function register(app, handlers, factory) {
+    app.get('/a', (req, res) => res.end());
+    app.post('/b', function (req, res) { res.end(); });
+    app.get('/c', handler);
+    app.get('/d', handlers.health);
+    app.get('/e', buildHealthHandler());
+    app.get('/f', buildHealthHandler(services));
+    app.get('/g', factory.createHandler());
+    app.get('/h', requireAuth, handleGuarded);
+}
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a route registration became a request: {:?}",
+        analysis.http_calls
+    );
+}
+
+/// The control the rule must not break.
+///
+/// Without this the fix could be "reject every call expression", which would
+/// silence the false positive by deleting real requests too.
+#[test]
+fn a_known_http_client_still_makes_requests_whatever_it_is_passed() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            r"
+http.get('/api/orders', callback);
+http.get('/api/items', makeCallback());
+http.get('/api/users', factory.makeCallback());
+client.post('/api/orders', payload);
+axios.get('/api/charts', buildOptions());
+api.put('/api/pools', { body: payload });
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(
+        analysis.http_calls.len(),
+        6,
+        "a known client's requests were suppressed: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn an_unknown_receiver_passing_options_is_still_a_request() {
+    // The other side of the boundary: options, not handlers. A request may be
+    // made by any object, and an object literal argument is not a handler.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/service.ts",
+            r"
+svc.post('/api/orders', { body: payload });
+svc.get('/api/orders');
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
+}
+
+#[test]
+fn the_configuration_object_form_is_unaffected_by_the_handler_rule() {
+    // Zulip's real frontend requests, which must survive every tightening.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "web/src/reload.ts",
+            r"
+void channel.get({ url: '/compatibility', success() { done(); } });
+void channel.post({ url: '/emails/', data });
+",
+        )
+        .expect("fixture parses");
+    assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
+}

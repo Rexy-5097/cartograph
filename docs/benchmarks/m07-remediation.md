@@ -168,13 +168,30 @@ false positive in 1,737 `HttpCall` edges: PostHog's
 Django's `metrics_view`. The remediation had refused registrations with inline
 handlers and documented the named-handler case as still indistinguishable.
 
-It is now refused too. A registration passes handlers, written inline or
-referenced by name; a request passes options. The rule applies only to a
-receiver that is not a known HTTP client, because Node's own
-`http.get(url, callback)` passes a function and is a real request. Exactly one
-edge in the corpus matched the shape — the false positive itself — so nothing
-correct was lost, and Zulip's four hand-written frontend requests through
-`channel.get({url})` are untouched.
+It is now refused too. A registration passes handlers; a request passes
+options. The rule applies only to a receiver that is not a known HTTP client,
+because Node's own `http.get(url, callback)` passes a function and is a real
+request.
+
+**The family took three passes to close, one shape at a time.** The
+remediation refused handlers written inline. The first acceptance audit found
+`app.get('/_metrics', getMetrics)` — a named reference — and refused that. The
+second acceptance audit found `app.get('/_health', buildGetHealth(services))`
+— a factory call — and halted rather than accept M07 with it standing. All
+three are now one rule, and one fixture asserts all three together so the
+family cannot be closed a third of the way again:
+
+| Shape | Example | Found by |
+|---|---|---|
+| inline function | `app.get('/x', (c) => …)` | M07 remediation |
+| named reference | `app.get('/x', getMetrics)` | acceptance audit 1 |
+| factory call | `app.get('/x', buildHandler(deps))` | acceptance audit 2 |
+
+Each time, exactly one corpus edge matched the newly-refused shape and no true
+positive was lost. Zulip's four hand-written frontend requests through
+`channel.get({url})`, and a known client's `http.get(url, makeCallback())`,
+are untouched — the receiver check, not the argument shape, is what keeps the
+rule contextual.
 
 ## Still not solved
 
