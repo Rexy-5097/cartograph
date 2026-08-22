@@ -7,14 +7,22 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M08 — confidence calibration and measurement** (PR open, not accepted) |
-| Status | M00–M07 **ACCEPTED**; M08 measurement complete, PR #14 open, not merged |
-| Branch | `feature/m08-calibration` |
-| Next permitted milestone | M08 — **unlocked**; M09 locked until M08 is accepted |
-| Last accepted checkpoint | `cartograph-m07` (immutable, commit `2514f77`) |
+| Active milestone | **M09 — CLI polish, trace, JSON output, v0.1.0** (unlocked, not started) |
+| Status | M00–M08 **ACCEPTED**; M09 unlocked, no code written |
+| Branch | `main` |
+| Next permitted milestone | M09 — **unlocked**; M10 locked until M09 is accepted |
+| Last accepted checkpoint | `cartograph-m08` (immutable, commit `9dbb38e`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
+
+- **M08: ACCEPTED** — a measurement baseline, not completed calibration
+  science. Confidence is an uncalibrated prior selected by evidence class,
+  not a probability. ECE 0.1819/0.1825, MCE 0.35, all under-confidence;
+  overconfidence is unmeasurable because the low bands have no verified
+  observations. Recall measured where M07 left it open: HttpCall 117/129,
+  OrmAccess 1401/1883, chains 3 of 5. **24.9% of edges are unverifiable and
+  every figure is an upper bound.** No production threshold changed.
 
 - **M07: ACCEPTED** — the acceptance criterion is met four times over. Four
   complete chains run from hand-written React components in Airflow's UI,

@@ -453,6 +453,83 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M08 — Confidence calibration and measurement
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-22 by the project owner |
+| Base | `cartograph-m07` — commit `2514f77` |
+| Branch | `feature/m08-calibration` · PR [#14](https://github.com/Rexy-5097/cartograph/pull/14) (merged `9dbb38e`) |
+| Provisional checkpoint | none — ADR-0010: none was needed |
+| **Accepted checkpoint** | **`cartograph-m08`** — commit `9dbb38e`, immutable |
+
+> A measurement milestone. The analyser is **byte-identical to
+> `cartograph-m07`** — `git diff cartograph-m07 main -- crates/` is empty — so
+> no production confidence value or threshold changed, and M07's graph
+> behaviour holds by construction rather than by re-measurement.
+
+### Scope delivered
+
+An independent per-edge labeller that re-derives every relationship from
+source, including a second implementation of router prefix composition written
+from FastAPI's semantics; a labelled dataset of 14,932 edges bound to the
+digests of its inputs **and of its own records**; calibration by confidence
+value, provenance and relationship class; threshold trade-offs; recall for the
+three classes M07 left unmeasured; a holdout split computed from edge identity;
+sixteen integrity checks; and QG-009 enforcement of all of it.
+
+### Gate results
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 405 tests |
+| `benchmarks/m08/test_calibration.py` | PASS — 23 tests (run by `make gates`) |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 100/100 |
+| CI on `9dbb38e` | PASS |
+
+### Findings
+
+**Confidence is an uncalibrated prior selected by evidence class, not a
+probability.** Seven distinct values across 14,932 edges, 79% at exactly 0.80.
+Grouping by confidence and grouping by evidence are the same partition.
+
+| | |
+|---|---|
+| ECE | **0.1819** development · **0.1825** holdout |
+| MCE | **0.35** |
+| Direction | **under**-confidence — observed ~1.0 against stated 0.80–0.98 |
+| `HttpCall` recall | **117/129** within the generated-client scope |
+| `OrmAccess` recall | **1401/1883** within the import-bound scope |
+| Chain recall | **3 of 5** |
+| False positives | **1** in 11,221 verified edges |
+| Integrity / adversarial | 16/16 · 14/14 pipeline · 8/8 gate |
+
+**These measurements are bounded by the independently verifiable subset and
+should not be interpreted as corpus-wide accuracy.**
+
+### Accepted limitations — preserved, not resolved
+
+1. **24.9% of edges (3,711 of 14,932) are unverifiable from source**, and not a
+   random quarter: an edge is unverifiable for the same reasons it is weak.
+2. **The low-confidence bands have zero verified observations** — 0.64, 0.72
+   and 0.784, 697 edges between them. 0.65 has eight, too few to estimate from.
+3. **Overconfidence is therefore unmeasured.** Only under-confidence could be
+   observed.
+4. **The chain-recall denominator is five.** Reported as a count, never a rate.
+5. **One false positive remains, deliberately.** A function-local `class Element`
+   in a PostHog test shadows a real ORM model; M08 measures rather than patches.
+6. **Recall is scope-specific**, one repository and one client family — not
+   corpus-wide.
+
+M08 is accepted as a trustworthy measurement baseline, not as completed
+calibration science.
+
 ## M07 — Full-stack verification on real repositories
 
 | Field | Value |

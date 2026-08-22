@@ -4,10 +4,10 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M08
-status: IN_PROGRESS            # measurement complete, PR open, NOT accepted
-current_branch: feature/m08-calibration
-next_allowed_milestone: M08    # UNLOCKED - M07 accepted; M09 locked until M08 is accepted
+current_milestone: M09
+status: NOT_STARTED
+current_branch: main
+next_allowed_milestone: M09    # UNLOCKED - M08 accepted; M10 locked until M09 is accepted
 
 milestones:
   M00:
@@ -95,37 +95,55 @@ milestones:
       orm_access_recall: UNMEASURED
       chain_recall: UNMEASURED
   M08:
-    status: IN_PROGRESS                   # PR open, not merged, not tagged
+    status: ACCEPTED
+    accepted: 2026-08-22
     pull_request: 14
-    provisional_tag: null
-    accepted_tag: null
+    provisional_tag: null                 # ADR-0010: none needed
+    accepted_tag: cartograph-m08          # immutable
+    merge_commit: 9dbb38ecf180ae82102dd49949c584c1f69794a9
+    product_change: none                  # analyser byte-identical to cartograph-m07
     finding: |
       Confidence is an uncalibrated prior selected by evidence class, not a
-      probability: seven distinct values across 14,932 edges. Measured ECE
-      0.182 and MCE 0.35, both in the direction of UNDER-confidence. A quarter
-      of edges (24.9%) cannot be verified from source and are concentrated
-      where evidence is weakest, so every accuracy figure is an upper bound.
-      The three low-confidence bands have ZERO verified observations, so
-      overconfidence is not measurable at all.
+      probability: seven distinct values across 14,932 edges, 79% at exactly
+      0.80. Measured ECE 0.1819 development / 0.1825 holdout and MCE 0.35, all
+      in the direction of UNDER-confidence. Overconfidence could not be
+      measured at all: the low-confidence bands have zero verified
+      observations.
+
+      These measurements are bounded by the independently verifiable subset
+      and should not be interpreted as corpus-wide accuracy.
     metrics:
       edges_labelled: 14932
       verified: 11221
-      unverifiable: 3711
-      false_positives: 1
+      unverifiable: 3711                  # 24.9%, concentrated where evidence is weakest
+      false_positives: 1                  # deliberately recorded, not fixed
       ece_development: 0.1819
       ece_holdout: 0.1825
       mce: 0.35
-      http_call_recall: 0.907        # 117/129, airflow generated-client scope
-      orm_access_recall: 0.744       # 1401/1883, airflow import-bound scope
-      chain_recall: "3 of 5"         # too small for a stable estimate
+      http_call_recall: "117/129"         # generated-client scope
+      orm_access_recall: "1401/1883"      # import-bound scope
+      chain_recall: "3 of 5"              # denominator too small for a rate
       integrity_checks: "16/16"
       adversarial_attacks_detected: "14/14 pipeline, 8/8 gate"
+      production_thresholds_changed: none
+    accepted_limitations:
+      - 24.9% of edges are unverifiable from source, and not a random quarter
+      - low-confidence bands (0.64, 0.72, 0.784) have zero verified observations
+      - overconfidence is therefore unmeasured
+      - the chain-recall denominator is five
+      - one false positive remains, deliberately recorded
+      - recall is scope-specific, not corpus-wide
+  M09:
+    status: NOT_STARTED                   # unlocked; no code written
+    pull_request: null
+    provisional_tag: null
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M07
+  milestone: M08
   class: accepted
-  tag: cartograph-m07
-  merge_commit: 2514f771188a94a0fd51ff31d9f819687b80f0ec
+  tag: cartograph-m08
+  merge_commit: 9dbb38ecf180ae82102dd49949c584c1f69794a9
 
 gates:                           # feature/m07-real-validation, 2026-08-20 (QG-001..009)
   repository: PASS               # QG-001
@@ -137,7 +155,7 @@ gates:                           # feature/m07-real-validation, 2026-08-20 (QG-0
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M07 deliverables present, no M08+ capability
   agentos_validator: PASS        # 99/100
-  ci: PASS                       # main at 2514f77 green
+  ci: PASS                       # main at 9dbb38e green
 
 tests:
   total: 405
