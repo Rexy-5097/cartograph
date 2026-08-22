@@ -5,8 +5,77 @@ All notable changes to Cartograph are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Cartograph is pre-release. No version has shipped; the first public release is
-v0.1.0 at milestone M09.
+## [0.1.0] — 2026-08-22
+
+The first public release. Milestone M09.
+
+The engine was validated at M07 and measured at M08; M09 turns it into a CLI an
+external developer can install and use. **No resolver logic changed** — the
+analyser is byte-identical to the accepted M08 state, and all seven benchmark
+repositories reproduce that state's graph edge for edge.
+
+### Added
+
+- **`cartograph .`** — the default command. Analyses a repository and reports
+  what it found under three headings, in vocabulary chosen not to overclaim:
+  **observed** (the source says this), **resolved** (the resolver determined
+  this), **refused** (the resolver declined to claim this). Refusals are printed
+  at the same weight as results, because a tool that shows its successes
+  prominently and its refusals in small type is misrepresenting its own
+  reliability. The summary never says *verified*.
+- **`cartograph trace <symbol>`** — follows one symbol's relationships across
+  the stack, walking the graph outward and reporting each hop's confidence,
+  provenance, evidence and locations. The path comes out of the graph; nothing
+  is re-derived in the CLI.
+  - An ambiguous symbol lists its candidates and exits `6`. Nothing is chosen —
+    picking one would make the answer depend on iteration order.
+  - A fork prints `branch 1 of 2`, because two successors printed in sequence
+    read as `A → B → C` when the graph says `A → B` and `A → C`.
+  - A break is marked with why: chain end, depth limit, or cycle. Where the
+    chain stops in a file that also holds refused observations, those are shown
+    and labelled as being in the same file rather than attributed to the symbol.
+- **A versioned JSON contract** — `schema_version` `1.0`, published as
+  [a schema file](docs/architecture/cartograph-output-1.0.schema.json) that the
+  test suite executes against real output rather than merely describing. Every
+  serialised edge carries source, target, kind, confidence, provenance, evidence
+  and location.
+- **Documented exit codes** — `0` success, `2` usage, `3` input, `4` analysis,
+  `5` symbol not found, `6` ambiguous symbol, `7` partial analysis with
+  `--strict`. `1` is deliberately unused, so an unexpected `1` is always a
+  defect. Every code is tested through the real binary.
+- **Release distribution** — a workflow that builds a native binary per platform
+  *on that platform*, smoke-tests it there, and attaches it to the release; plus
+  an npm launcher that forwards argv, stdio and the exit code and performs no
+  analysis in JavaScript.
+- **Golden output fixtures** — the summary, trace, error and JSON documents are
+  pinned byte-for-byte with machine-specific values normalised, so a change to
+  what a user sees appears in review as a diff of the output itself.
+
+### Fixed
+
+- **`cartograph version` reported milestone `M01`** — it had, from M01 through
+  M08. The milestone is now checked against `agentos/artifacts/project-state.yaml`
+  by a unit test, so it cannot go stale quietly again; the version, commit and
+  target triple are derived rather than written down.
+- **Absolute filesystem paths leaked into `--json` output** via the `root`
+  field. Serialised output now names the repository and never the machine.
+- **A closed pipe crashed the process.** `cartograph . | head -5` panicked;
+  output is now written once and a broken pipe exits `0`.
+- **Diagnostics were miscounted.** A file that both failed and explained why was
+  excluded from the diagnostic-file count, so four diagnostics across four files
+  were reported as being across two.
+- **`repository` was a string in three commands and an object in two.** Caught
+  by the schema conformance test, unified on the object.
+- **Symbolic links are no longer followed** during discovery, so analysis cannot
+  pull source from outside the path the user named.
+
+### Known limitations
+
+Memory scales with repository size — 920 MB on a 32,000-file repository — and
+there is no incremental mode, file watching or caching between runs. That is
+M10's goal; v0.1.0 records the baseline rather than solving it. `trace` walks
+outward only. Only TypeScript, TSX and Python are read.
+[The full list](docs/releases/v0.1.0.md#known-limitations).
 
 ## [Unreleased]
 

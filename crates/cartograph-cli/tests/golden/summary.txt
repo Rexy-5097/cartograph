@@ -1,0 +1,49 @@
+Cartograph 0.1.0 — fixtures
+
+  path            <absolute>
+  languages       TypeScript (8), TSX (1), Python (10)
+  files analysed  19
+  symbols         87
+  duration        <duration>
+
+OBSERVED — what the source says
+  routes                     15   route declarations found in source
+  HTTP call sites            18   syntactically HTTP-looking calls
+  ORM models                  0   classes recognised as ORM models
+
+RESOLVED — what the resolver determined
+  database tables             0   models that resolved to a table name
+  graph                       6   nodes, 6 edges
+  cross-language              2   edges whose endpoints are different languages
+
+  by relationship
+    http-call                  6
+
+  by provenance
+    route-matcher              6   computed
+
+  by confidence (uncalibrated priors)
+    0.98                       2
+    0.90                       2
+    0.72                       2
+
+REFUSED — what the resolver declined to claim
+  ambiguous                   6   rival candidates, no edge produced
+  no match                    6   no candidate route
+  unsupported                 0   outside the supported subset
+
+DIAGNOSTICS
+  4 diagnostic(s) across 4 file(s); 2 file(s) could not be parsed
+    invalid-utf8.ts  file is not valid UTF-8
+    malformed.ts:6  unparseable region
+    python/invalid_utf8.py  file is not valid UTF-8
+    python/malformed.py:9  missing `)`
+
+Nothing above is claimed to be verified. Confidence values are the
+specification's uncalibrated priors, not measured probabilities;
+see docs/benchmarks/m08-confidence-policy.md. Refusals are by design.
+
+NEXT
+  cartograph trace <symbol>     follow one relationship, hop by hop
+  cartograph match <path>       why each of the 12 refusals happened
+  --json                        the machine-readable graph

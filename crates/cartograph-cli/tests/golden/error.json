@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "command": "trace",
+  "errors": [
+    {
+      "code": "symbol-not-found",
+      "message": "no symbol named `NoSuchSymbolAnywhere` is in the graph",
+      "hint": "the graph contains only symbols that participate in a resolved relationship; run `cartograph .` to see what was found, and note that an observation the resolver refused produces no node"
+    }
+  ]
+}

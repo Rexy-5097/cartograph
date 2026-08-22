@@ -14,7 +14,8 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use std::fmt::Write as _;
+
 use cartograph_parser::Analyzer;
 use cartograph_parser::model::FileAnalysis;
 use cartograph_resolver::{
@@ -24,6 +25,8 @@ use cartograph_resolver::{
 use serde::Serialize;
 
 use crate::discovery;
+use crate::error::{CliError, ErrorCode, ExitCode};
+use crate::json::SCHEMA_VERSION;
 
 /// Aggregate counts across a run.
 #[derive(Debug, Default, Serialize)]
@@ -37,26 +40,48 @@ struct Totals {
 }
 
 /// The `--json` payload.
+///
+/// `schema_version` and `command` are the envelope every `--json` document
+/// carries; the body is consumed unchanged by the frozen M07/M08 benchmark
+/// harness, so it is extended rather than reshaped.
 #[derive(Debug, Serialize)]
 struct JsonReport {
-    root: String,
+    schema_version: &'static str,
+    command: &'static str,
+    /// What was analysed. Never the absolute path (PART 12).
+    repository: crate::pipeline::Repository,
     totals: Totals,
     /// Every canonicalised observation, each independent of the others.
     canonical_routes: Vec<CanonicalRoute>,
 }
 
 /// Canonicalises every observation under `path`.
-pub fn run(path: &Path, json: bool) -> Result<()> {
+///
+/// # Errors
+///
+/// [`ErrorCode::InvalidPath`] when the path cannot be analysed, and
+/// [`ErrorCode::AnalysisFailed`] when extraction itself breaks.
+pub fn run(path: &Path, json: bool) -> Result<(String, ExitCode), CliError> {
     let (root, files) = discovery::discover(path)?;
-    let mut analyzer = Analyzer::new().context("loading grammars")?;
+    let mut analyzer = Analyzer::new().map_err(|error| {
+        CliError::new(
+            ErrorCode::AnalysisFailed,
+            "the TypeScript, TSX and Python grammars could not be loaded",
+        )
+        .with_hint(format!("underlying cause: {error}"))
+    })?;
 
     let mut canonical = Vec::new();
     let mut totals = Totals::default();
 
     for rel in &files {
-        let analysis: FileAnalysis = analyzer
-            .analyze_file(&root, rel)
-            .with_context(|| format!("analysing {rel}"))?;
+        let analysis: FileAnalysis = analyzer.analyze_file(&root, rel).map_err(|error| {
+            CliError::new(
+                ErrorCode::AnalysisFailed,
+                format!("analysis failed while reading `{rel}`"),
+            )
+            .with_hint(format!("underlying cause: {error}"))
+        })?;
         totals.files += 1;
 
         for route in &analysis.routes {
@@ -87,18 +112,28 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
 
     if json {
         let report = JsonReport {
-            root: path.display().to_string(),
+            schema_version: SCHEMA_VERSION,
+            command: "normalize",
+            repository: crate::pipeline::Repository::describe(path, &root),
             totals,
             canonical_routes: canonical,
         };
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        let mut text = serde_json::to_string_pretty(&report).map_err(|error| {
+            CliError::new(
+                ErrorCode::AnalysisFailed,
+                "the result could not be serialised as JSON",
+            )
+            .with_hint(format!("underlying cause: {error}"))
+        })?;
+        text.push('\n');
+        Ok((text, ExitCode::Success))
     } else {
-        print_summary(&canonical, &totals);
+        Ok((print_summary(&canonical, &totals), ExitCode::Success))
     }
-    Ok(())
 }
 
-fn print_summary(canonical: &[CanonicalRoute], totals: &Totals) {
+fn print_summary(canonical: &[CanonicalRoute], totals: &Totals) -> String {
+    let mut out = String::with_capacity(1024);
     for route in canonical {
         let side = match route.provenance.kind {
             ObservationKind::RouteDeclaration => "route ",
@@ -112,30 +147,42 @@ fn print_summary(canonical: &[CanonicalRoute], totals: &Totals) {
             NormalizationStatus::Partial => "partial",
             NormalizationStatus::Unsupported => "unsupported",
         };
-        println!(
+        let _ = writeln!(
+            out,
             "{side} {:<11} {}:{}",
             status, route.provenance.file, route.provenance.span
         );
-        println!("        raw       {}", route.provenance.raw_path);
+        let _ = writeln!(out, "        raw       {}", route.provenance.raw_path);
         match route.status {
             NormalizationStatus::Unsupported => {
-                println!("        canonical (none — not safely normalisable)");
+                let _ = writeln!(out, "        canonical (none — not safely normalisable)");
             }
-            _ => println!("        canonical {route}"),
+            _ => {
+                let _ = writeln!(out, "        canonical {route}");
+            }
         }
         for note in &route.notes {
-            println!("        note      {note:?}");
+            let _ = writeln!(out, "        note      {note:?}");
         }
     }
-    println!();
-    println!("Files                {}", totals.files);
-    println!("Route declarations   {}", totals.route_declarations);
-    println!("Client calls         {}", totals.client_calls);
-    println!(
+    let _ = writeln!(out);
+    let _ = writeln!(out, "Files                {}", totals.files);
+    let _ = writeln!(out, "Route declarations   {}", totals.route_declarations);
+    let _ = writeln!(out, "Client calls         {}", totals.client_calls);
+    let _ = writeln!(
+        out,
         "Canonicalised        {} exact, {} partial, {} unsupported",
         totals.exact, totals.partial, totals.unsupported
     );
-    println!();
-    println!("Each observation is canonicalised on its own. Client calls are NOT");
-    println!("matched against route declarations — that is milestone M04.");
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "Each observation is canonicalised on its own. Client calls are NOT"
+    );
+    let _ = writeln!(
+        out,
+        "matched against route declarations — that is milestone M04."
+    );
+
+    out
 }

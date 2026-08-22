@@ -1,0 +1,25 @@
+{
+  "name": "cartograph-cli",
+  "version": "0.1.0",
+  "description": "Compute the architecture. Prove the relationships. A launcher for the Cartograph native binary.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rexy-5097/cartograph.git"
+  },
+  "homepage": "https://github.com/Rexy-5097/cartograph",
+  "bin": {
+    "cartograph": "bin/cartograph.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test.js"
+  }
+}

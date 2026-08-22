@@ -1,0 +1,23 @@
+http.ts  (file)  http.ts:1
+├─ branch 1 of 2
+     │
+     ↓ HTTP-CALL   confidence 0.98   provenance route-matcher
+     │   evidence   GET /health matched GET /health at python/fastapi_routes.py:28 (health); exact HTTP method; every path segment static and equal
+     │   observed   http.ts:13
+     │
+   health  (function)  python/fastapi_routes.py:28
+     ⊘ chain ends here — no outgoing edge from this node
+├─ branch 2 of 2
+     │
+     ↓ HTTP-CALL   confidence 0.72   provenance route-matcher
+     │   evidence   GET /orders/latest matched UNKNOWN /orders/{pk}/ at python/django_urls.py:8 (views.order_detail); route declared no method; trailing slash differs; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values
+     │   observed   http.ts:15
+     │
+   views.order_detail  (function)  python/django_urls.py:8
+     ⊘ chain ends here — no outgoing edge from this node
+
+This path does not reach a database table. Every hop shown is an
+edge the resolver produced; a missing hop was refused, not hidden.
+Confidence values are uncalibrated priors, not measured probabilities.
+
+Repository fixtures — 6 nodes, 6 edges, analysed in <duration>.

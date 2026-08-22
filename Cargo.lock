@@ -87,7 +87,7 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "cartograph-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "cartograph-core",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "cartograph-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "cartograph-graph"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cartograph-core",
  "cartograph-testkit",
@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "cartograph-parser"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cartograph-core",
  "criterion",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "cartograph-resolver"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cartograph-core",
  "cartograph-graph",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "cartograph-testkit"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "cartograph-core",
  "time",

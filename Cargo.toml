@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -55,11 +55,11 @@ tree-sitter-typescript = "0.23"
 # M02: the Python grammar. Same runtime as M01; only the grammar is new.
 tree-sitter-python = "0.25"
 
-cartograph-core = { path = "crates/cartograph-core", version = "0.0.0" }
-cartograph-graph = { path = "crates/cartograph-graph", version = "0.0.0" }
-cartograph-parser = { path = "crates/cartograph-parser", version = "0.0.0" }
-cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.0.0" }
-cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.0.0" }
+cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
+cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
+cartograph-parser = { path = "crates/cartograph-parser", version = "0.1.0" }
+cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.1.0" }
+cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

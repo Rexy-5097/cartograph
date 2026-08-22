@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0",
+  "command": "trace",
+  "repository": {
+    "name": "fixtures",
+    "requested": "<absolute>"
+  },
+  "languages": {
+    "typescript": 8,
+    "tsx": 1,
+    "python": 10
+  },
+  "summary": {
+    "files": 19,
+    "symbols": 87,
+    "routes_observed": 15,
+    "http_observed": 18,
+    "orm_models": 0,
+    "tables_resolved": 0,
+    "nodes": 6,
+    "edges": 6,
+    "cross_language_edges": 2,
+    "http_call_edges": 6,
+    "client_call_edges": 0,
+    "orm_edges": 0,
+    "ambiguous": 6,
+    "no_match": 6,
+    "unsupported": 0,
+    "refused": 12,
+    "diagnostics": 4,
+    "files_failed": 2,
+    "duration_ms": "<duration>",
+  },
+  "nodes": [
+    {
+      "id": 0,
+      "kind": "file",
+      "name": "http.ts",
+      "file": "http.ts",
+      "line": 1
+    },
+    {
+      "id": 1,
+      "kind": "function",
+      "name": "health",
+      "file": "python/fastapi_routes.py",
+      "line": 28
+    },
+    {
+      "id": 2,
+      "kind": "function",
+      "name": "views.order_detail",
+      "file": "python/django_urls.py",
+      "line": 8
+    },
+    {
+      "id": 3,
+      "kind": "file",
+      "name": "python/http_calls.py",
+      "file": "python/http_calls.py",
+      "line": 1
+    },
+    {
+      "id": 4,
+      "kind": "function",
+      "name": "replace_order",
+      "file": "python/fastapi_routes.py",
+      "line": 18
+    },
+    {
+      "id": 5,
+      "kind": "function",
+      "name": "remove_order",
+      "file": "python/fastapi_routes.py",
+      "line": 23
+    }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "source": 0,
+      "target": 1,
+      "kind": "http-call",
+      "confidence": 0.98,
+      "provenance": "route-matcher",
+      "evidence": "GET /health matched GET /health at python/fastapi_routes.py:28 (health); exact HTTP method; every path segment static and equal",
+      "file": "http.ts",
+      "line": 13
+    },
+    {
+      "id": 1,
+      "source": 0,
+      "target": 2,
+      "kind": "http-call",
+      "confidence": 0.71999997,
+      "provenance": "route-matcher",
+      "evidence": "GET /orders/latest matched UNKNOWN /orders/{pk}/ at python/django_urls.py:8 (views.order_detail); route declared no method; trailing slash differs; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+      "file": "http.ts",
+      "line": 15
+    },
+    {
+      "id": 2,
+      "source": 3,
+      "target": 4,
+      "kind": "http-call",
+      "confidence": 0.9,
+      "provenance": "route-matcher",
+      "evidence": "PUT /orders/1 matched PUT /orders/{id} at python/fastapi_routes.py:18 (replace_order); exact HTTP method; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+      "file": "python/http_calls.py",
+      "line": 12
+    },
+    {
+      "id": 3,
+      "source": 3,
+      "target": 5,
+      "kind": "http-call",
+      "confidence": 0.9,
+      "provenance": "route-matcher",
+      "evidence": "DELETE /orders/1 matched DELETE /orders/{id} at python/fastapi_routes.py:23 (remove_order); exact HTTP method; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+      "file": "python/http_calls.py",
+      "line": 13
+    },
+    {
+      "id": 4,
+      "source": 3,
+      "target": 1,
+      "kind": "http-call",
+      "confidence": 0.98,
+      "provenance": "route-matcher",
+      "evidence": "GET /health matched GET /health at python/fastapi_routes.py:28 (health); exact HTTP method; every path segment static and equal",
+      "file": "python/http_calls.py",
+      "line": 15
+    },
+    {
+      "id": 5,
+      "source": 3,
+      "target": 2,
+      "kind": "http-call",
+      "confidence": 0.71999997,
+      "provenance": "route-matcher",
+      "evidence": "POST /orders/from-unknown-object matched UNKNOWN /orders/{pk}/ at python/django_urls.py:8 (views.order_detail); route declared no method; trailing slash differs; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+      "file": "python/http_calls.py",
+      "line": 19
+    }
+  ],
+  "diagnostics": [
+    {
+      "file": "invalid-utf8.ts",
+      "severity": "error",
+      "kind": "NotUtf8",
+      "message": "file is not valid UTF-8"
+    },
+    {
+      "file": "malformed.ts",
+      "severity": "error",
+      "kind": "SyntaxError",
+      "message": "unparseable region",
+      "line": 6
+    },
+    {
+      "file": "python/invalid_utf8.py",
+      "severity": "error",
+      "kind": "NotUtf8",
+      "message": "file is not valid UTF-8"
+    },
+    {
+      "file": "python/malformed.py",
+      "severity": "error",
+      "kind": "MissingToken",
+      "message": "missing `)`",
+      "line": 9
+    }
+  ],
+  "errors": [],
+  "result": {
+    "symbol": "http.ts",
+    "from": {
+      "id": 0,
+      "kind": "file",
+      "name": "http.ts",
+      "file": "http.ts",
+      "line": 1
+    },
+    "steps": [
+      {
+        "edge": {
+          "id": 0,
+          "source": 0,
+          "target": 1,
+          "kind": "http-call",
+          "confidence": 0.98,
+          "provenance": "route-matcher",
+          "evidence": "GET /health matched GET /health at python/fastapi_routes.py:28 (health); exact HTTP method; every path segment static and equal",
+          "file": "http.ts",
+          "line": 13
+        },
+        "to": {
+          "id": 1,
+          "kind": "function",
+          "name": "health",
+          "file": "python/fastapi_routes.py",
+          "line": 28
+        },
+        "stop": "chain-end"
+      },
+      {
+        "edge": {
+          "id": 1,
+          "source": 0,
+          "target": 2,
+          "kind": "http-call",
+          "confidence": 0.71999997,
+          "provenance": "route-matcher",
+          "evidence": "GET /orders/latest matched UNKNOWN /orders/{pk}/ at python/django_urls.py:8 (views.order_detail); route declared no method; trailing slash differs; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values",
+          "file": "http.ts",
+          "line": 15
+        },
+        "to": {
+          "id": 2,
+          "kind": "function",
+          "name": "views.order_detail",
+          "file": "python/django_urls.py",
+          "line": 8
+        },
+        "stop": "chain-end"
+      }
+    ],
+    "reaches_table": false,
+    "max_depth": 10
+  }
+}
