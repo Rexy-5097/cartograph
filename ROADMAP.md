@@ -31,8 +31,8 @@ real-repository validation.
 | **M04** | Cross-language resolver — TS call to Python handler | Day 8 | **Accepted** (`cartograph-m04`) |
 | **M05** | Template evaluator for dynamic URLs | Day 11 | **Accepted** (`cartograph-m05`) |
 | **M06** | ORM resolution — handler to model to table | Day 13 | **Accepted** (`cartograph-m06`) |
-| M07 | Full verified chain on a real repository | Day 14 | **Awaiting review** — validation PR #10, remediation PR #11 |
-| M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | Not started |
+| M07 | Full verified chain on a real repository | Day 14 | **Accepted** (`cartograph-m07`) |
+| M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | **Unlocked, not started** |
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | Not started |
 | M10 | Incremental engine | Week 8 | Not started |
 | M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | Not started |

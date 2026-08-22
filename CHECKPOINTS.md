@@ -457,10 +457,37 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 | Field | Value |
 |---|---|
-| Status | **AWAITING REVIEW** — not accepted, no checkpoint tag created |
-| Branch | `feature/m07-real-validation` |
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-22 by the project owner |
 | Base | `cartograph-m06` — commit `ef26ae2` |
-| Checkpoint | none. ADR-0010: the accepted tag belongs to the accepted merge commit, and no provisional tag was created because none was needed |
+| Validation | PR [#10](https://github.com/Rexy-5097/cartograph/pull/10) (merged `7986348`), containing PR [#11](https://github.com/Rexy-5097/cartograph/pull/11) remediation (merged `cb1f1db`) |
+| Acceptance-audit corrections | PR [#12](https://github.com/Rexy-5097/cartograph/pull/12) (merged `7a3e8a5`) · PR [#13](https://github.com/Rexy-5097/cartograph/pull/13) (merged `2514f77`) |
+| Provisional checkpoint | none — ADR-0010: none was needed |
+| **Accepted checkpoint** | **`cartograph-m07`** — commit `2514f77`, immutable |
+
+> The accepted commit is the PR #13 merge, not the PR #10 merge. M07 took four
+> merges: the validation that produced the negative finding, the remediation
+> that answered it, and two acceptance audits that each found one false
+> positive and refused it. Accepting an earlier commit would accept a corpus
+> with a known false positive in it.
+
+### Acceptance criterion
+
+**PASS** — four genuine frontend-originating complete chains on a real
+repository (`apache/airflow` at `9b43d6a`), each traversing shared graph nodes
+with confidence, provenance, evidence and a source location on every edge:
+
+| Origin (hand-written React) | Handler | Model | Table |
+|---|---|---|---|
+| `ui/src/components/DagActions/ParseDagButton.tsx:30` | `reparse_dag_file` | `DagPriorityParsingRequest` | `dag_priority_parsing_request` |
+| `ui/src/pages/Connections/AddConnectionButton.tsx:29` | `post_connection` | `Connection` | `connection` |
+| `ui/src/pages/Connections/TestConnectionButton.tsx:37` | `test_connection` | `Connection` | `connection` |
+| `ui/src/pages/Pools/AddPoolButton.tsx:28` | `post_pool` | `Pool` | `slot_pool` |
+
+**HttpCall recall: UNMEASURED · OrmAccess recall: UNMEASURED · chain recall:
+UNMEASURED.** No independent denominator exists for these classes. They are
+limitations of the evaluation, not evidence of absence, and M07 is accepted
+with them open because the product criterion it was created to test is met.
 
 ### Scope delivered
 

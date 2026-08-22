@@ -7,15 +7,23 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M07 — Verified full-stack chain** (awaiting review) |
-| Status | M00–M06 **ACCEPTED**; M07 validation PR #10 and remediation PR #11 open, neither merged |
-| Branch | `feature/m07-remediation-accuracy` |
-| Next permitted milestone | M07 — **unlocked**; M08 locked until M07 is accepted |
-| Last accepted checkpoint | `cartograph-m06` (immutable, commit `ef26ae2`) |
+| Active milestone | **M08 — Golden fixtures, CrossStack-Bench, calibration** (unlocked, not started) |
+| Status | M00–M07 **ACCEPTED**; M08 unlocked, no code written |
+| Branch | `main` |
+| Next permitted milestone | M08 — **unlocked**; M09 locked until M08 is accepted |
+| Last accepted checkpoint | `cartograph-m07` (immutable, commit `2514f77`) |
 | Spec | Frozen V3, August 2026 |
 
 ## What exists
 
+- **M07: ACCEPTED** — the acceptance criterion is met four times over. Four
+  complete chains run from hand-written React components in Airflow's UI,
+  through generated clients, to database tables, traversing shared graph
+  nodes with confidence, provenance, evidence and a location on every edge.
+  M07 began as a negative finding and that record stands unaltered; what
+  followed was remediation, not revision. **Recall for HttpCall, OrmAccess
+  and chains remains UNMEASURED**, and only Airflow yields frontend chains —
+  both open limitations, recorded rather than hidden.
 - **M07 remediation** — import resolution, configuration-object requests,
   router prefix composition and client-wrapper call edges. Three complete
   chains now run from a hand-written React component to a database table on

@@ -4,10 +4,10 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M07
-status: AWAITING_REVIEW        # implementation and both benchmark passes complete
-current_branch: feature/m07-remediation-accuracy
-next_allowed_milestone: M07    # UNLOCKED - M06 accepted; M08 locked until M07 is accepted
+current_milestone: M08
+status: NOT_STARTED
+current_branch: main
+next_allowed_milestone: M08    # UNLOCKED - M07 accepted; M09 locked until M08 is accepted
 
 milestones:
   M00:
@@ -61,49 +61,65 @@ milestones:
     accepted_tag: cartograph-m06          # immutable
     merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
   M07:
-    status: AWAITING_REVIEW               # PR open, CI green, not merged, not tagged
-    pull_request: 10
-    provisional_tag: null                 # ADR-0010: none needed; the accepted tag
-    accepted_tag: null                    # belongs to the accepted merge commit
-    result: |
-      Seven pinned repositories, 58,225 files. Route extraction and
-      model-to-table resolution both precision 1.000 / recall 1.000 over 101
-      and 48 in-scope ground-truth records. Six fully verified chains, NONE
-      beginning at a frontend file: 12 of 1,458 HttpCall edges have a
-      TypeScript client. The negative result is the finding.
-    remediation:                          # PR #11, branch feature/m07-remediation-accuracy
-      status: AWAITING_REVIEW
-      pull_request: 11
-      result: |
-        Import resolution, configuration-object requests, router prefix
-        composition and client-wrapper call edges. THREE complete chains now
-        run from a hand-written React component to a database table on
-        Airflow, each verified against source. 379 false OrmAccess edges
-        removed - including five of M07's six chains, which ran through a
-        response datamodel sharing a model's name. The honest M07 baseline is
-        one chain, not six. Route and Queries metrics unchanged at 1.000.
-        HttpCall, OrmAccess and chain recall remain UNMEASURED.
+    status: ACCEPTED
+    accepted: 2026-08-22
+    pull_request: 10                      # validation, merged 7986348
+    remediation_pull_request: 11          # merged cb1f1db into the validation branch
+    acceptance_fix_pull_requests: [12, 13]  # merged 7a3e8a5 and 2514f77
+    provisional_tag: null                 # ADR-0010: none needed
+    accepted_tag: cartograph-m07          # immutable
+    merge_commit: 2514f771188a94a0fd51ff31d9f819687b80f0ec
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      Four genuine frontend-originating complete chains verified on a real
+      repository (apache/airflow at 9b43d6a). Each runs from a hand-written
+      React component in ui/src through a generated client to a database
+      table, traversing shared graph nodes, with confidence, provenance,
+      evidence and a source location on every edge.
+    finding: |
+      End-to-end frontend-originating chain demonstrated on real
+      repositories; recall remains unmeasured for HttpCall, OrmAccess and
+      chain.
+    metrics:
+      routes: {tp: 101, fp: 0, fn: 0, precision: 1.0, recall: 1.0}
+      queries: {tp: 48, fp: 0, fn: 0, precision: 1.0, recall: 1.0}
+      queries_produced: 290
+      queries_source_confirmed: 290
+      orm_access_produced: 11464
+      orm_access_unconfirmable: 126     # was 286 before remediation
+      http_call_produced: 1735
+      call_edges: 1443
+      frontend_originating_chains: 4
+      false_positives: 0
+      http_call_recall: UNMEASURED
+      orm_access_recall: UNMEASURED
+      chain_recall: UNMEASURED
+  M08:
+    status: NOT_STARTED                   # unlocked; no code written
+    pull_request: null
+    provisional_tag: null
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M06
+  milestone: M07
   class: accepted
-  tag: cartograph-m06
-  merge_commit: ef26ae27143ff8a8f1e49b5a618ad5a615092cc8
+  tag: cartograph-m07
+  merge_commit: 2514f771188a94a0fd51ff31d9f819687b80f0ec
 
 gates:                           # feature/m07-real-validation, 2026-08-20 (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 399 passed, 0 failed
+  tests: PASS                    # QG-004 - 405 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008 - M07 deliverables present, no M08+ capability
   agentos_validator: PASS        # 99/100
-  ci: PENDING                    # PR #11
+  ci: PASS                       # main at 2514f77 green
 
 tests:
-  total: 399
+  total: 405
   failed: 0
 
 benchmarks:
