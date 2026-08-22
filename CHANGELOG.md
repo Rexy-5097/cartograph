@@ -10,6 +10,38 @@ v0.1.0 at milestone M09.
 
 ## [Unreleased]
 
+### Added — M08, confidence calibration and measurement
+
+**Confidence is not a probability.** It is an uncalibrated prior selected by
+evidence class: seven distinct values across 14,932 edges, 79% of them at
+exactly 0.80. Grouping by confidence and grouping by evidence are the same
+partition, so a ten-bin reliability diagram leaves six bins empty. Report:
+[docs/benchmarks/m08-report.md](docs/benchmarks/m08-report.md).
+
+- **An independent per-edge labeller** — `benchmarks/m08/label_edges.py`
+  re-derives every relationship from source, including a second implementation
+  of router prefix composition written from FastAPI's semantics rather than
+  from the resolver's code. 11,221 of 14,932 edges verified; **1 false
+  positive**.
+- **Calibration measured** — ECE 0.1819 development, 0.1825 holdout, MCE 0.35,
+  all in the direction of **under**-confidence. The split is computed from edge
+  identity and never from the label.
+- **The recall M07 left open** — `HttpCall` 117/129 (0.907), `OrmAccess`
+  1401/1883 (0.744), end-to-end chain **3 of 5**, each complete inside a scope
+  the result names.
+- **Results bound to their inputs** — corpus, subset, measurement, labeller and
+  the labelled records themselves. QG-009 refuses a result whose integrity
+  checks do not pass, and `make gates` now runs the calibration tests.
+
+### Known limitations recorded, not resolved
+
+**24.9% of edges cannot be verified from source**, concentrated where the
+evidence is weakest, so every accuracy figure is an upper bound. The three
+low-confidence bands have **zero** verified observations, so overconfidence is
+not measurable. One false positive is left unfixed deliberately: a function-local
+`class Element` in a PostHog test shadows a real ORM model, and the measurement
+is more honest counting it than patching it.
+
 ### Added — M07 remediation, accuracy-first cross-stack resolution
 
 **Three complete chains now run from a React component to a database table**,

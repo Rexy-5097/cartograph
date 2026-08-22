@@ -1,0 +1,221 @@
+{
+  "chain_recall": {
+    "boundary": "Bounded by the generated-client scope above and by the model access shapes this reader recognises. A handler reaching its model through `select(Model)` or a helper is outside it.",
+    "expected": 5,
+    "missed": 2,
+    "missed_examples": [
+      {
+        "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:3608",
+        "handler": "patch_pool",
+        "method": "PATCH",
+        "model": "Pool",
+        "table": "slot_pool",
+        "url": "/api/v2/pools/{pool_name}"
+      },
+      {
+        "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:3642",
+        "handler": "get_pools",
+        "method": "GET",
+        "model": "Pool",
+        "table": "slot_pool",
+        "url": "/api/v2/pools"
+      }
+    ],
+    "recall": 0.6,
+    "recovered": 3,
+    "recovered_examples": [
+      {
+        "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:835",
+        "handler": "enqueue_connection_test",
+        "method": "POST",
+        "model": "ConnectionTestRequest",
+        "table": "connection_test_request",
+        "url": "/api/v2/connections/enqueue-test"
+      },
+      {
+        "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:3669",
+        "handler": "post_pool",
+        "method": "POST",
+        "model": "Pool",
+        "table": "slot_pool",
+        "url": "/api/v2/pools"
+      },
+      {
+        "client": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts:4539",
+        "handler": "reparse_dag_file",
+        "method": "PUT",
+        "model": "DagPriorityParsingRequest",
+        "table": "dag_priority_parsing_request",
+        "url": "/api/v2/parseDagFile/{file_token}"
+      }
+    ],
+    "scope": "airflow: chains whose client operation, route, handler and model are all independently readable"
+  },
+  "http_call_recall": {
+    "boundary": "Complete for this generated client. It is NOT recall over every client call in the repository: hand-written callers, other clients and dynamic URLs are outside the scope and are neither counted nor claimed.",
+    "missed": 12,
+    "missed_examples": [
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3557,
+        "method": "DELETE",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/pools.py:54"
+        ],
+        "url": "/api/v2/pools/{pool_name}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3582,
+        "method": "GET",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/pools.py:79"
+        ],
+        "url": "/api/v2/pools/{pool_name}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3800,
+        "method": "GET",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/asset_state_store.py:115"
+        ],
+        "url": "/api/v2/assets/{asset_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3827,
+        "method": "PUT",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/asset_state_store.py:162"
+        ],
+        "url": "/api/v2/assets/{asset_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3855,
+        "method": "DELETE",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/asset_state_store.py:184"
+        ],
+        "url": "/api/v2/assets/{asset_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3959,
+        "method": "GET",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/task_state_store.py:186"
+        ],
+        "url": "/api/v2/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 3994,
+        "method": "PUT",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/task_state_store.py:221"
+        ],
+        "url": "/api/v2/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 4067,
+        "method": "DELETE",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/task_state_store.py:273"
+        ],
+        "url": "/api/v2/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/state-store/{key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 4106,
+        "method": "GET",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py:67"
+        ],
+        "url": "/api/v2/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}"
+      },
+      {
+        "file": "airflow-core/src/airflow/ui/openapi-gen/requests/services.gen.ts",
+        "line": 4177,
+        "method": "DELETE",
+        "routes": [
+          "airflow-core/src/airflow/api_fastapi/core_api/routes/public/xcom.py:390"
+        ],
+        "url": "/api/v2/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}"
+      }
+    ],
+    "operations_a_route_serves": 129,
+    "operations_declared": 177,
+    "operations_no_route_serves": 48,
+    "recall": 0.907,
+    "recovered": 117,
+    "scope": "airflow: every operation declared by the generated client (openapi-gen/requests/services.gen.ts)"
+  },
+  "milestone": "M08",
+  "note": "Each figure is recall within the scope it names, complete inside that boundary. None is recall over the whole corpus, and none should be quoted as such.",
+  "orm_access_recall": {
+    "boundary": "Excludes star-imported and locally-declared names, uses reached through aliases this reader does not follow, and any access shape other than `Model(...)` or `Model.objects.\u2026`.",
+    "expected": 1883,
+    "missed": 482,
+    "missed_examples": [
+      {
+        "file": "airflow-core/src/airflow/api_fastapi/execution_api/routes/task_instances.py",
+        "line": 621,
+        "model": "DagModel"
+      },
+      {
+        "file": "airflow-core/src/airflow/assets/manager.py",
+        "line": 613,
+        "model": "Log"
+      },
+      {
+        "file": "airflow-core/src/airflow/assets/manager.py",
+        "line": 646,
+        "model": "Log"
+      },
+      {
+        "file": "airflow-core/src/airflow/cli/commands/partition_command.py",
+        "line": 129,
+        "model": "DagRun"
+      },
+      {
+        "file": "airflow-core/src/airflow/cli/commands/partition_command.py",
+        "line": 133,
+        "model": "DagRun"
+      },
+      {
+        "file": "airflow-core/src/airflow/cli/commands/partition_command.py",
+        "line": 137,
+        "model": "DagRun"
+      },
+      {
+        "file": "airflow-core/src/airflow/cli/commands/partition_command.py",
+        "line": 139,
+        "model": "DagRun"
+      },
+      {
+        "file": "airflow-core/src/airflow/dag_processing/bundles/manager.py",
+        "line": 478,
+        "model": "DagVersion"
+      },
+      {
+        "file": "airflow-core/src/airflow/dag_processing/collection.py",
+        "line": 491,
+        "model": "DagModel"
+      },
+      {
+        "file": "airflow-core/src/airflow/dag_processing/collection.py",
+        "line": 492,
+        "model": "SerializedDagModel"
+      }
+    ],
+    "recall": 0.744,
+    "recovered": 1401,
+    "scope": "airflow: import-bound constructor and manager uses of models with a declared table"
+  },
+  "repository": "airflow",
+  "schema": "cartograph.m08-recall/1",
+  "status": "INTERNAL"
+}

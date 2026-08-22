@@ -1,0 +1,144 @@
+{
+  "checks": [
+    {
+      "check": "labeller unchanged since the dataset was built",
+      "detail": {
+        "now": "8334273740b0afc1",
+        "recorded": "8334273740b0afc1"
+      },
+      "passed": true
+    },
+    {
+      "check": "corpus unchanged",
+      "detail": {
+        "now": "ca61401e77e250a1",
+        "recorded": "ca61401e77e250a1"
+      },
+      "passed": true
+    },
+    {
+      "check": "supported subset unchanged",
+      "detail": {
+        "now": "1410a01ffc729421",
+        "recorded": "1410a01ffc729421"
+      },
+      "passed": true
+    },
+    {
+      "check": "every repository is at its pinned commit",
+      "detail": {
+        "mismatched": []
+      },
+      "passed": true
+    },
+    {
+      "check": "the labelled records are unchanged since the dataset was built",
+      "detail": {
+        "note": "covers deletion, relabelling, split reassignment and confidence edits",
+        "now": "69ae91fd9faf80be",
+        "recorded": "69ae91fd9faf80be"
+      },
+      "passed": true
+    },
+    {
+      "check": "the recorded label and split counts match the records present",
+      "detail": {
+        "recorded": {
+          "labels": {
+            "FALSE_POSITIVE": 1,
+            "TRUE_POSITIVE": 11220,
+            "UNVERIFIABLE": 3711
+          },
+          "splits": {
+            "development": 11153,
+            "holdout": 3779
+          }
+        }
+      },
+      "passed": true
+    },
+    {
+      "check": "the dataset retains refused and unverifiable observations",
+      "detail": {
+        "labels_present": [
+          "FALSE_POSITIVE",
+          "TRUE_POSITIVE",
+          "UNVERIFIABLE"
+        ],
+        "note": "a dataset containing only what could be verified would score itself on the easy half of its own corpus"
+      },
+      "passed": true
+    },
+    {
+      "check": "every produced relationship class is represented",
+      "detail": {
+        "kinds": [
+          "call",
+          "http-call",
+          "orm-access",
+          "queries"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "check": "development and holdout are disjoint",
+      "detail": {
+        "development": 11153,
+        "holdout": 3779,
+        "overlap": 0
+      },
+      "passed": true
+    },
+    {
+      "check": "calibration-development.json is bound to this dataset",
+      "detail": {
+        "note": "the calibration carries the digests the dataset was built from"
+      },
+      "passed": true
+    },
+    {
+      "check": "calibration-holdout.json is bound to this dataset",
+      "detail": {
+        "note": "the calibration carries the digests the dataset was built from"
+      },
+      "passed": true
+    },
+    {
+      "check": "no accuracy is reported for a group with no verified observations",
+      "detail": {
+        "violations": []
+      },
+      "passed": true
+    },
+    {
+      "check": "every small sample is flagged as statistically weak",
+      "detail": {
+        "violations": []
+      },
+      "passed": true
+    },
+    {
+      "check": "every record retains confidence, provenance and a location",
+      "detail": {
+        "missing": 0
+      },
+      "passed": true
+    },
+    {
+      "check": "labels are declared independent of analyser output",
+      "detail": {
+        "statement": "Every label is re-derived from repository source by benchmarks/m08/label_edges.py, which s..."
+      },
+      "passed": true
+    },
+    {
+      "check": "the holdout split is computed from edge identity, not from labels",
+      "detail": {
+        "method": "sha256 of (salt, repository, kind, location, edge id) modulo 4; bucket 0 is holdout"
+      },
+      "passed": true
+    }
+  ],
+  "schema": "cartograph.m08-integrity/1"
+}

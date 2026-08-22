@@ -5,8 +5,8 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M08
-status: NOT_STARTED
-current_branch: main
+status: IN_PROGRESS            # measurement complete, PR open, NOT accepted
+current_branch: feature/m08-calibration
 next_allowed_milestone: M08    # UNLOCKED - M07 accepted; M09 locked until M08 is accepted
 
 milestones:
@@ -95,10 +95,31 @@ milestones:
       orm_access_recall: UNMEASURED
       chain_recall: UNMEASURED
   M08:
-    status: NOT_STARTED                   # unlocked; no code written
-    pull_request: null
+    status: IN_PROGRESS                   # PR open, not merged, not tagged
+    pull_request: 14
     provisional_tag: null
     accepted_tag: null
+    finding: |
+      Confidence is an uncalibrated prior selected by evidence class, not a
+      probability: seven distinct values across 14,932 edges. Measured ECE
+      0.182 and MCE 0.35, both in the direction of UNDER-confidence. A quarter
+      of edges (24.9%) cannot be verified from source and are concentrated
+      where evidence is weakest, so every accuracy figure is an upper bound.
+      The three low-confidence bands have ZERO verified observations, so
+      overconfidence is not measurable at all.
+    metrics:
+      edges_labelled: 14932
+      verified: 11221
+      unverifiable: 3711
+      false_positives: 1
+      ece_development: 0.1819
+      ece_holdout: 0.1825
+      mce: 0.35
+      http_call_recall: 0.907        # 117/129, airflow generated-client scope
+      orm_access_recall: 0.744       # 1401/1883, airflow import-bound scope
+      chain_recall: "3 of 5"         # too small for a stable estimate
+      integrity_checks: "16/16"
+      adversarial_attacks_detected: "14/14 pipeline, 8/8 gate"
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M07
