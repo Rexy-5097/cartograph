@@ -7,9 +7,9 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M08 — Golden fixtures, CrossStack-Bench, calibration** (unlocked, not started) |
-| Status | M00–M07 **ACCEPTED**; M08 unlocked, no code written |
-| Branch | `main` |
+| Active milestone | **M08 — confidence calibration and measurement** (PR open, not accepted) |
+| Status | M00–M07 **ACCEPTED**; M08 measurement complete, PR #14 open, not merged |
+| Branch | `feature/m08-calibration` |
 | Next permitted milestone | M08 — **unlocked**; M09 locked until M08 is accepted |
 | Last accepted checkpoint | `cartograph-m07` (immutable, commit `2514f77`) |
 | Spec | Frozen V3, August 2026 |

@@ -507,6 +507,70 @@ def benchmark_problems():
     return problems
 
 
+def calibration_problems():
+    """Checks the M08 calibration artefacts, when a milestone has them.
+
+    Runs whenever benchmarks/m08/results/dataset.json exists, so it keeps
+    applying after the milestone that introduced it. The substance lives in
+    benchmarks/m08/verify_integrity.py; this gate refuses to let a result be
+    committed whose own integrity checks do not pass.
+    """
+    dataset = os.path.join(ROOT, "benchmarks/m08/results/dataset.json")
+    if not os.path.exists(dataset):
+        return []
+
+    problems = []
+    try:
+        data = json.loads(read_text(dataset))
+    except json.JSONDecodeError as exc:
+        return [f"the M08 dataset is not readable: {exc}"]
+
+    if not data.get("records"):
+        problems.append("the M08 dataset holds no labelled records")
+    if not data.get("records_sha256"):
+        problems.append("the M08 dataset is not bound to a digest of its own records")
+
+    labels = {r.get("label") for r in data.get("records", [])}
+    if "UNVERIFIABLE" not in labels:
+        problems.append(
+            "the M08 dataset records no unverifiable observations; a dataset "
+            "containing only what could be checked scores itself on the easy "
+            "half of its own corpus"
+        )
+
+    # Every calibration must be bound to the dataset it was computed from, and
+    # must not report an accuracy for a group it never verified.
+    for name in ("calibration-development", "calibration-holdout"):
+        path = os.path.join(ROOT, f"benchmarks/m08/results/{name}.json")
+        if not os.path.exists(path):
+            problems.append(f"no M08 {name} result recorded")
+            continue
+        cal = json.loads(read_text(path))
+        if cal.get("bound_to") != data.get("bound_to"):
+            problems.append(f"{name} was computed against different inputs than the dataset")
+        for value, entry in cal.get("by_confidence_value", {}).items():
+            if entry.get("verified") == 0 and entry.get("observed_accuracy") is not None:
+                problems.append(
+                    f"{name} reports an accuracy at confidence {value} with no verified observations"
+                )
+            if 0 < entry.get("verified", 0) < cal.get("weak_sample_threshold", 30) \
+                    and entry.get("sample_adequate"):
+                problems.append(
+                    f"{name} presents {entry['verified']} observations at confidence "
+                    f"{value} as an adequate sample"
+                )
+
+    integrity = os.path.join(ROOT, "benchmarks/m08/results/integrity.json")
+    if not os.path.exists(integrity):
+        problems.append("no M08 integrity result recorded")
+    else:
+        failed = [c["check"] for c in json.loads(read_text(integrity)).get("checks", [])
+                  if not c.get("passed")]
+        if failed:
+            problems.append(f"M08 integrity checks failing: {', '.join(failed[:3])}")
+    return problems
+
+
 def sha256_of(path):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -525,6 +589,7 @@ def qg009():
     sources = milestone_test_sources(milestone)
     entry = checkpoint_entry(milestone)
     problems += benchmark_problems()
+    problems += calibration_problems()
 
     # A milestone that has been unlocked but not started has neither
     # registered tests nor a checkpoint entry. Demanding verification findings

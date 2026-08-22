@@ -13,7 +13,7 @@ help:
 	@echo "  Cartograph — make targets"
 	@echo ""
 	@echo "  make check           fmt + lint + test + validate  (run before pushing)"
-	@echo "  make gates           Quality gates QG-001 … QG-008"
+	@echo "  make gates           Quality gates QG-001 … QG-009, and the calibration tests"
 	@echo ""
 	@echo "  make fmt             Check formatting"
 	@echo "  make fmt-fix         Apply formatting"
@@ -61,6 +61,7 @@ validate:
 
 ## Cartograph quality gates
 gates:
+	@$(PYTHON) benchmarks/m08/test_calibration.py -q
 	@$(PYTHON) agentos/tools/scripts/run_gates.py
 
 ## Remove build artifacts

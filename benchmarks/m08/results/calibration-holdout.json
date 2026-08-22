@@ -1,0 +1,656 @@
+{
+  "bound_to": {
+    "cartograph_commit": "2514f771188a94a0fd51ff31d9f819687b80f0ec",
+    "cartograph_tree_clean": true,
+    "corpus_sha256": "ca61401e77e250a11840aa625fb0caf4a6788d94c7add1d04c4acd17926b4a01",
+    "labeller_sha256": "8334273740b0afc1797677792886327ad95320732a3c4e41332315af508664fb",
+    "measurement_sha256": "c9c4edcd93cab93c35407cd1887c94d0c50dc2b673cd40762c4bb46e1eeb2046",
+    "repository_commits": {
+      "airflow": "9b43d6abc0fc0766b1b1a886657bb6befc33ee1d",
+      "autogpt": "601093ddfe23a3d58a9c8f4a208bd49b203ee612",
+      "full-stack-fastapi": "162344da111e833b30892728372ab95331f06873",
+      "onyx": "8ee706ebaa32804ae7d674bfb779f1b43609b1e4",
+      "posthog": "2dd790a6e7c3d3ab25ff8f45f07b0d0250de4c25",
+      "superset": "8222db334054172bf44789c58ab3857e4567b952",
+      "zulip": "0ce8f6278cdeacdc9b26dba6b08a63e567df87ac"
+    },
+    "supported_subset_sha256": "1410a01ffc729421b41da16daf36a91005cece987b9716eefb476f42385db2f9"
+  },
+  "by_confidence_value": {
+    "0.64": {
+      "ci95": null,
+      "false_positive": 0,
+      "observed_accuracy": null,
+      "produced": 51,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 51,
+      "unverifiable_share": 1.0,
+      "verified": 0
+    },
+    "0.65": {
+      "ci95": [
+        0.3424,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 2,
+      "sample_adequate": false,
+      "true_positive": 2,
+      "unverifiable": 0,
+      "unverifiable_share": 0.0,
+      "verified": 2
+    },
+    "0.72": {
+      "ci95": null,
+      "false_positive": 0,
+      "observed_accuracy": null,
+      "produced": 12,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 12,
+      "unverifiable_share": 1.0,
+      "verified": 0
+    },
+    "0.784": {
+      "ci95": null,
+      "false_positive": 0,
+      "observed_accuracy": null,
+      "produced": 109,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 109,
+      "unverifiable_share": 1.0,
+      "verified": 0
+    },
+    "0.8": {
+      "ci95": [
+        0.9984,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 2986,
+      "sample_adequate": true,
+      "true_positive": 2435,
+      "unverifiable": 551,
+      "unverifiable_share": 0.1845,
+      "verified": 2435
+    },
+    "0.9": {
+      "ci95": [
+        0.9855,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 457,
+      "sample_adequate": true,
+      "true_positive": 262,
+      "unverifiable": 195,
+      "unverifiable_share": 0.4267,
+      "verified": 262
+    },
+    "0.98": {
+      "ci95": [
+        0.9715,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 162,
+      "sample_adequate": true,
+      "true_positive": 131,
+      "unverifiable": 31,
+      "unverifiable_share": 0.1914,
+      "verified": 131
+    }
+  },
+  "by_provenance": {
+    "orm-resolution": {
+      "ci95": [
+        0.9984,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 2967,
+      "sample_adequate": true,
+      "true_positive": 2416,
+      "unverifiable": 551,
+      "unverifiable_share": 0.1857,
+      "verified": 2416
+    },
+    "route-matcher": {
+      "ci95": [
+        0.9829,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 433,
+      "sample_adequate": true,
+      "true_positive": 221,
+      "unverifiable": 212,
+      "unverifiable_share": 0.4896,
+      "verified": 221
+    },
+    "static-import-resolution": {
+      "ci95": [
+        0.9805,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 379,
+      "sample_adequate": true,
+      "true_positive": 193,
+      "unverifiable": 186,
+      "unverifiable_share": 0.4908,
+      "verified": 193
+    }
+  },
+  "by_provenance_calibration": {
+    "orm-resolution": {
+      "ece": 0.2,
+      "excluded_share": 0.1857,
+      "excluded_unverifiable": 551,
+      "mce": 0.2,
+      "terms": [
+        {
+          "confidence": 0.8,
+          "gap": 0.2,
+          "n": 2416,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 2416
+    },
+    "route-matcher": {
+      "ece": 0.0634,
+      "excluded_share": 0.4896,
+      "excluded_unverifiable": 212,
+      "mce": 0.35,
+      "terms": [
+        {
+          "confidence": 0.65,
+          "gap": 0.35,
+          "n": 2,
+          "observed": 1.0,
+          "sample_adequate": false
+        },
+        {
+          "confidence": 0.8,
+          "gap": 0.2,
+          "n": 19,
+          "observed": 1.0,
+          "sample_adequate": false
+        },
+        {
+          "confidence": 0.9,
+          "gap": 0.1,
+          "n": 69,
+          "observed": 1.0,
+          "sample_adequate": true
+        },
+        {
+          "confidence": 0.98,
+          "gap": 0.02,
+          "n": 131,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 221
+    },
+    "static-import-resolution": {
+      "ece": 0.1,
+      "excluded_share": 0.4908,
+      "excluded_unverifiable": 186,
+      "mce": 0.1,
+      "terms": [
+        {
+          "confidence": 0.9,
+          "gap": 0.1,
+          "n": 193,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 193
+    }
+  },
+  "by_relationship_class": {
+    "call": {
+      "ci95": [
+        0.9805,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 379,
+      "sample_adequate": true,
+      "true_positive": 193,
+      "unverifiable": 186,
+      "unverifiable_share": 0.4908,
+      "verified": 193
+    },
+    "http-call": {
+      "ci95": [
+        0.9829,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 433,
+      "sample_adequate": true,
+      "true_positive": 221,
+      "unverifiable": 212,
+      "unverifiable_share": 0.4896,
+      "verified": 221
+    },
+    "orm-access": {
+      "ci95": [
+        0.9984,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 2890,
+      "sample_adequate": true,
+      "true_positive": 2339,
+      "unverifiable": 551,
+      "unverifiable_share": 0.1907,
+      "verified": 2339
+    },
+    "queries": {
+      "ci95": [
+        0.9525,
+        1.0
+      ],
+      "false_positive": 0,
+      "observed_accuracy": 1.0,
+      "produced": 77,
+      "sample_adequate": true,
+      "true_positive": 77,
+      "unverifiable": 0,
+      "unverifiable_share": 0.0,
+      "verified": 77
+    }
+  },
+  "by_relationship_class_calibration": {
+    "call": {
+      "ece": 0.1,
+      "excluded_share": 0.4908,
+      "excluded_unverifiable": 186,
+      "mce": 0.1,
+      "terms": [
+        {
+          "confidence": 0.9,
+          "gap": 0.1,
+          "n": 193,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 193
+    },
+    "http-call": {
+      "ece": 0.0634,
+      "excluded_share": 0.4896,
+      "excluded_unverifiable": 212,
+      "mce": 0.35,
+      "terms": [
+        {
+          "confidence": 0.65,
+          "gap": 0.35,
+          "n": 2,
+          "observed": 1.0,
+          "sample_adequate": false
+        },
+        {
+          "confidence": 0.8,
+          "gap": 0.2,
+          "n": 19,
+          "observed": 1.0,
+          "sample_adequate": false
+        },
+        {
+          "confidence": 0.9,
+          "gap": 0.1,
+          "n": 69,
+          "observed": 1.0,
+          "sample_adequate": true
+        },
+        {
+          "confidence": 0.98,
+          "gap": 0.02,
+          "n": 131,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 221
+    },
+    "orm-access": {
+      "ece": 0.2,
+      "excluded_share": 0.1907,
+      "excluded_unverifiable": 551,
+      "mce": 0.2,
+      "terms": [
+        {
+          "confidence": 0.8,
+          "gap": 0.2,
+          "n": 2339,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 2339
+    },
+    "queries": {
+      "ece": 0.2,
+      "excluded_share": 0.0,
+      "excluded_unverifiable": 0,
+      "mce": 0.2,
+      "terms": [
+        {
+          "confidence": 0.8,
+          "gap": 0.2,
+          "n": 77,
+          "observed": 1.0,
+          "sample_adequate": true
+        }
+      ],
+      "verified": 77
+    }
+  },
+  "calibration_error": {
+    "ece": 0.1825,
+    "excluded_share": 0.2511,
+    "excluded_unverifiable": 949,
+    "mce": 0.35,
+    "terms": [
+      {
+        "confidence": 0.65,
+        "gap": 0.35,
+        "n": 2,
+        "observed": 1.0,
+        "sample_adequate": false
+      },
+      {
+        "confidence": 0.8,
+        "gap": 0.2,
+        "n": 2435,
+        "observed": 1.0,
+        "sample_adequate": true
+      },
+      {
+        "confidence": 0.9,
+        "gap": 0.1,
+        "n": 262,
+        "observed": 1.0,
+        "sample_adequate": true
+      },
+      {
+        "confidence": 0.98,
+        "gap": 0.02,
+        "n": 131,
+        "observed": 1.0,
+        "sample_adequate": true
+      }
+    ],
+    "verified": 2830
+  },
+  "milestone": "M08",
+  "overall": {
+    "ci95": [
+      0.9986,
+      1.0
+    ],
+    "false_positive": 0,
+    "observed_accuracy": 1.0,
+    "produced": 3779,
+    "sample_adequate": true,
+    "true_positive": 2830,
+    "unverifiable": 949,
+    "unverifiable_share": 0.2511,
+    "verified": 2830
+  },
+  "records_considered": 3779,
+  "reliability_bins": {
+    "0.0-0.1": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.1-0.2": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.2-0.3": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.3-0.4": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.4-0.5": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.5-0.6": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": null,
+      "observed_accuracy": null,
+      "produced": 0,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 0,
+      "unverifiable_share": null,
+      "verified": 0
+    },
+    "0.6-0.7": {
+      "ci95": [
+        0.3424,
+        1.0
+      ],
+      "false_positive": 0,
+      "mean_confidence": 0.6404,
+      "observed_accuracy": 1.0,
+      "produced": 53,
+      "sample_adequate": false,
+      "true_positive": 2,
+      "unverifiable": 51,
+      "unverifiable_share": 0.9623,
+      "verified": 2
+    },
+    "0.7-0.8": {
+      "ci95": null,
+      "false_positive": 0,
+      "mean_confidence": 0.7777,
+      "observed_accuracy": null,
+      "produced": 121,
+      "sample_adequate": false,
+      "true_positive": 0,
+      "unverifiable": 121,
+      "unverifiable_share": 1.0,
+      "verified": 0
+    },
+    "0.8-0.9": {
+      "ci95": [
+        0.9984,
+        1.0
+      ],
+      "false_positive": 0,
+      "mean_confidence": 0.8,
+      "observed_accuracy": 1.0,
+      "produced": 2986,
+      "sample_adequate": true,
+      "true_positive": 2435,
+      "unverifiable": 551,
+      "unverifiable_share": 0.1845,
+      "verified": 2435
+    },
+    "0.9-1.0": {
+      "ci95": [
+        0.9903,
+        1.0
+      ],
+      "false_positive": 0,
+      "mean_confidence": 0.9209,
+      "observed_accuracy": 1.0,
+      "produced": 619,
+      "sample_adequate": true,
+      "true_positive": 393,
+      "unverifiable": 226,
+      "unverifiable_share": 0.3651,
+      "verified": 393
+    }
+  },
+  "schema": "cartograph.m08-calibration/1",
+  "split": "holdout",
+  "status": "INTERNAL",
+  "thresholds": [
+    {
+      "coverage_of_verified": 1.0,
+      "false_positives_admitted": 0,
+      "kept": 2830,
+      "precision": 1.0,
+      "retained_true_positives": 1.0,
+      "threshold": 0.0
+    },
+    {
+      "coverage_of_verified": 1.0,
+      "false_positives_admitted": 0,
+      "kept": 2830,
+      "precision": 1.0,
+      "retained_true_positives": 1.0,
+      "threshold": 0.6
+    },
+    {
+      "coverage_of_verified": 1.0,
+      "false_positives_admitted": 0,
+      "kept": 2830,
+      "precision": 1.0,
+      "retained_true_positives": 1.0,
+      "threshold": 0.65
+    },
+    {
+      "coverage_of_verified": 0.9993,
+      "false_positives_admitted": 0,
+      "kept": 2828,
+      "precision": 1.0,
+      "retained_true_positives": 0.9993,
+      "threshold": 0.7
+    },
+    {
+      "coverage_of_verified": 0.9993,
+      "false_positives_admitted": 0,
+      "kept": 2828,
+      "precision": 1.0,
+      "retained_true_positives": 0.9993,
+      "threshold": 0.75
+    },
+    {
+      "coverage_of_verified": 0.9993,
+      "false_positives_admitted": 0,
+      "kept": 2828,
+      "precision": 1.0,
+      "retained_true_positives": 0.9993,
+      "threshold": 0.784
+    },
+    {
+      "coverage_of_verified": 0.9993,
+      "false_positives_admitted": 0,
+      "kept": 2828,
+      "precision": 1.0,
+      "retained_true_positives": 0.9993,
+      "threshold": 0.8
+    },
+    {
+      "coverage_of_verified": 0.1389,
+      "false_positives_admitted": 0,
+      "kept": 393,
+      "precision": 1.0,
+      "retained_true_positives": 0.1389,
+      "threshold": 0.85
+    },
+    {
+      "coverage_of_verified": 0.1389,
+      "false_positives_admitted": 0,
+      "kept": 393,
+      "precision": 1.0,
+      "retained_true_positives": 0.1389,
+      "threshold": 0.9
+    },
+    {
+      "coverage_of_verified": 0.0463,
+      "false_positives_admitted": 0,
+      "kept": 131,
+      "precision": 1.0,
+      "retained_true_positives": 0.0463,
+      "threshold": 0.95
+    },
+    {
+      "coverage_of_verified": 0.0463,
+      "false_positives_admitted": 0,
+      "kept": 131,
+      "precision": 1.0,
+      "retained_true_positives": 0.0463,
+      "threshold": 0.98
+    },
+    {
+      "coverage_of_verified": 0.0,
+      "false_positives_admitted": 0,
+      "kept": 0,
+      "precision": null,
+      "retained_true_positives": 0.0,
+      "threshold": 0.99
+    }
+  ],
+  "weak_sample_threshold": 30
+}
