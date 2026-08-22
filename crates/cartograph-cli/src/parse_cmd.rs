@@ -17,11 +17,14 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use std::fmt::Write as _;
+
 use cartograph_parser::Analyzer;
 use cartograph_parser::model::{FileAnalysis, ParseStatus};
 
 use crate::discovery;
+use crate::error::{CliError, ErrorCode, ExitCode};
+use crate::json::SCHEMA_VERSION;
 use serde::Serialize;
 use tracing::debug;
 
@@ -42,30 +45,57 @@ struct Totals {
 }
 
 /// The `--json` payload.
+///
+/// `schema_version` and `command` are the envelope every `--json` document
+/// carries (see `json`); the body predates it and is consumed unchanged by the
+/// frozen M07/M08 benchmark harness, so it is extended rather than reshaped.
 #[derive(Debug, Serialize)]
 struct JsonReport {
-    root: String,
+    schema_version: &'static str,
+    command: &'static str,
+    /// What was analysed. Never the absolute path (PART 12).
+    repository: crate::pipeline::Repository,
     totals: Totals,
     files: Vec<FileAnalysis>,
 }
 
 /// Runs extraction over `path` (a file or a directory tree).
-pub fn run(path: &Path, json: bool) -> Result<()> {
+///
+/// # Errors
+///
+/// [`ErrorCode::InvalidPath`] or [`ErrorCode::NoSupportedSources`] when the
+/// path cannot be analysed, [`ErrorCode::AnalysisFailed`] when extraction
+/// itself breaks.
+pub fn run(path: &Path, json: bool) -> Result<(String, ExitCode), CliError> {
     let (root, files) = discovery::discover(path)?;
     if files.is_empty() {
-        bail!("no TypeScript or TSX files under {}", path.display());
+        return Err(CliError::new(
+            ErrorCode::NoSupportedSources,
+            "no TypeScript, TSX or Python source files were found under that path",
+        )
+        .with_hint("supported extensions are .ts, .tsx, .mts, .cts, .py, .pyi"));
     }
 
-    let mut analyzer = Analyzer::new().context("loading grammars")?;
+    let mut analyzer = Analyzer::new().map_err(|error| {
+        CliError::new(
+            ErrorCode::AnalysisFailed,
+            "the TypeScript, TSX and Python grammars could not be loaded",
+        )
+        .with_hint(format!("underlying cause: {error}"))
+    })?;
     let started = std::time::Instant::now();
 
     let mut results = Vec::with_capacity(files.len());
     for rel in &files {
         // Path and extension were validated by discovery; a per-file failure
         // is a Failed analysis, so the walk itself cannot abort here.
-        let file_analysis = analyzer
-            .analyze_file(&root, rel)
-            .with_context(|| format!("analysing {rel}"))?;
+        let file_analysis = analyzer.analyze_file(&root, rel).map_err(|error| {
+            CliError::new(
+                ErrorCode::AnalysisFailed,
+                format!("analysis failed while reading `{rel}`"),
+            )
+            .with_hint(format!("underlying cause: {error}"))
+        })?;
         results.push(file_analysis);
     }
     let elapsed = started.elapsed();
@@ -75,15 +105,24 @@ pub fn run(path: &Path, json: bool) -> Result<()> {
 
     if json {
         let report = JsonReport {
-            root: path.display().to_string(),
+            schema_version: SCHEMA_VERSION,
+            command: "parse",
+            repository: crate::pipeline::Repository::describe(path, &root),
             totals,
             files: results,
         };
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        let mut text = serde_json::to_string_pretty(&report).map_err(|error| {
+            CliError::new(
+                ErrorCode::AnalysisFailed,
+                "the result could not be serialised as JSON",
+            )
+            .with_hint(format!("underlying cause: {error}"))
+        })?;
+        text.push('\n');
+        Ok((text, ExitCode::Success))
     } else {
-        print_summary(&results, &totals, elapsed);
+        Ok((print_summary(&results, &totals, elapsed), ExitCode::Success))
     }
-    Ok(())
 }
 
 fn tally(analyses: &[FileAnalysis]) -> Totals {
@@ -106,14 +145,20 @@ fn tally(analyses: &[FileAnalysis]) -> Totals {
     totals
 }
 
-fn print_summary(analyses: &[FileAnalysis], totals: &Totals, elapsed: std::time::Duration) {
+fn print_summary(
+    analyses: &[FileAnalysis],
+    totals: &Totals,
+    elapsed: std::time::Duration,
+) -> String {
+    let mut out = String::with_capacity(1024);
     for analysis in analyses {
         let status = match analysis.status {
             ParseStatus::Complete => "ok",
             ParseStatus::CompleteWithErrors => "errors",
             ParseStatus::Failed => "FAILED",
         };
-        println!(
+        let _ = writeln!(
+            out,
             "{:<7} {}  symbols {:<4} imports {:<3} calls {:<4} strings {:<4} http {:<3} routes {}",
             status,
             analysis.path,
@@ -126,32 +171,42 @@ fn print_summary(analyses: &[FileAnalysis], totals: &Totals, elapsed: std::time:
         );
         for diagnostic in &analysis.diagnostics {
             match diagnostic.span {
-                Some(span) => println!(
-                    "        - {}:{} {}",
-                    analysis.path, span, diagnostic.message
-                ),
-                None => println!("        - {}: {}", analysis.path, diagnostic.message),
+                Some(span) => {
+                    let _ = writeln!(
+                        out,
+                        "        - {}:{} {}",
+                        analysis.path, span, diagnostic.message
+                    );
+                }
+                None => {
+                    let _ = writeln!(out, "        - {}: {}", analysis.path, diagnostic.message);
+                }
             }
         }
     }
-    println!();
-    println!(
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
         "Files          {} ({} clean, {} with errors, {} failed)",
         totals.files, totals.parsed_clean, totals.parsed_with_errors, totals.failed
     );
-    println!("Symbols        {}", totals.symbols);
-    println!("Imports        {}", totals.imports);
-    println!("Call sites     {}", totals.calls);
-    println!("Strings        {}", totals.strings);
+    let _ = writeln!(out, "Symbols        {}", totals.symbols);
+    let _ = writeln!(out, "Imports        {}", totals.imports);
+    let _ = writeln!(out, "Call sites     {}", totals.calls);
+    let _ = writeln!(out, "Strings        {}", totals.strings);
 
-    println!(
+    let _ = writeln!(
+        out,
         "HTTP observed  {}   (syntactic observations, not resolved edges)",
         totals.http_observations
     );
-    println!(
+    let _ = writeln!(
+        out,
         "Routes observed {}  (declarations found in source, not verified endpoints)",
         totals.route_observations
     );
-    println!("Diagnostics    {}", totals.diagnostics);
-    println!("Completed in   {elapsed:.2?}");
+    let _ = writeln!(out, "Diagnostics    {}", totals.diagnostics);
+    let _ = writeln!(out, "Completed in   {elapsed:.2?}");
+
+    out
 }

@@ -1,32 +1,86 @@
 //! The `cartograph` command-line interface.
 //!
-//! One of three clients of the same core graph API — the desktop application
-//! (M11) and the MCP server (M15) are the others. The CLI holds no analysis
-//! logic of its own; when `analyze` arrives at M09 it will call into the core
-//! exactly as the other two clients do.
+//! One of three planned clients of the same core graph API — the desktop
+//! application and the MCP server are the others. The CLI holds no analysis
+//! logic of its own: every command composes library calls, and `pipeline`
+//! runs the same sequence for all of them so two commands cannot report on
+//! differently-built graphs.
 //!
-//! # What exists at M04
+//! # The command surface at M09
 //!
-//! `cartograph version`; `cartograph parse`, the extractor over a file or tree
-//! reporting syntactic facts and diagnostics; `cartograph normalize`, which
-//! canonicalises the observations `parse` finds; and `cartograph match`, which
-//! joins client calls to backend routes and reports the evidence.
-//! `analyze` and `trace` are the deliverables of later milestones and are
-//! deliberately absent rather than present and stubbed: a command that exists
-//! but does not work is a documentation defect.
+//! `cartograph <path>` — analyse a repository and summarise what was found.
+//! `cartograph trace <symbol>` — follow one relationship across the stack.
+//! `cartograph parse` — extracted syntactic facts and diagnostics.
+//! `cartograph normalize` — each observation's raw form beside its canonical one.
+//! `cartograph match` — every match decision, including the refusals.
+//! `cartograph version` — release identity.
+//!
+//! The surface is deliberately small. A command that exists but does not work
+//! is a documentation defect, so nothing is present as a stub.
+//!
+//! # Output discipline
+//!
+//! stdout carries the command's result and nothing else; diagnostics, progress
+//! and logs go to stderr. Under `--json`, stdout is a single JSON document —
+//! on success *and* on failure, so a consumer never has to decide whether to
+//! parse. Colour is not used at all: plain text is what stays readable in a
+//! pipe, a log file and a screen reader alike.
 
 use std::path::PathBuf;
 
-use anyhow::Result;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
-use tracing::info;
-use tracing_subscriber::EnvFilter;
+
+mod discovery;
+mod error;
+mod json;
+mod match_cmd;
+mod normalize_cmd;
+mod output;
+mod parse_cmd;
+mod pipeline;
+mod summary_cmd;
+mod trace_cmd;
+mod version;
+
+use error::{CliError, ExitCode};
 
 /// Compute the architecture. Prove the relationships.
 #[derive(Debug, Parser)]
-#[command(name = "cartograph", version, about, long_about = None)]
+#[command(
+    name = "cartograph",
+    version,
+    about,
+    long_about = None,
+    args_conflicts_with_subcommands = true,
+    after_help = "\
+Run `cartograph .` to analyse the current repository.
+
+Exit codes:
+  0  success            2  usage error       3  path or input error
+  4  analysis error     5  symbol not found  6  ambiguous symbol
+  7  partial analysis (only with --strict)"
+)]
 struct Cli {
+    /// Repository to analyse. Use `.` for the current directory.
+    ///
+    /// Given on its own this runs the default summary.
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+
+    /// Emit a JSON document instead of a human summary.
+    ///
+    /// stdout carries the JSON and nothing else, including when the command
+    /// fails: an error is reported as a JSON document too.
+    #[arg(long, global = true)]
+    json: bool,
+
+    /// Exit non-zero when some files could not be parsed.
+    ///
+    /// Off by default: real repositories contain files no parser handles, and
+    /// a partial analysis is a normal, reported outcome rather than a failure.
+    #[arg(long, global = true)]
+    strict: bool,
+
     /// Increase log verbosity. Repeat for more detail (-v, -vv).
     ///
     /// Overridden by the `CARTOGRAPH_LOG` environment variable when set.
@@ -34,106 +88,144 @@ struct Cli {
     verbose: u8,
 
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Extract syntactic facts from TypeScript/TSX source (M01).
+    /// Follow one symbol's relationships across the stack.
     ///
-    /// Reports what the files say - symbols, imports, call sites, string and
-    /// template structure, HTTP-looking call shapes - plus parse diagnostics.
+    /// Walks the graph outward from the named symbol, reporting each hop with
+    /// its confidence, provenance, evidence and location. Where the chain
+    /// stops, it says so rather than implying the path is complete.
+    Trace {
+        /// The symbol to trace. Qualify as `file:name` to disambiguate.
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+        /// Repository to analyse.
+        #[arg(long, default_value = ".", value_name = "PATH")]
+        path: PathBuf,
+        /// How many hops to follow before stopping.
+        #[arg(long, default_value_t = trace_cmd::DEFAULT_MAX_DEPTH, value_name = "N")]
+        max_depth: usize,
+    },
+    /// Extract syntactic facts from TypeScript, TSX and Python source.
+    ///
+    /// Reports what the files say — symbols, imports, call sites, string and
+    /// template structure, HTTP-looking call shapes — plus parse diagnostics.
     /// Facts are observations; nothing here is a resolved relationship.
     Parse {
-        /// A TypeScript/TSX file, or a directory to walk.
+        /// A source file, or a directory to walk.
         path: PathBuf,
-        /// Emit the full fact model as JSON instead of a summary.
-        #[arg(long)]
-        json: bool,
     },
-    /// Canonicalise the route and HTTP-call observations under a path (M03).
+    /// Canonicalise the route and HTTP-call observations under a path.
     ///
     /// Shows each observation's raw form beside its canonical form. Client
-    /// calls are not matched against route declarations; that is M04.
+    /// calls are not matched against route declarations.
     Normalize {
-        /// A TypeScript/TSX/Python file, or a directory to walk.
+        /// A source file, or a directory to walk.
         path: PathBuf,
-        /// Emit the full canonical model as JSON instead of a summary.
-        #[arg(long)]
-        json: bool,
     },
-    /// Match client HTTP calls against backend routes (M04).
+    /// Match client HTTP calls against backend routes.
     ///
     /// Reports each decision with its candidates, confidence and evidence.
     /// Ambiguous results produce no edge and say so.
     Match {
         /// A file, or a directory to walk.
         path: PathBuf,
-        /// Emit the full match model as JSON instead of a summary.
-        #[arg(long)]
-        json: bool,
     },
     /// Print version and build information.
-    Version {
-        /// Emit JSON instead of text.
-        #[arg(long)]
-        json: bool,
-    },
+    Version,
 }
 
-mod discovery;
-mod match_cmd;
-mod normalize_cmd;
-mod parse_cmd;
-
-/// Version information, in the shape the `--json` output promises.
-#[derive(Debug, Serialize)]
-struct VersionInfo {
-    /// The released version of the binary.
-    version: &'static str,
-    /// The frozen specification version the domain model implements.
-    spec_version: &'static str,
-    /// The most recent completed milestone.
-    milestone: &'static str,
-}
-
-impl VersionInfo {
-    fn current() -> Self {
-        Self {
-            version: env!("CARGO_PKG_VERSION"),
-            spec_version: cartograph_core::SPEC_VERSION,
-            milestone: "M01",
+impl Command {
+    /// The name used in `--json` documents and error envelopes.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Trace { .. } => "trace",
+            Self::Parse { .. } => "parse",
+            Self::Normalize { .. } => "normalize",
+            Self::Match { .. } => "match",
+            Self::Version => "version",
         }
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
     init_tracing(cli.verbose);
 
-    match cli.command {
-        Command::Normalize { path, json } => normalize_cmd::run(&path, json)?,
-        Command::Parse { path, json } => parse_cmd::run(&path, json)?,
-        Command::Match { path, json } => match_cmd::run(&path, json)?,
-        Command::Version { json } => version(json)?,
-    }
+    let command_name = cli.command.as_ref().map_or("summary", Command::name);
 
-    Ok(())
+    let outcome = dispatch(&cli);
+
+    let code = match outcome {
+        Ok((text, code)) => {
+            let written = output::emit(&text);
+            // A write failure outranks a successful analysis: the caller did
+            // not receive the result, so reporting success would be false.
+            if written == ExitCode::Success {
+                code
+            } else {
+                written
+            }
+        }
+        Err(error) => report_failure(&error, command_name, cli.json),
+    };
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    std::process::ExitCode::from(code.code() as u8)
 }
 
-fn version(json: bool) -> Result<()> {
-    let info = VersionInfo::current();
-
-    if json {
-        println!("{}", serde_json::to_string_pretty(&info)?);
-    } else {
-        println!("cartograph {}", info.version);
-        println!("specification {}", info.spec_version);
-        println!("milestone {}", info.milestone);
+/// Runs the requested command, returning what to print and how to exit.
+fn dispatch(cli: &Cli) -> Result<(String, ExitCode), CliError> {
+    match &cli.command {
+        Some(Command::Trace {
+            symbol,
+            path,
+            max_depth,
+        }) => trace_cmd::run(path, symbol, *max_depth, cli.json),
+        Some(Command::Parse { path }) => parse_cmd::run(path, cli.json),
+        Some(Command::Normalize { path }) => normalize_cmd::run(path, cli.json),
+        Some(Command::Match { path }) => match_cmd::run(path, cli.json),
+        Some(Command::Version) => version::run(cli.json).map(|text| (text, ExitCode::Success)),
+        // Nothing to do and nothing named: show how to use the tool. That is
+        // a usage error, not a silent success, so it exits 2.
+        None => {
+            let Some(path) = &cli.path else {
+                use clap::CommandFactory;
+                // Help on stderr, not stdout: this is the "you have not told
+                // me what to do" path, and it exits non-zero. stdout is
+                // reserved for a command's result, so a pipe gets nothing.
+                output::emit_error(&Cli::command().render_help().to_string());
+                std::process::exit(ExitCode::Usage.code());
+            };
+            summary_cmd::run(path, cli.json, cli.strict)
+        }
     }
+}
 
-    info!(version = info.version, "reported version");
-    Ok(())
+/// Renders a failure and returns the exit status it produces.
+///
+/// In JSON mode the error becomes a JSON document on stdout, so a consumer
+/// parsing `--json` output always receives JSON. In text mode it goes to
+/// stderr, leaving stdout empty.
+fn report_failure(error: &CliError, command: &'static str, as_json: bool) -> ExitCode {
+    if as_json {
+        let envelope = json::ErrorEnvelope::new(command, error);
+        match serde_json::to_string_pretty(&envelope) {
+            Ok(mut text) => {
+                text.push('\n');
+                output::emit(&text);
+            }
+            // Serialising a fixed-shape error document cannot realistically
+            // fail, but falling back to the human form beats printing nothing.
+            Err(_) => output::emit_error(&error.to_string()),
+        }
+    } else {
+        output::emit_error(&error.to_string());
+    }
+    error.exit()
 }
 
 /// Configures logging.
@@ -152,8 +244,8 @@ fn init_tracing(verbosity: u8) {
     // CARTOGRAPH_LOG rather than RUST_LOG: a developer analysing a Rust
     // project should be able to set RUST_LOG for their own program without
     // Cartograph's logging changing underneath them.
-    let filter =
-        EnvFilter::try_from_env("CARTOGRAPH_LOG").unwrap_or_else(|_| EnvFilter::new(default));
+    let filter = tracing_subscriber::EnvFilter::try_from_env("CARTOGRAPH_LOG")
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default));
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -173,26 +265,88 @@ mod tests {
     }
 
     #[test]
-    fn version_json_reports_the_binarys_own_version() {
-        let info = VersionInfo::current();
-        assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
-        assert_eq!(info.spec_version, "V3");
-        assert_eq!(info.milestone, "M01");
-    }
-
-    #[test]
-    fn analysis_commands_are_absent_until_the_milestone_that_implements_them() {
-        // The command set is a deliberate milestone decision: `parse` landed
-        // with M01, `normalize` with M03, `match` with M04; `analyze`/`trace`
-        // are M09 deliverables and must not appear to work before they do. If
-        // this test fails, the scope moved.
+    fn the_command_surface_is_the_m09_surface() {
+        // The command set is a deliberate milestone decision. `trace` and the
+        // default summary are the M09 deliverables; nothing beyond them
+        // belongs here until the milestone that implements it. If this test
+        // fails, the scope moved.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
             .map(clap::Command::get_name)
             .collect();
-        // Declaration order, which is also pipeline order in `--help`:
-        // parse produces observations, normalize canonicalises them.
-        assert_eq!(names, vec!["parse", "normalize", "match", "version"]);
+        assert_eq!(
+            names,
+            vec!["trace", "parse", "normalize", "match", "version"]
+        );
+    }
+
+    #[test]
+    fn no_m10_or_later_command_is_present() {
+        // Named explicitly so an accidental addition fails loudly rather than
+        // shipping a capability the project has not built.
+        let command = Cli::command();
+        let names: Vec<_> = command
+            .get_subcommands()
+            .map(clap::Command::get_name)
+            .collect();
+        for forbidden in ["watch", "serve", "diff", "ask", "mcp", "ui", "desktop"] {
+            assert!(
+                !names.contains(&forbidden),
+                "`{forbidden}` is a later milestone's deliverable"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_path_is_the_default_summary() {
+        let cli = Cli::try_parse_from(["cartograph", "."]).expect("parses");
+        assert!(cli.command.is_none());
+        assert_eq!(cli.path, Some(PathBuf::from(".")));
+    }
+
+    #[test]
+    fn json_is_global_and_may_follow_the_subcommand() {
+        let cli = Cli::try_parse_from(["cartograph", "match", ".", "--json"]).expect("parses");
+        assert!(cli.json);
+        assert!(matches!(cli.command, Some(Command::Match { .. })));
+    }
+
+    #[test]
+    fn json_is_global_and_may_precede_the_path() {
+        let cli = Cli::try_parse_from(["cartograph", "--json", "."]).expect("parses");
+        assert!(cli.json);
+        assert_eq!(cli.path, Some(PathBuf::from(".")));
+    }
+
+    #[test]
+    fn trace_defaults_to_the_current_directory() {
+        let cli = Cli::try_parse_from(["cartograph", "trace", "CheckoutButton"]).expect("parses");
+        match cli.command {
+            Some(Command::Trace {
+                symbol,
+                path,
+                max_depth,
+            }) => {
+                assert_eq!(symbol, "CheckoutButton");
+                assert_eq!(path, PathBuf::from("."));
+                assert_eq!(max_depth, trace_cmd::DEFAULT_MAX_DEPTH);
+            }
+            other => panic!("expected trace, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn strict_is_off_unless_asked_for() {
+        let cli = Cli::try_parse_from(["cartograph", "."]).expect("parses");
+        assert!(!cli.strict);
+        let strict = Cli::try_parse_from(["cartograph", ".", "--strict"]).expect("parses");
+        assert!(strict.strict);
+    }
+
+    #[test]
+    fn command_names_match_the_json_command_field() {
+        let cli = Cli::try_parse_from(["cartograph", "trace", "X"]).expect("parses");
+        assert_eq!(cli.command.as_ref().map(Command::name), Some("trace"));
     }
 }

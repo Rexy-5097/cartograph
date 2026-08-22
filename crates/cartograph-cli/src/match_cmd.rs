@@ -1,8 +1,6 @@
 //! The `cartograph match` command: join client HTTP calls to backend routes.
 //!
-//! Runs the whole resolver pipeline over a tree — extraction, canonicalisation,
-//! matching, classification — and prints, for each client observation, the
-//! candidates and the decision.
+//! Reports, for each client observation, the candidates and the decision.
 //!
 //! # What it shows
 //!
@@ -10,24 +8,31 @@
 //! ambiguous result lists its rival candidates, and an unsupported one says
 //! why it could not be compared. A resolver is only as trustworthy as its
 //! refusals, so the refusals are on screen rather than filtered out.
+//!
+//! # Why the payload shape is frozen
+//!
+//! This command's `--json` document is the input to the M07 benchmark and the
+//! M08 calibration dataset, both of which are accepted, digest-bound
+//! artefacts. Its `totals`, `graph`, `matches` and `orm` sections are
+//! therefore extended but never reshaped: M09 adds the `schema_version`,
+//! `command` and `repository` keys and removes `root`, which used to carry an
+//! absolute filesystem path into serialised output (PART 12).
 
+use std::fmt::Write as _;
 use std::path::Path;
 
-use anyhow::{Context, Result};
-use cartograph_core::{EdgeKind, NodeKind, Provenance};
-use cartograph_graph::ArchitectureGraph;
-use cartograph_parser::Analyzer;
-use cartograph_resolver::{
-    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
-    add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
-    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
-    with_composed_prefix, with_resolved_url,
-};
+use cartograph_resolver::{MatchResult, MatchStatus};
 use serde::Serialize;
 
-use crate::discovery;
+use crate::error::{CliError, ErrorCode, ExitCode};
+use crate::json::{self, JsonEdge, JsonNode, SCHEMA_VERSION};
+use crate::pipeline::{self, Analysis};
 
 /// Aggregate counts across a run.
+///
+/// Field names are a contract: `benchmarks/run_benchmark.py` reads them by
+/// name, and the M07 results in `benchmarks/results/` were recorded through
+/// them. Renaming one silently invalidates a measurement.
 #[derive(Debug, Default, Serialize)]
 struct Totals {
     files: usize,
@@ -52,6 +57,31 @@ struct Totals {
     dynamic_resolved: usize,
     /// Dynamic URLs partly determined, with the gaps kept explicit.
     dynamic_partial: usize,
+}
+
+impl Totals {
+    /// Projects the pipeline's counts onto this command's frozen field names.
+    fn from_pipeline(totals: &pipeline::Totals) -> Self {
+        Self {
+            files: totals.files,
+            backend_routes: totals.routes,
+            client_calls: totals.http_observations,
+            exact: totals.exact,
+            strong: totals.strong,
+            ambiguous: totals.ambiguous,
+            no_match: totals.no_match,
+            unsupported: totals.unsupported,
+            edges: totals.http_call_edges,
+            orm_models: totals.orm_models,
+            orm_tables: totals.orm_tables,
+            orm_edges: totals.orm_edges,
+            orm_ambiguous: totals.orm_ambiguous,
+            routes_composed: totals.routes_composed,
+            client_call_edges: totals.client_call_edges,
+            dynamic_resolved: totals.dynamic_resolved,
+            dynamic_partial: totals.dynamic_partial,
+        }
+    }
 }
 
 /// One decision, in the shape `--json` promises.
@@ -94,37 +124,11 @@ struct JsonOrm {
     accessed_by: Vec<String>,
 }
 
-/// One graph node, in the shape `--json` promises.
+/// The graph a run produced, as built — not a re-derivation.
 ///
 /// Exported so a reader — or the M07 benchmark — can verify **node identity**
 /// rather than infer it. Two edges that name the same handler are only part of
-/// one chain if they share a node id, and no summary can show that.
-#[derive(Debug, Serialize)]
-struct JsonNode {
-    id: u64,
-    kind: NodeKind,
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    file: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    line: Option<u32>,
-}
-
-/// One graph edge, with the four attributes the domain model requires.
-#[derive(Debug, Serialize)]
-struct JsonEdge {
-    id: u64,
-    source: u64,
-    target: u64,
-    kind: EdgeKind,
-    confidence: f32,
-    provenance: Provenance,
-    evidence: String,
-    file: String,
-    line: u32,
-}
-
-/// The graph a run produced, as built — not a re-derivation.
+/// one chain if they share a node id, and no summary can show that (ADR-0011).
 #[derive(Debug, Serialize)]
 struct JsonGraph {
     node_count: usize,
@@ -134,8 +138,13 @@ struct JsonGraph {
 }
 
 #[derive(Debug, Serialize)]
-struct JsonReport {
-    root: String,
+struct JsonReport<'a> {
+    /// The version of the output contract.
+    schema_version: &'static str,
+    /// Which command produced the document.
+    command: &'static str,
+    /// What was analysed. Never the absolute path (PART 12).
+    repository: &'a crate::pipeline::Repository,
     /// Wall-clock time for extraction, resolution and graph construction.
     elapsed_ms: u128,
     totals: Totals,
@@ -148,195 +157,79 @@ struct JsonReport {
 }
 
 /// Matches every client observation under `path` against the routes found there.
-pub fn run(path: &Path, json: bool) -> Result<()> {
-    let outcome = analyse(path)?;
-    report(path, outcome, json)
+///
+/// # Errors
+///
+/// Whatever the pipeline could not do; see [`pipeline::run`].
+pub fn run(path: &Path, json: bool) -> Result<(String, ExitCode), CliError> {
+    let analysis = pipeline::run(path, pipeline::Options { quiet: json })?;
+
+    let text = if json {
+        render_json(&analysis)?
+    } else {
+        render_text(&analysis)
+    };
+
+    Ok((text, ExitCode::Success))
 }
 
-/// Everything one run produced.
-struct Outcome {
-    totals: Totals,
-    results: Vec<MatchResult>,
-    orm: OrmAnalysis,
-    /// Kept rather than dropped: the graph is the deliverable, and the
-    /// decisions above are only the reasoning that produced it.
-    graph: ArchitectureGraph,
-    elapsed: std::time::Duration,
-}
+fn render_json(analysis: &Analysis) -> Result<String, CliError> {
+    let orm = &analysis.orm;
 
-fn analyse(path: &Path) -> Result<Outcome> {
-    let (root, files) = discovery::discover(path)?;
-    let mut analyzer = Analyzer::new().context("loading grammars")?;
-
-    let mut totals = Totals::default();
-    let mut backend = Vec::new();
-    let mut clients = Vec::new();
-
-    let started = std::time::Instant::now();
-
-    // Every file is analysed before any URL is resolved: dynamic resolution
-    // (M05) needs the whole project's exported constants to follow an import.
-    let mut analyses = Vec::with_capacity(files.len());
-    for rel in &files {
-        analyses.push(
-            analyzer
-                .analyze_file(&root, rel)
-                .with_context(|| format!("analysing {rel}"))?,
-        );
-    }
-    let exported = collect_exported_constants(&analyses);
-    // A route's served path is not the path its decorator states: the router
-    // it is registered on may carry a prefix, and that router may itself be
-    // included in another. Composing them is what lets a frontend asking for
-    // `/api/v2/pools` meet a decorator that says `""`.
-    let modules = ModuleIndex::build(&analyses);
-    let routers = RouterIndex::build(&analyses, &modules);
-
-    for analysis in &analyses {
-        totals.files += 1;
-        let scope = scope_for_file(analysis, &exported);
-
-        for route in &analysis.routes {
-            // An unresolved or ambiguous prefix leaves the route exactly as
-            // declared, so composition can only ever make a path more
-            // complete — never replace a known path with a guessed one.
-            let composed = route
-                .receiver
-                .as_ref()
-                .and_then(|r| routers.prefix_for(&analysis.path, r))
-                .and_then(|resolution| with_composed_prefix(route, resolution));
-            if composed.is_some() {
-                totals.routes_composed += 1;
-            }
-            backend.push(normalize_route_declaration(
-                composed.as_ref().unwrap_or(route),
-                &analysis.path,
-                analysis.language,
-            ));
-        }
-        for call in &analysis.http_calls {
-            // M05 resolves a dynamic URL as far as the source determines it.
-            // A literal URL is declined and takes the unchanged M04 path, so
-            // previously-correct behaviour cannot shift.
-            let resolved = resolve_url(call, analysis, &scope);
-            if let Some(r) = &resolved {
-                if r.is_fully_known() {
-                    totals.dynamic_resolved += 1;
-                } else {
-                    totals.dynamic_partial += 1;
-                }
-            }
-            let effective = resolved
-                .as_ref()
-                .map_or_else(|| call.clone(), |r| with_resolved_url(call, r));
-            clients.push(normalize_client_call(
-                &effective,
-                &analysis.path,
-                analysis.language,
-            ));
-        }
-    }
-    totals.backend_routes = backend.len();
-    totals.client_calls = clients.len();
-
-    let index = RouteIndex::build(backend);
-    let results: Vec<MatchResult> = clients.iter().map(|c| match_client(c, &index)).collect();
-
-    // Edges are built only from accepted matches; the graph is the product of
-    // the decisions, never an input to them.
-    let mut graph = ArchitectureGraph::new();
-    for result in &results {
-        match result.status {
-            MatchStatus::Exact => totals.exact += 1,
-            MatchStatus::Strong => totals.strong += 1,
-            MatchStatus::Ambiguous => totals.ambiguous += 1,
-            MatchStatus::NoMatch => totals.no_match += 1,
-            MatchStatus::Unsupported => totals.unsupported += 1,
-            _ => {}
-        }
-        if add_edge_for_match(&mut graph, result, None)?.is_some() {
-            totals.edges += 1;
-        }
-    }
-    // The client wrapper stays on the path: a component calls a generated
-    // client function, and that function issues the request.
-    totals.client_call_edges = add_client_call_edges(&mut graph, &analyses, &modules, None)?;
-
-    // M06: handler → model → table, over the same graph so the cross-stack
-    // chain stays connected (ADR-0011).
-    let orm = OrmAnalysis::build(&analyses);
-    totals.orm_models = orm.models.len();
-    totals.orm_tables = orm
+    let mut orm_rows: Vec<JsonOrm> = orm
         .models
         .values()
-        .filter(|m| m.table.name().is_some())
-        .count();
-    totals.orm_ambiguous = orm.ambiguous.len();
-    totals.orm_edges = add_orm_edges(&mut graph, &orm, None)?;
-
-    let elapsed = started.elapsed();
-
-    Ok(Outcome {
-        totals,
-        results,
-        orm,
-        graph,
-        elapsed,
-    })
-}
-
-fn report(path: &Path, outcome: Outcome, json: bool) -> Result<()> {
-    let Outcome {
-        totals,
-        results,
-        orm,
-        graph,
-        elapsed,
-    } = outcome;
-
-    if json {
-        let mut orm_rows: Vec<JsonOrm> = orm
-            .models
-            .values()
-            .map(|m| JsonOrm {
-                model: m.name.clone(),
-                table: m.table.name().map(ToOwned::to_owned),
-                table_evidence: m.table.explain(),
-                flavor: format!("{:?}", m.flavor),
-                base: m.base.clone(),
-                file: m.file.clone(),
-                line: m.span.start_line,
-                accessed_by: orm
-                    .accesses
-                    .iter()
-                    .filter(|a| a.model == m.name)
-                    .filter_map(|a| {
-                        a.handler.as_ref().map(|h| {
-                            format!(
-                                "{h} via {}() at {}:{}",
-                                a.expression, a.file, a.span.start_line
-                            )
-                        })
+        .map(|m| JsonOrm {
+            model: m.name.clone(),
+            table: m.table.name().map(ToOwned::to_owned),
+            table_evidence: m.table.explain(),
+            flavor: format!("{:?}", m.flavor),
+            base: m.base.clone(),
+            file: m.file.clone(),
+            line: m.span.start_line,
+            accessed_by: orm
+                .accesses
+                .iter()
+                .filter(|a| a.model == m.name)
+                .filter_map(|a| {
+                    a.handler.as_ref().map(|h| {
+                        format!(
+                            "{h} via {}() at {}:{}",
+                            a.expression, a.file, a.span.start_line
+                        )
                     })
-                    .collect(),
-            })
-            .collect();
-        orm_rows.sort_by(|a, b| a.model.cmp(&b.model));
+                })
+                .collect(),
+        })
+        .collect();
+    orm_rows.sort_by(|a, b| a.model.cmp(&b.model));
 
-        let report = JsonReport {
-            root: path.display().to_string(),
-            elapsed_ms: elapsed.as_millis(),
-            totals,
-            graph: json_graph(&graph),
-            matches: results.iter().map(json_match).collect(),
-            orm: orm_rows,
-            orm_ambiguous: orm.ambiguous.clone(),
-        };
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else {
-        print_summary(&results, &totals, elapsed);
-    }
-    Ok(())
+    let report = JsonReport {
+        schema_version: SCHEMA_VERSION,
+        command: "match",
+        repository: &analysis.repository,
+        elapsed_ms: analysis.elapsed.as_millis(),
+        totals: Totals::from_pipeline(&analysis.totals),
+        graph: JsonGraph {
+            node_count: analysis.graph.node_count(),
+            edge_count: analysis.graph.edge_count(),
+            nodes: json::nodes(&analysis.graph),
+            edges: json::edges(&analysis.graph),
+        },
+        matches: analysis.results.iter().map(json_match).collect(),
+        orm: orm_rows,
+        orm_ambiguous: orm.ambiguous.clone(),
+    };
+
+    let mut text = serde_json::to_string_pretty(&report).map_err(|error| {
+        CliError::new(
+            ErrorCode::AnalysisFailed,
+            "the result could not be serialised as JSON",
+        )
+        .with_hint(format!("underlying cause: {error}"))
+    })?;
+    text.push('\n');
+    Ok(text)
 }
 
 fn status_name(status: MatchStatus) -> &'static str {
@@ -374,66 +267,41 @@ fn json_match(result: &MatchResult) -> JsonMatch {
     }
 }
 
-/// Serialises the graph exactly as it was built.
-///
-/// Nodes and edges are emitted in id order so two runs over the same tree
-/// produce byte-identical output, which is what makes a benchmark result
-/// comparable between passes.
-fn json_graph(graph: &ArchitectureGraph) -> JsonGraph {
-    let mut nodes: Vec<JsonNode> = graph
-        .nodes()
-        .map(|n| JsonNode {
-            id: n.id().as_u64(),
-            kind: n.kind(),
-            name: n.name().to_owned(),
-            file: n.location().map(|l| l.file().to_owned()),
-            line: n.location().map(cartograph_core::SourceLocation::line),
-        })
-        .collect();
-    nodes.sort_by_key(|n| n.id);
-
-    let mut edges: Vec<JsonEdge> = graph
-        .edges()
-        .map(|e| JsonEdge {
-            id: e.id().as_u64(),
-            source: e.source().as_u64(),
-            target: e.target().as_u64(),
-            kind: e.kind(),
-            confidence: e.confidence().get(),
-            provenance: e.provenance(),
-            evidence: e.evidence().as_str().to_owned(),
-            file: e.location().file().to_owned(),
-            line: e.location().line(),
-        })
-        .collect();
-    edges.sort_by_key(|e| e.id);
-
-    JsonGraph {
-        node_count: graph.node_count(),
-        edge_count: graph.edge_count(),
-        nodes,
-        edges,
-    }
+fn render_text(analysis: &Analysis) -> String {
+    let totals = Totals::from_pipeline(&analysis.totals);
+    let mut out = String::with_capacity(4096);
+    render_decisions(&mut out, analysis);
+    render_totals(&mut out, &totals, analysis.elapsed);
+    out
 }
 
-fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::Duration) {
-    for result in results {
+/// One block per client observation: what it is, and what was decided.
+fn render_decisions(out: &mut String, analysis: &Analysis) {
+    for result in &analysis.results {
         let client = &result.client.provenance;
-        println!(
+        let _ = writeln!(
+            out,
             "{}:{}  {}",
             client.file, client.span.start_line, result.client
         );
 
         match result.status {
             MatchStatus::Exact | MatchStatus::Strong => {
-                let candidate = result.accepted().expect("accepted status has a candidate");
+                let Some(candidate) = result.accepted() else {
+                    // An accepted status without a candidate would be a
+                    // resolver defect; say so rather than panic in a renderer.
+                    let _ = writeln!(out, "    ↓ MATCH — candidate missing (defect)");
+                    continue;
+                };
                 let route = &candidate.route.provenance;
-                println!(
+                let _ = writeln!(
+                    out,
                     "    ↓ MATCH ({})   confidence {}   provenance route_matcher",
                     status_name(result.status),
                     candidate.confidence
                 );
-                println!(
+                let _ = writeln!(
+                    out,
                     "      {}:{}  {}{}",
                     route.file,
                     route.span.start_line,
@@ -446,12 +314,14 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
                 );
             }
             MatchStatus::Ambiguous => {
-                println!(
+                let _ = writeln!(
+                    out,
                     "    ↓ AMBIGUOUS — {} equally plausible routes, no edge produced",
                     result.candidates.len()
                 );
                 for candidate in &result.candidates {
-                    println!(
+                    let _ = writeln!(
+                        out,
                         "      candidate {}:{}  {}",
                         candidate.route.provenance.file,
                         candidate.route.provenance.span.start_line,
@@ -460,51 +330,72 @@ fn print_summary(results: &[MatchResult], totals: &Totals, elapsed: std::time::D
                 }
             }
             MatchStatus::Unsupported => {
-                println!(
+                let _ = writeln!(
+                    out,
                     "    ↓ UNSUPPORTED — {}",
                     result
                         .unsupported_reason
                         .map_or_else(|| "not comparable".to_owned(), |r| format!("{r:?}"))
                 );
             }
-            _ => println!("    ↓ no matching route"),
+            _ => {
+                let _ = writeln!(out, "    ↓ no matching route");
+            }
         }
     }
+}
 
-    println!();
-    println!("Files              {}", totals.files);
-    println!("Backend routes     {}", totals.backend_routes);
-    println!("Client calls       {}", totals.client_calls);
-    println!(
+/// The run's aggregate counts.
+fn render_totals(out: &mut String, totals: &Totals, elapsed: std::time::Duration) {
+    let _ = writeln!(out);
+    let _ = writeln!(out, "Files              {}", totals.files);
+    let _ = writeln!(out, "Backend routes     {}", totals.backend_routes);
+    let _ = writeln!(out, "Client calls       {}", totals.client_calls);
+    let _ = writeln!(
+        out,
         "Decisions          {} exact, {} strong, {} ambiguous, {} no-match, {} unsupported",
         totals.exact, totals.strong, totals.ambiguous, totals.no_match, totals.unsupported
     );
-    println!(
+    let _ = writeln!(
+        out,
         "Dynamic URLs       {} fully resolved, {} partially",
         totals.dynamic_resolved, totals.dynamic_partial
     );
-    println!(
+    let _ = writeln!(
+        out,
         "Routers            {} route(s) given a composed served path",
         totals.routes_composed
     );
-    println!(
+    let _ = writeln!(
+        out,
         "Client wrappers    {} call edge(s) into a function that issues a request",
         totals.client_call_edges
     );
-    println!("HttpCall edges     {}", totals.edges);
-    println!(
+    let _ = writeln!(out, "HttpCall edges     {}", totals.edges);
+    let _ = writeln!(
+        out,
         "ORM                {} models ({} with a resolved table), {} edges",
         totals.orm_models, totals.orm_tables, totals.orm_edges
     );
     if totals.orm_ambiguous > 0 {
-        println!(
+        let _ = writeln!(
+            out,
             "                   {} model name(s) claimed by more than one class — no edge",
             totals.orm_ambiguous
         );
     }
-    println!("Completed in       {elapsed:.2?}");
-    println!();
-    println!("Edges are produced only for exact and strong matches. Ambiguous results");
-    println!("keep their candidates and produce no edge. Confidence values are the");
-    println!("specification's uncalibrated priors; calibration is milestone M08.");
+    let _ = writeln!(out, "Completed in       {elapsed:.2?}");
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "Edges are produced only for exact and strong matches. Ambiguous results"
+    );
+    let _ = writeln!(
+        out,
+        "keep their candidates and produce no edge. Confidence values are the"
+    );
+    let _ = writeln!(
+        out,
+        "specification's uncalibrated priors; see docs/benchmarks/m08-confidence-policy.md."
+    );
 }

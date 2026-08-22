@@ -1,0 +1,181 @@
+# Cartograph release builds.
+#
+# Produces a native binary for each supported platform, smoke-tests it on that
+# platform, and attaches it to the release. Nothing is cross-compiled: every
+# artefact is built and run on the operating system it targets, because a
+# binary that has never been executed on its own platform is not evidence that
+# the platform is supported.
+#
+# The project does not claim a platform until this workflow has produced and
+# smoke-tested a binary for it. See docs/releases/v0.1.0.md.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # Buildable on demand so the workflow itself can be verified without
+  # publishing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: cartograph
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary: cartograph
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: cartograph
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: cartograph.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pinned toolchain, exactly as CI and local development use.
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Record toolchain
+        run: rustc --version --verbose
+
+      - name: Build
+        shell: bash
+        env:
+          # So a binary built from an exported archive still names its source.
+          CARTOGRAPH_BUILD_COMMIT: ${{ github.sha }}
+        run: cargo build --release --target ${{ matrix.target }} -p cartograph-cli
+
+      # A binary that has not been run is not a release artefact. Each check
+      # below asserts something the CLI contract promises, on this platform.
+      - name: Smoke test — version
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          "$BIN" version
+          "$BIN" version | grep -q "cartograph 0.1.0"
+          "$BIN" version | grep -q "milestone M09"
+          "$BIN" version --json | grep -q '"version": "0.1.0"'
+
+      - name: Smoke test — analyse a repository
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          FIXTURES="crates/cartograph-parser/tests/fixtures"
+          "$BIN" "$FIXTURES" > summary.txt
+          grep -q "OBSERVED" summary.txt
+          grep -q "REFUSED" summary.txt
+          grep -q "Nothing above is claimed to be verified" summary.txt
+
+      - name: Smoke test — JSON is parseable and leaks no absolute path
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          FIXTURES="crates/cartograph-parser/tests/fixtures"
+          "$BIN" --json "$FIXTURES" > out.json
+          python3 - <<'PY'
+          import json, os
+          d = json.load(open("out.json"))
+          assert d["schema_version"] == "1.0", d["schema_version"]
+          assert d["command"] == "summary"
+          assert d["summary"]["files"] > 0
+
+          # Every edge carries the case for believing it.
+          for e in d["edges"]:
+              for k in ("source", "target", "kind", "confidence",
+                        "provenance", "evidence", "file", "line"):
+                  assert k in e, f"edge lost {k}: {e}"
+
+          # No path may name the machine. A route node is legitimately called
+          # "/api/orders", so this looks for filesystem roots, not slashes.
+          ROOTS = ("/Users/", "/home/", "/Volumes/", "/private/", "C:\\", "D:\\")
+          def scan(node, where="$"):
+              if isinstance(node, str):
+                  assert not node.startswith(ROOTS), f"absolute path at {where}: {node}"
+                  assert os.getcwd() not in node, f"workspace path at {where}: {node}"
+              elif isinstance(node, dict):
+                  for k, v in node.items():
+                      scan(v, f"{where}.{k}")
+              elif isinstance(node, list):
+                  for i, v in enumerate(node):
+                      scan(v, f"{where}[{i}]")
+          scan(d)
+          print("json contract ok:", d["summary"]["files"], "files,",
+                len(d["edges"]), "edges, no path leaks")
+          PY
+
+      - name: Smoke test — trace and exit codes
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          FIXTURES="crates/cartograph-parser/tests/fixtures"
+          "$BIN" trace http.ts --path "$FIXTURES" | grep -q "HTTP-CALL"
+          set +e
+          "$BIN" trace NoSuchSymbol --path "$FIXTURES"; test $? -eq 5 || exit 1
+          "$BIN" no/such/path;                          test $? -eq 3 || exit 1
+          "$BIN" --definitely-not-a-flag;               test $? -eq 2 || exit 1
+          set -e
+          echo "exit codes 2, 3 and 5 confirmed on ${{ matrix.target }}"
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist/
+          cp LICENSE README.md dist/
+          cd dist
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "../cartograph-${{ matrix.target }}.zip" *
+          else
+            tar czf "../cartograph-${{ matrix.target }}.tar.gz" *
+          fi
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartograph-${{ matrix.target }}
+          path: |
+            cartograph-${{ matrix.target }}.tar.gz
+            cartograph-${{ matrix.target }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: attach to release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+      - name: Checksums
+        run: |
+          cd artefacts
+          find . -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec sha256sum {} \; > SHA256SUMS
+          cat SHA256SUMS
+      - name: Attach
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artefacts/**/*.tar.gz
+            artefacts/**/*.zip
+            artefacts/SHA256SUMS
+          fail_on_unmatched_files: true

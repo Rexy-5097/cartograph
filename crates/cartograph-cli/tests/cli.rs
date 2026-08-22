@@ -24,9 +24,12 @@ fn version_prints_the_binary_and_specification_versions() {
         "missing spec line: {stdout}"
     );
     assert!(
-        stdout.contains("milestone M01"),
+        stdout.contains("milestone M09"),
         "missing milestone line: {stdout}"
     );
+    assert!(stdout.contains("cartograph 0.1.0"), "not v0.1.0: {stdout}");
+    assert!(stdout.contains("commit "), "missing commit line: {stdout}");
+    assert!(stdout.contains("target "), "missing target line: {stdout}");
 }
 
 #[test]
@@ -41,8 +44,10 @@ fn version_json_is_parseable() {
         serde_json::from_slice(&output.stdout).expect("stdout is valid JSON");
 
     assert_eq!(value["spec_version"], "V3");
-    assert_eq!(value["milestone"], "M01");
-    assert!(value["version"].is_string());
+    assert_eq!(value["milestone"], "M09");
+    assert_eq!(value["version"], "0.1.0");
+    assert!(value["commit"].is_string());
+    assert!(value["target"].is_string());
 }
 
 #[test]
@@ -61,13 +66,15 @@ fn json_output_goes_to_stdout_and_logs_go_to_stderr() {
 }
 
 #[test]
-fn an_unknown_command_fails_rather_than_guessing() {
+fn an_unknown_command_is_not_silently_accepted() {
+    // From M09 a bare argument is a repository path, so `analyze` is read as a
+    // directory named `analyze`. It does not exist, so the run fails with the
+    // input code rather than appearing to do something.
     let output = cartograph().arg("analyze").output().expect("binary runs");
 
-    assert!(
-        !output.status.success(),
-        "`analyze` is an M09 deliverable and must not appear to work at M00"
-    );
+    assert_eq!(output.status.code(), Some(3), "expected the input code");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("does not exist"), "unclear error: {stderr}");
 }
 
 #[test]
@@ -152,12 +159,17 @@ fn parse_single_file_works() {
 }
 
 #[test]
-fn parse_rejects_a_non_typescript_file() {
+fn parse_rejects_a_file_in_an_unsupported_language() {
     let output = cartograph()
         .args(["parse", "Cargo.toml"])
         .output()
         .expect("binary runs");
-    assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(3));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(".tsx"),
+        "the error must name what is supported: {stderr}"
+    );
 }
 
 // ── Python support (M02) ────────────────────────────────────────────
@@ -419,4 +431,637 @@ fn the_export_is_stable_across_runs() {
         value
     };
     assert_eq!(run(), run(), "analysis output must be deterministic");
+}
+
+// ════════════════════════════════════════════════════════════════════
+// M09 — the developer-facing CLI
+// ════════════════════════════════════════════════════════════════════
+//
+// These exercise the shipped binary the way a user does. The layers are
+// deliberate: argument parsing and formatting are unit-tested inside the
+// crate, and everything below runs the real executable, because the two M05
+// and M07 defects that reached a release were both invisible to unit tests
+// and obvious the first time the binary was run.
+
+/// Exit codes, as documented in `docs/development/cli.md`.
+mod exit {
+    pub const SUCCESS: i32 = 0;
+    pub const USAGE: i32 = 2;
+    pub const INPUT: i32 = 3;
+    pub const NOT_FOUND: i32 = 5;
+    pub const AMBIGUOUS: i32 = 6;
+    pub const PARTIAL: i32 = 7;
+}
+
+// ── the default command ─────────────────────────────────────────────
+
+#[test]
+fn a_bare_path_analyses_the_repository() {
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::SUCCESS));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Everything PART 4 requires the summary to report.
+    for expected in [
+        "Cartograph 0.1.0",
+        "languages",
+        "files analysed",
+        "symbols",
+        "duration",
+        "OBSERVED",
+        "routes",
+        "HTTP call sites",
+        "ORM models",
+        "RESOLVED",
+        "database tables",
+        "cross-language",
+        "REFUSED",
+        "ambiguous",
+        "unsupported",
+        "DIAGNOSTICS",
+    ] {
+        assert!(
+            stdout.contains(expected),
+            "summary lacks `{expected}`:\n{stdout}"
+        );
+    }
+}
+
+#[test]
+fn the_summary_never_claims_a_relationship_is_verified() {
+    // The product's whole argument is that it computes rather than guesses.
+    // Claiming verification it has not performed would be the one overclaim
+    // that undermines everything else.
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+
+    assert!(
+        !stdout.contains("verified relationship") && !stdout.contains("verified edge"),
+        "the summary claimed verification: {stdout}"
+    );
+    assert!(
+        stdout.contains("nothing above is claimed to be verified"),
+        "the summary must state the caveat explicitly: {stdout}"
+    );
+    assert!(
+        stdout.contains("uncalibrated"),
+        "confidence must be labelled uncalibrated: {stdout}"
+    );
+}
+
+#[test]
+fn the_summary_reports_refusals_as_prominently_as_results() {
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(stdout.contains("REFUSED"), "{stdout}");
+    assert!(stdout.contains("no edge produced"), "{stdout}");
+    assert!(stdout.contains("Refusals are by design"), "{stdout}");
+}
+
+#[test]
+fn the_summary_is_deterministic() {
+    let run = || {
+        let output = cartograph()
+            .arg(parser_fixtures())
+            .output()
+            .expect("binary runs");
+        // The duration line is expected to differ; nothing else may.
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("duration"))
+            .filter(|line| !line.starts_with("Repository "))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(run(), run(), "the summary must not vary between runs");
+}
+
+// ── trace ───────────────────────────────────────────────────────────
+
+#[test]
+fn trace_follows_a_chain_out_of_the_graph() {
+    let output = cartograph()
+        .args(["trace", "http.ts", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::SUCCESS));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // PART 6: the relationship, its confidence, provenance, evidence and both
+    // locations must all be inspectable.
+    assert!(
+        stdout.contains("HTTP-CALL"),
+        "no relationship kind: {stdout}"
+    );
+    assert!(
+        stdout.contains("confidence 0.98"),
+        "no confidence: {stdout}"
+    );
+    assert!(
+        stdout.contains("provenance route-matcher"),
+        "no provenance: {stdout}"
+    );
+    assert!(stdout.contains("evidence"), "no evidence: {stdout}");
+    assert!(
+        stdout.contains("observed   http.ts:"),
+        "no location: {stdout}"
+    );
+    assert!(
+        stdout.contains("python/fastapi_routes.py:28"),
+        "no target location: {stdout}"
+    );
+}
+
+#[test]
+fn trace_marks_the_break_rather_than_implying_completeness() {
+    let output = cartograph()
+        .args(["trace", "http.ts", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("chain ends here"),
+        "an incomplete chain must say so: {stdout}"
+    );
+    assert!(
+        stdout.contains("does not reach a database table"),
+        "the summary line must not imply a full-stack path: {stdout}"
+    );
+}
+
+#[test]
+fn trace_labels_a_fork_instead_of_printing_it_as_one_chain() {
+    // Two outgoing edges printed in sequence read as A -> B -> C, which is a
+    // different claim from A -> B and A -> C.
+    let output = cartograph()
+        .args(["trace", "http.ts", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("branch 1 of 2"),
+        "unlabelled fork: {stdout}"
+    );
+    assert!(
+        stdout.contains("branch 2 of 2"),
+        "unlabelled fork: {stdout}"
+    );
+}
+
+#[test]
+fn trace_reports_a_missing_symbol_with_its_own_exit_code() {
+    let output = cartograph()
+        .args(["trace", "NoSuchSymbolAnywhere", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::NOT_FOUND));
+    assert!(output.stdout.is_empty(), "stdout must stay empty on error");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("symbol-not-found"), "{stderr}");
+    assert!(stderr.contains("NoSuchSymbolAnywhere"), "{stderr}");
+}
+
+#[test]
+fn trace_json_reports_a_missing_symbol_as_json_on_stdout() {
+    let output = cartograph()
+        .args(["trace", "NoSuchSymbolAnywhere", "--json", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::NOT_FOUND));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .expect("a failing --json run must still emit JSON on stdout");
+    assert_eq!(value["schema_version"], "1.0");
+    assert_eq!(value["command"], "trace");
+    assert_eq!(value["errors"][0]["code"], "symbol-not-found");
+}
+
+#[test]
+fn trace_refuses_to_choose_between_ambiguous_symbols() {
+    // `health` is declared in both the FastAPI and Flask fixtures.
+    let output = cartograph()
+        .args(["trace", "health", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    // Either it is unique here (then this asserts nothing useful) or it is
+    // ambiguous — in which case no symbol may be chosen.
+    if output.status.code() == Some(exit::AMBIGUOUS) {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("ambiguous-symbol"), "{stderr}");
+        assert!(stderr.contains("matches"), "{stderr}");
+        assert!(
+            stderr.contains("qualifying the name with its file"),
+            "the error must say how to disambiguate: {stderr}"
+        );
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn trace_accepts_a_file_qualified_symbol() {
+    let output = cartograph()
+        .args(["trace", "python/fastapi_routes.py:health", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(
+        output.status.code(),
+        Some(exit::SUCCESS),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn trace_json_carries_the_full_evidence_of_every_hop() {
+    let output = cartograph()
+        .args(["trace", "http.ts", "--json", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("pure JSON");
+    assert_eq!(value["command"], "trace");
+    let steps = value["result"]["steps"].as_array().expect("steps array");
+    assert!(!steps.is_empty());
+
+    for step in steps {
+        let edge = &step["edge"];
+        for required in [
+            "source",
+            "target",
+            "kind",
+            "confidence",
+            "provenance",
+            "evidence",
+            "file",
+            "line",
+        ] {
+            assert!(
+                edge.get(required).is_some(),
+                "trace lost `{required}` from an edge: {edge}"
+            );
+        }
+        assert!(step["to"]["name"].is_string(), "no target node: {step}");
+    }
+}
+
+#[test]
+fn trace_respects_the_depth_limit() {
+    let output = cartograph()
+        .args(["trace", "http.ts", "--max-depth", "0", "--json", "--path"])
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["result"]["max_depth"], 0);
+    assert_eq!(
+        value["result"]["stop"], "max-depth",
+        "a truncated walk must say it was truncated: {}",
+        value["result"]
+    );
+}
+
+// ── the JSON contract ───────────────────────────────────────────────
+
+#[test]
+fn every_json_document_declares_the_schema_version_and_command() {
+    let cases: [(&[&str], &str); 4] = [
+        (&["--json"], "summary"),
+        (&["parse", "--json"], "parse"),
+        (&["normalize", "--json"], "normalize"),
+        (&["match", "--json"], "match"),
+    ];
+
+    for (args, command) in cases {
+        let mut cmd = cartograph();
+        // The default summary takes the path positionally; the rest take it
+        // after the subcommand. Both orders end up here.
+        if args == ["--json"] {
+            cmd.arg("--json").arg(parser_fixtures());
+        } else {
+            cmd.args(args).arg(parser_fixtures());
+        }
+        let output = cmd.output().expect("binary runs");
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|e| panic!("{command} did not emit pure JSON: {e}"));
+
+        assert_eq!(value["schema_version"], "1.0", "{command}");
+        assert_eq!(value["command"], command, "{command}");
+    }
+}
+
+#[test]
+fn the_summary_document_has_the_documented_sections() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    for section in [
+        "schema_version",
+        "command",
+        "repository",
+        "languages",
+        "summary",
+        "nodes",
+        "edges",
+        "diagnostics",
+        "errors",
+    ] {
+        assert!(value.get(section).is_some(), "missing `{section}`");
+    }
+    assert!(value["errors"].as_array().unwrap().is_empty());
+    assert!(value["summary"]["files"].as_u64().unwrap() >= 8);
+    assert!(value["summary"]["duration_ms"].is_number());
+}
+
+#[test]
+fn no_json_document_contains_an_absolute_machine_path() {
+    // PART 12 and PART 21: a serialised graph states facts about a
+    // repository, never about the machine that analysed it.
+    for args in [
+        vec!["--json"],
+        vec!["parse", "--json"],
+        vec!["normalize", "--json"],
+        vec!["match", "--json"],
+    ] {
+        let mut cmd = cartograph();
+        cmd.args(&args).arg(parser_fixtures());
+        let output = cmd.output().expect("binary runs");
+        let text = String::from_utf8_lossy(&output.stdout);
+
+        assert!(
+            !text.contains("/Volumes/"),
+            "{args:?} leaked an absolute path"
+        );
+        assert!(
+            !text.contains(env!("CARGO_MANIFEST_DIR")),
+            "{args:?} leaked the manifest directory"
+        );
+    }
+}
+
+#[test]
+fn an_absolute_repository_path_is_accepted_but_never_echoed() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures()) // an absolute path
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["repository"]["name"], "fixtures");
+    assert_eq!(value["repository"]["requested"], "<absolute>");
+}
+
+// ── stdout / stderr discipline ──────────────────────────────────────
+
+#[test]
+fn json_mode_keeps_stdout_pure_even_with_logging_turned_up() {
+    for args in [
+        vec!["--json", "-vv"],
+        vec!["match", "--json", "-vv"],
+        vec!["parse", "--json", "-vv"],
+    ] {
+        let mut cmd = cartograph();
+        cmd.args(&args).arg(parser_fixtures());
+        let output = cmd.output().expect("binary runs");
+        assert!(
+            serde_json::from_slice::<serde_json::Value>(&output.stdout).is_ok(),
+            "{args:?} contaminated stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+}
+
+#[test]
+fn json_mode_emits_no_progress_output() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("analysing…"),
+        "progress leaked in JSON mode: {stderr}"
+    );
+}
+
+#[test]
+fn a_failure_writes_nothing_to_stdout_in_text_mode() {
+    let output = cartograph()
+        .arg("no/such/repository")
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::INPUT));
+    assert!(
+        output.stdout.is_empty(),
+        "stdout must stay empty so a pipe receives nothing: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(!output.stderr.is_empty(), "the error must be reported");
+}
+
+// ── exit codes ──────────────────────────────────────────────────────
+
+#[test]
+fn success_exits_zero() {
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::SUCCESS));
+}
+
+#[test]
+fn a_usage_error_exits_two() {
+    let output = cartograph()
+        .args(["--definitely-not-a-flag"])
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::USAGE));
+}
+
+#[test]
+fn no_arguments_shows_help_and_exits_with_the_usage_code() {
+    let output = cartograph().output().expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::USAGE));
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(combined.contains("Usage"), "no usage shown: {combined}");
+}
+
+#[test]
+fn a_missing_path_exits_with_the_input_code() {
+    let output = cartograph()
+        .arg("definitely/not/a/repository")
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::INPUT));
+}
+
+#[test]
+fn strict_turns_a_partial_analysis_into_a_non_zero_exit() {
+    // The fixture corpus deliberately contains files that cannot be parsed.
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .arg("--strict")
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::PARTIAL));
+    // The result is still delivered: a partial analysis is still an analysis.
+    assert!(!output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("partial-analysis"), "{stderr}");
+}
+
+#[test]
+fn the_same_repository_succeeds_without_strict() {
+    let output = cartograph()
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    assert_eq!(
+        output.status.code(),
+        Some(exit::SUCCESS),
+        "an unparseable file must not fail the run by default"
+    );
+}
+
+#[test]
+fn strict_json_records_the_partial_analysis_in_the_errors_array() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures())
+        .arg("--strict")
+        .output()
+        .expect("binary runs");
+
+    assert_eq!(output.status.code(), Some(exit::PARTIAL));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("pure JSON");
+    assert_eq!(value["errors"][0]["code"], "partial-analysis");
+    // The analysis is still present alongside the complaint.
+    assert!(value["summary"]["files"].as_u64().unwrap() > 0);
+}
+
+// ── path handling (PART 12) ─────────────────────────────────────────
+
+#[test]
+fn the_current_directory_is_analysable_as_a_relative_path() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(".")
+        .current_dir(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["repository"]["requested"], ".");
+    assert_eq!(value["repository"]["name"], "fixtures");
+}
+
+#[test]
+fn a_relative_subdirectory_is_analysable() {
+    let output = cartograph()
+        .arg("--json")
+        .arg("python")
+        .current_dir(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["repository"]["requested"], "python");
+    assert!(value["summary"]["files"].as_u64().unwrap() >= 8);
+}
+
+#[test]
+fn relative_and_absolute_paths_produce_the_same_graph() {
+    let strip = |mut value: serde_json::Value| {
+        value["repository"] = serde_json::Value::Null;
+        value["summary"]["duration_ms"] = serde_json::Value::Null;
+        value
+    };
+
+    let relative = cartograph()
+        .arg("--json")
+        .arg(".")
+        .current_dir(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let absolute = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+
+    let a: serde_json::Value = serde_json::from_slice(&relative.stdout).unwrap();
+    let b: serde_json::Value = serde_json::from_slice(&absolute.stdout).unwrap();
+    assert_eq!(strip(a), strip(b), "the path spelling changed the analysis");
+}
+
+#[test]
+fn a_file_is_accepted_where_a_directory_is_expected() {
+    let output = cartograph()
+        .arg(parser_fixtures().join("http.ts"))
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(exit::SUCCESS));
+}
+
+#[test]
+fn serialised_paths_are_repository_relative_with_forward_slashes() {
+    let output = cartograph()
+        .arg("--json")
+        .arg(parser_fixtures())
+        .output()
+        .expect("binary runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    for node in value["nodes"].as_array().unwrap() {
+        if let Some(file) = node["file"].as_str() {
+            assert!(!file.starts_with('/'), "absolute node path: {file}");
+            assert!(!file.contains('\\'), "backslash in node path: {file}");
+            assert!(!file.contains(".."), "traversal in node path: {file}");
+        }
+    }
+    for edge in value["edges"].as_array().unwrap() {
+        let file = edge["file"].as_str().unwrap();
+        assert!(!file.starts_with('/'), "absolute edge path: {file}");
+        assert!(!file.contains('\\'), "backslash in edge path: {file}");
+    }
 }

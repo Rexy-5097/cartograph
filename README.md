@@ -7,12 +7,59 @@ symbol-level, cross-language graph of a software system from source code,
 language semantics, HTTP boundaries, database schemas and Git history — and
 shows the evidence behind every edge it draws.
 
-> **Status: pre-alpha, milestone M06 of 17.** The cross-stack chain now
-> resolves: a TypeScript call site is matched to a Python handler and becomes
-> an evidenced graph edge. ORM resolution, the desktop app and MCP do not
-> exist. `cartograph
-> analyze` is not implemented yet. Nothing in this README describes behaviour
-> the code does not have — see [What works today](#what-works-today).
+> **Status: v0.1.0, milestone M09 of 17.** The CLI is the product surface: it
+> analyses a repository and traces one relationship across the stack, with
+> evidence on every edge. The desktop app, MCP server and GitHub integration do
+> not exist. Nothing in this README describes behaviour the code does not have —
+> see [What works today](#what-works-today).
+
+---
+
+## Try it
+
+```bash
+cargo install --git https://github.com/Rexy-5097/cartograph cartograph-cli
+cartograph .
+```
+
+Then follow one relationship all the way down. This is real output, from
+[Apache Airflow](https://github.com/apache/airflow) at commit `9b43d6a`:
+
+```console
+$ cartograph trace enqueueConnectionTest
+
+enqueueConnectionTest  (function)  .../ui/openapi-gen/requests/services.gen.ts:834
+  │
+  ↓ HTTP-CALL   confidence 0.98   provenance route-matcher
+  │   evidence   POST /api/v2/connections/enqueue-test matched POST /api/v2/connections/enqueue-test
+  │              at .../routes/public/connections.py:383 (enqueue_connection_test);
+  │              exact HTTP method; every path segment static and equal
+  │
+enqueue_connection_test  (function)  .../core_api/routes/public/connections.py:383
+  │
+  ↓ ORM-ACCESS   confidence 0.80   provenance orm-resolution
+  │   evidence   ConnectionTestRequest(...) in enqueue_connection_test at .../connections.py:427
+  │
+ConnectionTestRequest  (class)  .../airflow/models/connection_test.py:82
+  │
+  ↓ QUERIES   confidence 0.80   provenance orm-resolution
+  │   evidence   ConnectionTestRequest maps to table "connection_test_request"
+  │
+connection_test_request  (table)
+
+This path crosses the HTTP boundary and reaches a database table.
+```
+
+A TypeScript function, an HTTP boundary, a Python handler, a SQLAlchemy model
+and a database table. Four artefacts, three languages, no shared symbol table —
+and every hop carries the evidence for itself.
+
+*(Directory paths are shortened to `...` above, and the per-hop `observed`
+line is omitted, so the block fits. Everything else is verbatim; run the
+command to see the rest.)*
+
+Add `--json` for the machine-readable graph.
+[Installation and the full command reference](docs/releases/v0.1.0.md).
 
 ---
 
@@ -81,14 +128,16 @@ see [ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md).
 
 ## What works today
 
-M00 delivered the foundation, M01–M02 extraction, M03 canonicalisation, M04 the first semantic join:
+M00 delivered the foundation, M01–M02 extraction, M03 canonicalisation, M04
+the first semantic join, M05 dynamic URLs, M06 ORM resolution, M07 validation
+against seven production repositories, M08 calibration, M09 this CLI:
 
 | Component | State |
 |---|---|
 | `cartograph-core` — domain model, evidence, provenance, confidence | Implemented, tested |
 | `cartograph-graph` — architecture graph over `petgraph` | Implemented, tested |
 | `cartograph-parser` — tree-sitter TypeScript/TSX **and Python** extraction | Implemented, tested |
-| `cartograph-cli` — `version`, `parse`, `normalize`, `match` | Implemented |
+| `cartograph-cli` — `cartograph .`, `trace`, `parse`, `normalize`, `match`, `version` | Implemented, released as v0.1.0 |
 | `cartograph-resolver` — canonical routes, matching, dynamic URLs, ORM resolution | Implemented, tested |
 | `cartograph-testkit` — fixtures | Implemented |
 
@@ -120,10 +169,28 @@ HTTP observation means "this file contains a call shaped like a request", not
 actually connecting them is M04, and that distinction is the whole point of the
 architecture.
 
-No accuracy claim is published anywhere in this repository: accuracy does not
-exist before the resolver and its benchmark (M08). See
-[docs/benchmarks/](docs/benchmarks/) for what will be measured and the
-standard for publishing it.
+### Accuracy, measured
+
+Against seven pinned production repositories — Superset, PostHog, Zulip, Onyx,
+Airflow, AutoGPT and the FastAPI full-stack template — over 14,932 edges:
+
+| | |
+|---|---|
+| False positives among 11,221 independently verified edges | **1** |
+| `HttpCall` recall | 0.907 (117/129) |
+| `OrmAccess` recall | 0.744 (1401/1883) |
+| End-to-end chain recall | 3 of 5 |
+| Calibration error (ECE) | 0.18, toward **under**-confidence |
+| Edges that could not be verified from source | **24.9%** |
+
+That last row is the important one: a quarter of the graph could not be checked,
+and it is not a random quarter — it concentrates where the evidence is weakest.
+Every figure above is therefore an upper bound. **Confidence values are
+uncalibrated priors, not probabilities**, and must not be thresholded as if they
+were.
+
+Full method and limitations: [docs/benchmarks/m08-report.md](docs/benchmarks/m08-report.md)
+and [the confidence policy](docs/benchmarks/m08-confidence-policy.md).
 
 ---
 
@@ -137,8 +204,8 @@ Three surfaces, in build order:
 | **BLAST** | What breaks if I change this? | M12 |
 | **DIFF** | What did this change do to the architecture? | M13 |
 
-The first finish line is one command on one real repository:
-`cartograph analyze .` (M07). Everything else is downstream of it.
+The first finish line — one command against a real repository — is done:
+`cartograph .` shipped at M09 as v0.1.0. Everything above is downstream of it.
 
 Full plan: [ROADMAP.md](ROADMAP.md).
 
@@ -158,7 +225,8 @@ See [SECURITY.md](SECURITY.md).
 
 ## Building
 
-Requires Rust 1.85 or later.
+Requires Rust 1.97.1, pinned in `rust-toolchain.toml` and selected
+automatically by `rustup`.
 
 ```bash
 make check
@@ -173,6 +241,8 @@ tests, and the AgentOS validator. Individual targets are listed by `make help`.
 
 ```
 crates/          The product. Six Rust crates.
+npm/             A launcher for the native binary. No analysis lives here.
+benchmarks/      The M07 corpus and M08 calibration harness.
 docs/            Architecture, resolver design, benchmarks, security, ADRs.
 agentos/         Vendored AgentOS v1.0.0 — development governance, not product code.
 .github/         CI and pull request governance.
