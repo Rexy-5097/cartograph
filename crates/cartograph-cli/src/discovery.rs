@@ -201,25 +201,36 @@ mod tests {
 
     /// The classification `display` depends on, pinned per form.
     ///
-    /// `\rooted\secret` and `/rooted/secret` are the regression: on Windows
-    /// neither is `is_absolute()`, so both were echoed back in full. The
-    /// relative rows guard the other direction — a fix that redacted
-    /// everything would be no fix at all.
+    /// A leading `/` is rooted on both platforms. The backslash and drive
+    /// forms are Windows-only *by definition*: on Unix a backslash is an
+    /// ordinary filename character, so `C:\workspace\secret` is one relative
+    /// filename there and asserting otherwise would encode Windows semantics
+    /// into a Unix run. The relative rows guard the other direction — a fix
+    /// that redacted everything would be no fix at all.
     #[test]
     fn every_rooted_form_is_rooted_and_no_relative_form_is() {
+        for rooted in ["/rooted/secret-project", "/"] {
+            assert!(
+                is_rooted(Path::new(rooted)),
+                "{rooted} must be treated as rooted on every platform"
+            );
+        }
+
+        #[cfg(windows)]
         for rooted in [
             r"C:\workspace\secret-project",
             "C:/secret-project",
             r"\rooted\secret-project",
-            "/rooted/secret-project",
             concat!(r"\", r"\", r"server\share\secret-project"),
         ] {
             assert!(
                 is_rooted(Path::new(rooted)),
-                "{rooted} must be treated as rooted"
+                "{rooted} must be treated as rooted on Windows"
             );
         }
 
+        // Relative on every platform: on Unix the backslash forms are single
+        // filenames, on Windows they are relative paths. Either way, echoed.
         for relative in [
             "relative/path",
             r"relative\path",
@@ -237,14 +248,20 @@ mod tests {
         }
     }
 
-    /// Windows accepts a path rooted on the current drive, with no letter.
-    /// `is_absolute()` is false for it, which is exactly how it leaked.
+    /// A path rooted on the current drive, with no drive letter. On Windows
+    /// `is_absolute()` is false for it, which is exactly how it leaked; the
+    /// forward-slash form is rooted on Unix too, so it runs everywhere.
     #[test]
     fn a_rooted_drive_less_missing_path_is_not_echoed_in_full() {
-        for rooted in [
-            r"\nonexistent-root-xyz\secret-project",
+        #[cfg(windows)]
+        const ROOTED: &[&str] = &[
             "/nonexistent-root-xyz/secret-project",
-        ] {
+            r"\nonexistent-root-xyz\secret-project",
+        ];
+        #[cfg(not(windows))]
+        const ROOTED: &[&str] = &["/nonexistent-root-xyz/secret-project"];
+
+        for &rooted in ROOTED {
             let error = discover(Path::new(rooted)).expect_err("fails");
             assert!(
                 !error.message.contains("nonexistent-root-xyz"),

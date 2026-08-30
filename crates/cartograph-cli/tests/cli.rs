@@ -847,10 +847,17 @@ fn an_absolute_repository_path_is_accepted_but_never_echoed() {
 /// `requested` field and the human-readable error before this was fixed.
 #[test]
 fn a_rooted_drive_less_path_never_reaches_serialised_output() {
-    for rooted in [
-        r"\nonexistent-root-xyz\secret-project",
+    // The forward-slash form is rooted on Unix too. The backslash form is a
+    // plain filename there, so asserting on it would be a Windows assumption.
+    #[cfg(windows)]
+    const ROOTED: &[&str] = &[
         "/nonexistent-root-xyz/secret-project",
-    ] {
+        r"\nonexistent-root-xyz\secret-project",
+    ];
+    #[cfg(not(windows))]
+    const ROOTED: &[&str] = &["/nonexistent-root-xyz/secret-project"];
+
+    for &rooted in ROOTED {
         let output = cartograph()
             .arg("--json")
             .arg(rooted)
