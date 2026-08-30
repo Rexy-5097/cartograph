@@ -313,3 +313,80 @@ same guarantees the serialised output already makes. Instrumentation counts
 files and facts; it never logs file contents. Nothing is written to disk in
 this slice, so there is no on-disk cache to audit; if persistence is added,
 this section must state exactly what is stored before it ships.
+
+---
+
+## 8. Next slice — localizing `OrmAnalysis`
+
+Per the incremental-design rule, this is the inspection and design; implementation
+follows separately. `OrmAnalysis` is chosen first because its ambiguity rule is
+explicit, which makes its non-local behaviour easy to state rather than easy to
+miss.
+
+### Inputs, outputs, dependencies
+
+`OrmAnalysis::build(&[FileAnalysis])` does four things:
+
+| Step | Reads | Locality |
+|---|---|---|
+| 1. filter to Python files | every file's `language` | whole project |
+| 2. `ModuleIndex::build(files)` | imports, symbols, aliases of **all** files, TypeScript included | whole project |
+| 3. `discover_models(file)` | one file's `symbols` | **per file, pure** |
+| 4. merge: count names, drop duplicates into `ambiguous` | every file's contribution | whole project |
+| 5. `discover_accesses(file, &merged_models, &index)` | one file's `calls`, **plus** the merged map and the module index | per file, but reads global state |
+
+Outputs: `models: HashMap<name, OrmModel>`, `ambiguous: Vec<String>`,
+`accesses: Vec<OrmAccessSite>`.
+
+Only **step 3** is a pure per-file function. That is the contribution to cache.
+
+### The finding that governs the design
+
+**Model identity is a whole-project property, because ambiguity is.** A name
+declared by two classes resolves to nothing, so:
+
+- **Creating** a file that declares `Order` removes an *existing* `Order` model
+  that no edited file mentions.
+- **Deleting** one of two conflicting files *restores* the survivor's model —
+  a deletion that adds a node.
+- **Renaming** a class both un-ambiguates its old name and may collide on the new one.
+
+So a per-file cache of `discover_models` is sound, but the **merge must be
+redone whenever any contribution changes**, and step 5 must be redone whenever
+the merged map changes, because an access resolves against it.
+
+### Invalidation boundaries
+
+| Change | Cached | Recomputed |
+|---|---|---|
+| a Python file's bytes change | other files' `discover_models` contributions | that file's contribution, the merge, all accesses |
+| a Python file added or deleted | other contributions | the merge, all accesses |
+| a TypeScript file changes | all model contributions | `ModuleIndex`, all accesses |
+| nothing changes | everything | nothing |
+
+Conservative by construction: whenever the merge output differs at all, every
+access is recomputed rather than reasoned about individually. Accesses are cheap
+relative to parsing, and an access that resolves against a stale model map is
+exactly the silent-staleness failure this milestone exists to prevent.
+
+### Honest bound on the benefit
+
+This slice caches step 3 only. Steps 2, 4 and 5 stay whole-project, and
+`ModuleIndex` still reads every file including TypeScript. So the expected win
+is small — `discover_models` is a filter over already-parsed symbols, not a
+parse. **It is worth doing for what it establishes, not for what it saves:** it
+is the first derived fact to get a real dependency rule, and the ambiguity
+behaviour above is the first genuine invalidation hazard in the codebase.
+
+If measurement afterwards shows the win is negligible, the correct conclusion is
+that `ModuleIndex` — read by steps 2 and 5 and by the router and dynamic-URL
+paths — is the structure that actually needs localizing, and this slice will
+have bought that knowledge cheaply and safely.
+
+### Tests required before it lands
+
+Beyond the seventeen already passing: two classes claiming one name across two
+files; deleting one of them and asserting the survivor's model *reappears*;
+creating a colliding declaration and asserting the existing model *disappears*;
+and renaming a class into and out of a collision. Each compared against a clean
+rebuild.

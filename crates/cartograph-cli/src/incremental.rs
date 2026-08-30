@@ -872,6 +872,135 @@ mod differential {
         repo.assert_incremental_matches_clean(&mut cache, "local change, unrelated subtree");
     }
 
+    /// Model identity is a whole-project property because ambiguity is: a
+    /// class name claimed by two classes resolves to nothing. This is the
+    /// first genuine invalidation hazard — a *create* can delete nodes, and a
+    /// *delete* can create them — so it is pinned before `OrmAnalysis` is
+    /// localized.
+    ///
+    /// The collision has to be built carefully. An earlier version of this
+    /// fixture gave the rival class a differently named base (`Base3`), which
+    /// the resolver does not recognise as a model at all, so there was no
+    /// collision and the test was asserting behaviour the product does not
+    /// have. Declaring the same `Base` in both files is what actually
+    /// collides — and it collides on `Base` too, so every model resolves to
+    /// nothing.
+    fn colliding_models(repo: &Repo) {
+        repo.write(
+            "app/routes.py",
+            "from fastapi import APIRouter
+             from .models import Order
+             router = APIRouter()
+             @router.get('/api/orders')
+             def list_orders():
+                 return Order.query.all()
+",
+        )
+        .write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase
+             class Base(DeclarativeBase):
+                 pass
+             class Order(Base):
+                 __tablename__ = 'orders'
+",
+        );
+    }
+
+    const RIVAL: &str = "from sqlalchemy.orm import DeclarativeBase
+                         class Base(DeclarativeBase):
+                             pass
+                         class Order(Base):
+                             __tablename__ = 'other_orders'
+";
+
+    /// Creating a colliding declaration removes a model the edited file never
+    /// mentions.
+    #[test]
+    fn a_colliding_declaration_removes_the_model_it_collides_with() {
+        let repo = Repo::new("collide-create");
+        colliding_models(&repo);
+        let mut cache = FactCache::new();
+        let before = canonical(&repo.incremental(&mut cache).graph);
+        assert!(
+            before.nodes.iter().any(|n| n.contains("|orders|")),
+            "the table must resolve before the collision: {:?}",
+            before.nodes
+        );
+
+        repo.write("app/duplicate.py", RIVAL);
+
+        let after = canonical(&repo.incremental(&mut cache).graph);
+        assert!(
+            !after.nodes.iter().any(|n| n.contains("|orders|")),
+            "an ambiguous model must resolve to nothing: {:?}",
+            after.nodes
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "collision created");
+    }
+
+    /// ...and deleting one claimant brings it back — a deletion that *adds* a
+    /// node, which no purely subtractive invalidation rule would produce.
+    #[test]
+    fn deleting_one_claimant_restores_the_ambiguous_model() {
+        let repo = Repo::new("collide-delete");
+        colliding_models(&repo);
+        repo.write("app/duplicate.py", RIVAL);
+        let mut cache = FactCache::new();
+        let ambiguous = canonical(&repo.incremental(&mut cache).graph);
+        assert!(
+            !ambiguous.nodes.iter().any(|n| n.contains("|orders|")),
+            "the fixture must start ambiguous: {:?}",
+            ambiguous.nodes
+        );
+
+        repo.delete("app/duplicate.py");
+
+        let after = canonical(&repo.incremental(&mut cache).graph);
+        assert!(
+            after.nodes.iter().any(|n| n.contains("|orders|")),
+            "removing the rival claimant must restore the model: {:?}",
+            after.nodes
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "collision removed by deletion");
+    }
+
+    /// Entering and leaving a collision is symmetric and leaves no residue.
+    #[test]
+    fn renaming_a_class_into_and_out_of_a_collision_is_symmetric() {
+        let repo = Repo::new("collide-rename");
+        colliding_models(&repo);
+        let mut cache = FactCache::new();
+        let original = canonical(&repo.incremental(&mut cache).graph);
+
+        repo.write("app/duplicate.py", RIVAL);
+        let collided = canonical(&repo.incremental(&mut cache).graph);
+        assert_ne!(original, collided, "the collision must change the graph");
+        repo.assert_incremental_matches_clean(&mut cache, "renamed into collision");
+
+        // Rename the rival's class out of the collision. Its base still
+        // collides, so this asserts equality with a clean rebuild rather than
+        // predicting which models survive.
+        repo.write(
+            "app/duplicate.py",
+            "from sqlalchemy.orm import DeclarativeBase
+             class Ledger(DeclarativeBase):
+                 pass
+             class Receipt(Ledger):
+                 __tablename__ = 'receipts'
+",
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "renamed out of collision");
+
+        // Removing the rival entirely returns to exactly the original graph.
+        repo.delete("app/duplicate.py");
+        assert_eq!(
+            original,
+            canonical(&repo.incremental(&mut cache).graph),
+            "the collision cycle left residue"
+        );
+    }
+
     /// PART 24 — the performance baseline, on a real repository.
     ///
     /// Opt-in and ignored by default: it needs a checkout this repository does
