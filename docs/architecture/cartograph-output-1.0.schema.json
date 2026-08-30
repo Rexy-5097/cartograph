@@ -26,7 +26,7 @@
           "type": "string"
         },
         "requested": {
-          "description": "The path as typed, when relative. An absolute path is replaced by the literal `<absolute>`.",
+          "description": "The path as typed, when relative. A rooted path — absolute, or Windows drive-less — is replaced by the literal `<absolute>`.",
           "type": "string"
         }
       }

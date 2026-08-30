@@ -27,7 +27,7 @@ described. The document and the program cannot disagree without a test failing.
   "command": "summary",            // summary | trace | parse | normalize | match
   "repository": {
     "name": "my-app",              // the repository's own directory name
-    "requested": "."               // as typed; "<absolute>" for an absolute path
+    "requested": "."               // as typed; "<absolute>" for any rooted path
   },
   "languages": { "typescript": 39, "tsx": 70, "python": 47 },
   "summary": { "files": 156, "edges": 663, /* … */ "duration_ms": 5300 },

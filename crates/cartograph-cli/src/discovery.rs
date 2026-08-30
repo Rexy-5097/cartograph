@@ -101,13 +101,31 @@ pub fn discover(path: &Path) -> Result<(PathBuf, Vec<String>), CliError> {
     Ok((path.to_path_buf(), files))
 }
 
+/// Whether a path names a location outside the repository, and so must never
+/// be reproduced in output.
+///
+/// `is_absolute()` alone is not this question on Windows. There it requires a
+/// drive or UNC prefix, so `\rooted\secret` and `/rooted/secret` — both legal,
+/// both resolved against the current drive — report `false` and would be
+/// echoed back in full. `has_root()` is `true` for them, and the pair together
+/// is the invariant the domain model already enforces by string in
+/// `cartograph_core::SourceLocation::new`.
+///
+/// On Unix the two are equivalent (each means a leading `/`), so this is a
+/// no-op there rather than a platform branch. Every relative form stays
+/// relative: `..\secret`, `.\secret` and the drive-relative `C:secret` are all
+/// `false`, so repository-relative paths are still echoed as typed.
+pub(crate) fn is_rooted(path: &Path) -> bool {
+    path.is_absolute() || path.has_root()
+}
+
 /// How a path is named back to the user.
 ///
-/// A relative path is echoed as typed. An absolute path is reduced to its
+/// A relative path is echoed as typed. A rooted path is reduced to its
 /// final component: the user knows which repository they asked about, and the
 /// directories above it are not Cartograph's to repeat (PART 12, PART 21).
 fn display(path: &Path) -> String {
-    if path.is_absolute() {
+    if is_rooted(path) {
         path.file_name()
             .and_then(|n| n.to_str())
             .map_or_else(|| "<absolute>".to_owned(), ToOwned::to_owned)
@@ -179,6 +197,73 @@ mod tests {
             "the absolute path leaked into the message: {error}"
         );
         assert!(error.message.contains("secret-project"), "{error}");
+    }
+
+    /// The classification `display` depends on, pinned per form.
+    ///
+    /// `\rooted\secret` and `/rooted/secret` are the regression: on Windows
+    /// neither is `is_absolute()`, so both were echoed back in full. The
+    /// relative rows guard the other direction — a fix that redacted
+    /// everything would be no fix at all.
+    #[test]
+    fn every_rooted_form_is_rooted_and_no_relative_form_is() {
+        for rooted in [
+            r"C:\workspace\secret-project",
+            "C:/secret-project",
+            r"\rooted\secret-project",
+            "/rooted/secret-project",
+            concat!(r"\", r"\", r"server\share\secret-project"),
+        ] {
+            assert!(
+                is_rooted(Path::new(rooted)),
+                "{rooted} must be treated as rooted"
+            );
+        }
+
+        for relative in [
+            "relative/path",
+            r"relative\path",
+            "./relative/path",
+            r".\secret-project",
+            r"..\secret-project",
+            "../sibling",
+            "C:secret-project", // drive-relative, not rooted
+            ".",
+        ] {
+            assert!(
+                !is_rooted(Path::new(relative)),
+                "{relative} must stay relative and be echoed as typed"
+            );
+        }
+    }
+
+    /// Windows accepts a path rooted on the current drive, with no letter.
+    /// `is_absolute()` is false for it, which is exactly how it leaked.
+    #[test]
+    fn a_rooted_drive_less_missing_path_is_not_echoed_in_full() {
+        for rooted in [
+            r"\nonexistent-root-xyz\secret-project",
+            "/nonexistent-root-xyz/secret-project",
+        ] {
+            let error = discover(Path::new(rooted)).expect_err("fails");
+            assert!(
+                !error.message.contains("nonexistent-root-xyz"),
+                "the rooted path leaked into the message for {rooted}: {error}"
+            );
+            assert!(
+                error.message.contains("secret-project"),
+                "the repository name is still owed to the user: {error}"
+            );
+        }
+    }
+
+    /// A relative path is the user's own words and is echoed unchanged, so the
+    /// redaction cannot be implemented by redacting everything.
+    #[test]
+    fn a_relative_path_is_echoed_as_typed() {
+        assert_eq!(display(Path::new("crates/x")), "crates/x");
+        assert_eq!(display(Path::new(r"crates\x")), "crates/x");
+        assert_eq!(display(Path::new("../sibling")), "../sibling");
     }
 
     #[test]
