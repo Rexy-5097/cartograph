@@ -7,14 +7,41 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M09 — CLI polish, trace, JSON output, v0.1.0** (unlocked, not started) |
-| Status | M00–M08 **ACCEPTED**; M09 unlocked, no code written |
+| Active milestone | **M09 — CLI v0.1.0** (accepted; this tree implements M09) |
+| Status | M00–M09 **ACCEPTED**; M10 unlocked, no code written |
 | Branch | `main` |
-| Next permitted milestone | M09 — **unlocked**; M10 locked until M09 is accepted |
-| Last accepted checkpoint | `cartograph-m08` (immutable, commit `9dbb38e`) |
+| Next permitted milestone | M10 — **unlocked**; M11 locked until M10 is accepted |
+| Last accepted checkpoint | `cartograph-m09` (immutable, commit `e8416f9`) |
 | Spec | Frozen V3, August 2026 |
 
+> `current_milestone` in the ledger stays at M09 because it names what this
+> tree implements — `version::MILESTONE` is checked against it by a unit test.
+> M10 is unlocked through `next_allowed_milestone`; the field advances with the
+> first M10 code, not with M09's acceptance.
+
 ## What exists
+
+- **M09: ACCEPTED** — the first developer-facing release. Six commands over
+  one shared pipeline, a versioned `--json` document (`schema_version` 1.0)
+  with a conformance suite, documented and tested exit codes, and an npm
+  launcher that reimplements nothing.
+
+  The accepted state is PR #15 **plus** PR #16. Moving development to Windows
+  found a privacy defect: redaction was gated on `Path::is_absolute()`, which
+  on Windows requires a drive or UNC prefix, so a path rooted on the current
+  drive (`\rooted\secret`) was reproduced in full — in the serialised
+  `repository.requested` field and in the human-readable error. On Unix the
+  two predicates are equivalent, so CI never saw it. `discovery::is_rooted`
+  (`is_absolute() || has_root()`) now owns the question at both call sites.
+  `c578b42` was **not** tagged: its gates fail on Windows.
+
+  **The analyser is byte-identical to `cartograph-m08`**, so M09 inherits
+  M08's accuracy limits rather than improving on them. 497 tests, 9/9 gates
+  and the full CLI surface pass on `x86_64-pc-windows-msvc`; zulip
+  (`0ce8f627`, 1,539 files) and full-stack-fastapi (`162344da`, 156 files)
+  both analyse clean with no path leakage. Windows is now validated for
+  **development**, not for release artifacts — only the Linux and
+  Apple-Silicon binaries are built and smoke-tested by CI.
 
 - **M08: ACCEPTED** — a measurement baseline, not completed calibration
   science. Confidence is an uncalibrated prior selected by evidence class,
@@ -101,6 +128,7 @@ MCP, no AI. `cartograph-resolver` remains a doc-only crate.
 
 | Date | Session outcome |
 |---|---|
+| 2026-08-31 | Development environment reconstructed on Windows 11 from GitHub alone (no SSD, no prior machine). Found M09 merged but never accepted, and a Windows privacy defect that made its gates fail: redaction gated on `Path::is_absolute()`, which misses drive-less rooted paths, leaking them into serialised JSON and stderr. Fixed under PR #16 with six regression tests; analyser untouched. M09 accepted at `e8416f9` (`cartograph-m09`), folding PR #16 in per the M07 precedent. M10 unlocked and **not** started, per RULE 025. |
 | 2026-08-19 | M01 accepted (`cartograph-m01`), M02 executed: Python extractor into the shared fact model, route observations, 47 new tests, benchmarks, three smoke corpora. `RouteFramework` corrected to `RouteDeclarationStyle` after Flask's repo disproved the framework label. PR #3 opened; stopped per RULE 025. |
 | 2026-08-19 | M00 checkpoint semantics repaired (ADR-0010: provisional rc tags vs accepted tags; premature cartograph-m00 retired, rc1 created at exact PR head). M01 executed: tree-sitter TS/TSX extractor, fact model, diagnostics, CLI `parse`, 22-category fixture corpus, 82 tests, criterion group, two real-repo smoke tests. PR opened; stopped per RULE 025. |
 | 2026-08-18 | M00 executed end-to-end: workspace, domain model, graph, CLI, testkit, AgentOS vendored + adapted, governance docs, gates, CI, PR opened. Stopped per RULE 025. |

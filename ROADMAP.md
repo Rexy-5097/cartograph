@@ -33,8 +33,8 @@ real-repository validation.
 | **M06** | ORM resolution — handler to model to table | Day 13 | **Accepted** (`cartograph-m06`) |
 | M07 | Full verified chain on a real repository | Day 14 | **Accepted** (`cartograph-m07`) |
 | M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | **Accepted** (`cartograph-m08`) |
-| M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | **Unlocked, not started** |
-| M10 | Incremental engine | Week 8 | Not started |
+| M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | **Accepted** (`cartograph-m09`) |
+| M10 | Incremental engine | Week 8 | **Unlocked, not started** |
 | M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | Not started |
 | M12 | Blast radius across language boundaries | Week 13 | Not started |
 | M13 | Structural diff, branch against branch | Week 16 | Not started |

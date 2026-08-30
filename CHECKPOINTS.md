@@ -453,6 +453,110 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M09 — CLI v0.1.0
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-31 by the project owner |
+| Base | `cartograph-m08` — commit `9dbb38e` |
+| Branch | `feature/m09-cli-v010` · PR [#15](https://github.com/Rexy-5097/cartograph/pull/15) (merged `c578b42`) |
+| Acceptance fix | `fix/m09-windows-rooted-path` · PR [#16](https://github.com/Rexy-5097/cartograph/pull/16) (merged `e8416f9`) |
+| Provisional checkpoint | none — ADR-0010: none was needed |
+| **Accepted checkpoint** | **`cartograph-m09`** — commit `e8416f9`, immutable |
+
+> The accepted state is PR #15 **plus** PR #16. Tagging `c578b42` was rejected:
+> its gates fail on Windows. This follows M07, which folded its acceptance
+> fixes (PRs #12, #13) into the accepted checkpoint rather than tagging a state
+> that did not pass.
+
+### Scope delivered
+
+`cartograph <path>`, `trace`, `parse`, `normalize`, `match` and `version`, each
+composing the same shared pipeline so two commands cannot report on differently
+built graphs; a versioned `--json` document (`schema_version` 1.0) with a
+schema conformance suite; documented, tested exit codes; and an npm launcher
+that finds the native binary and forwards argv, stdio and the exit code without
+reimplementing any analysis.
+
+### Why PR #16 was required
+
+Bringing the project onto Windows found a privacy defect. `display` and
+`Repository::describe` gated redaction on `Path::is_absolute()`, which on
+Windows requires a drive or UNC prefix. A path rooted on the current drive was
+therefore reproduced in full — in the serialised `repository.requested` field
+and in the human-readable error:
+
+| Input | Before | After |
+|---|---|---|
+| `\dev\…\fixtures` | `"requested": "/dev/cartograph/crates/…"` | `"requested": "<absolute>"` |
+| `\rooted\secret-project` | `` `/rooted/secret-project` does not exist `` | `` `secret-project` does not exist `` |
+| `C:\workspace\secret-project` | already redacted | unchanged |
+| `relative/path` | echoed as typed | unchanged |
+
+`discovery::is_rooted` (`is_absolute() || has_root()`) now owns the question and
+both call sites use it. On Unix the two predicates are equivalent, which is why
+CI never saw the defect. The analyser was not touched.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `e8416f9`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS |
+| `cargo test --workspace` | PASS — 497 tests, 0 failed |
+| `benchmarks/m08/test_calibration.py` | PASS — 23 tests |
+| `cargo bench --workspace --no-run` | PASS |
+| `cargo build --release -p cartograph-cli` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100, 3 warnings |
+| CI on `e8416f9` | PASS — all six required checks |
+
+### Verification findings
+
+**The analyser is byte-identical to `cartograph-m08`.** `git diff
+cartograph-m08 -- crates/cartograph-{core,graph,parser,resolver,testkit}` is
+empty. Verified behaviourally as well: the pre-fix binary at `c578b42` and the
+accepted binary produce identical `parse` and `normalize` output on the pinned
+`full-stack-fastapi` corpus, and identical `summary`/`match` output apart from
+timing fields.
+
+**Real-repository regression, at the pinned commits.**
+`full-stack-fastapi` (`162344da`) — 156 files, 23 routes, 0 failed.
+`zulip` (`0ce8f627`) — 1,539 files, 235 routes, 1,308 nodes, 1,469 edges, 0
+failed; `trace` returns a cross-language chain with evidence, confidence,
+provenance and source locations. No filesystem path appeared in any output.
+
+**Windows privacy regression.** Five rooted forms — drive-qualified, drive-less
+backslash, forward-slash, UNC and verbatim — leak nothing to stdout, stderr or
+JSON, all exit 3, none panics, and JSON stays well formed. Relative paths are
+still echoed exactly as typed, so the redaction is not implemented by redacting
+everything.
+
+**The accuracy figures are M08's, unchanged.** M09 shipped no analyser change,
+so it inherits M08's limits rather than improving on them: confidence is an
+uncalibrated prior, and 24.9% of edges remain unverifiable from source.
+
+### Accepted limitations
+
+- Memory scales with repository size — 920 MB on a 32,000-file repository.
+- No incremental analysis, no file watching, no cache between runs (M10).
+- TypeScript, TSX and Python only.
+- The supported subset only; anything outside it is refused, not guessed.
+- `trace` walks outward only — no reverse traversal, no blast radius (M12+).
+- Node ids are stable within a run, not across runs.
+- Confidence is not a calibrated probability and must not be thresholded.
+- **Windows is validated for development, not for release artifacts.** CI
+  builds and smoke-tests `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`
+  on every pull request. `x86_64-apple-darwin` and `x86_64-pc-windows-msvc` are
+  configured in `release.yml` but **not yet produced** — the workflow runs on
+  tag push and no `v*` tag exists. Build from source on those targets.
+
+---
+
 ## M08 — Confidence calibration and measurement
 
 | Field | Value |

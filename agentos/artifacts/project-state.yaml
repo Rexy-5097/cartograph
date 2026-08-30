@@ -5,9 +5,16 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M09
-status: NOT_STARTED
+status: ACCEPTED
 current_branch: main
-next_allowed_milestone: M09    # UNLOCKED - M08 accepted; M10 locked until M09 is accepted
+next_allowed_milestone: M10    # UNLOCKED - M09 accepted; M11 locked until M10 is accepted
+# `current_milestone` names the milestone this tree implements, not the one
+# next in play: `cartograph_cli::version::MILESTONE` is checked against it by a
+# unit test, and that constant is what the binary actually implements (M09).
+# M10 is unlocked via next_allowed_milestone and its own NOT_STARTED entry.
+# Advancing this field to M10 belongs with the first M10 code, not with M09's
+# acceptance bookkeeping — moving it here would fail QG-004 or force a false
+# claim in `cartograph version`.
 
 milestones:
   M00:
@@ -134,31 +141,103 @@ milestones:
       - one false positive remains, deliberately recorded
       - recall is scope-specific, not corpus-wide
   M09:
+    status: ACCEPTED
+    accepted: 2026-08-31
+    pull_request: 15                        # implementation, merged c578b42
+    acceptance_fix_pull_requests: [16]      # merged e8416f9; see acceptance_reason
+    provisional_tag: null                   # ADR-0010: none needed
+    accepted_tag: cartograph-m09            # immutable
+    merge_commit: e8416f936c6c1f909922b5d5185d4347920ddf2c
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      The accepted state is PR #15 plus PR #16, not PR #15 alone. Bringing the
+      project onto Windows found a privacy defect in the M09 CLI: `display`
+      and `Repository::describe` gated redaction on `Path::is_absolute()`,
+      which on Windows requires a drive or UNC prefix. A path rooted on the
+      current drive — `\rooted\secret` or `/rooted/secret` — was therefore
+      reproduced in full in the serialised `repository.requested` field and in
+      the human-readable error, contradicting the v0.1.0 guarantee that no
+      absolute filesystem path appears in serialised output. On Unix the two
+      predicates are equivalent, so CI never saw it.
+
+      At c578b42 `cargo test --workspace` failed one test on Windows and
+      QG-004 failed with it. PR #16 introduced `discovery::is_rooted`
+      (`is_absolute() || has_root()`), used at both sites, and six regression
+      tests. The analyser was not touched: crates core, graph, parser,
+      resolver and testkit are byte-identical to cartograph-m08, and output on
+      the pinned full-stack-fastapi corpus is identical apart from timing
+      fields. This follows the M07 precedent of folding acceptance fixes into
+      the accepted checkpoint rather than tagging a state whose gates fail.
+    finding: |
+      A first developer-facing release whose supported subset is narrower than
+      its ambition, and documented as such. The M09 accuracy figures are M08's
+      and are unchanged: confidence remains an uncalibrated prior and 24.9% of
+      edges remain unverifiable, so every accuracy number is an upper bound.
+
+      Windows is now a validated development platform: 497 tests, 9/9 gates
+      and the full CLI surface pass on x86_64-pc-windows-msvc. It is NOT a
+      validated release-artifact platform — see release_artifacts below.
+    metrics:
+      commands: 6                  # summary, trace, parse, normalize, match, version
+      schema_version: "1.0"
+      exit_codes_documented: 8     # 0, 2, 3, 4, 5, 6, 7; 1 deliberately unused
+      tests: 497
+      windows_privacy_forms_verified: 5   # drive, drive-less, forward-slash, UNC, verbatim
+    release_artifacts:
+      # Built and smoke-tested by CI on every pull request:
+      verified: [x86_64-unknown-linux-gnu, aarch64-apple-darwin]
+      # Configured in .github/workflows/release.yml but never produced: the
+      # workflow runs on tag push and no `v*` tag exists. Not claimed.
+      configured_not_produced: [x86_64-apple-darwin, x86_64-pc-windows-msvc]
+    accepted_limitations:
+      - memory scales with repository size (920 MB on a 32,000-file repository)
+      - no incremental analysis, no file watching, no cache between runs (M10)
+      - TypeScript, TSX and Python only
+      - the supported subset only; anything outside it is refused, not guessed
+      - trace walks outward only; no reverse traversal, no blast radius (M12+)
+      - node ids are stable within a run, not across runs
+      - confidence is not a calibrated probability and must not be thresholded
+      - M08's measurement limits carry forward unchanged
+      - Windows is validated for development, not for release artifacts
+  M10:
     status: NOT_STARTED                   # unlocked; no code written
     pull_request: null
     provisional_tag: null
     accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M08
+  milestone: M09
   class: accepted
-  tag: cartograph-m08
-  merge_commit: 9dbb38ecf180ae82102dd49949c584c1f69794a9
+  tag: cartograph-m09
+  merge_commit: e8416f936c6c1f909922b5d5185d4347920ddf2c
 
-gates:                           # feature/m07-real-validation, 2026-08-20 (QG-001..009)
+gates:                           # main at e8416f9, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 405 passed, 0 failed
+  tests: PASS                    # QG-004 - 497 passed, 0 failed
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
-  milestone_acceptance: PASS     # QG-008 - M07 deliverables present, no M08+ capability
-  agentos_validator: PASS        # 99/100
-  ci: PASS                       # main at 9dbb38e green
+  milestone_acceptance: PASS     # QG-008
+  agentos_validator: PASS        # 98/100, 3 warnings - see agentos_validator below
+  ci: PASS                       # e8416f9: all six required checks green
+
+agentos_validator:
+  score: 98                      # ADR-0009 recorded 99/100 at M00
+  status: PASS
+  warnings: 3
+  # Two are ADR-0009's deliberate omissions. The third is absent from upstream
+  # raptors-way as well, so it is not a Cartograph regression. The 99 -> 98
+  # difference is historical documentation drift, not a change in the
+  # framework: no AgentOS file was modified to raise or lower it.
+  warning_detail:
+    - production_validation/productivity_metrics.csv  # absent upstream too
+    - .pre-commit-config.yaml                         # ADR-0009: not vendored
+    - .devcontainer/devcontainer.json                 # ADR-0009: not vendored
 
 tests:
-  total: 405
+  total: 497
   failed: 0
 
 benchmarks:
