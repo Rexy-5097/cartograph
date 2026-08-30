@@ -5,6 +5,50 @@ All notable changes to Cartograph are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Milestone **M10 — incremental analysis engine**. First slice: the parse cache.
+No product behaviour changes; the analyser is byte-identical to
+`cartograph-m09`.
+
+### Added
+
+- **Content-addressed parse cache.** Per-file facts are keyed by
+  repository-relative path and a hash of the file's bytes, and reused when the
+  bytes have not changed. `Analyzer::dispatch` is a pure function of
+  `(path, language, source)`, so a cache hit cannot produce a different answer
+  than a fresh parse.
+- **Canonical graph equality** (`cartograph-testkit::canonical`) — the relation
+  `incremental == clean` is stated in. Compares node and edge *semantic*
+  identity, including confidence, provenance, evidence and locations, as sorted
+  multisets. Excludes `NodeId`/`EdgeId` (graph-local, ADR-0011), insertion
+  order and `created_at`.
+- **Deterministic repository-mutation harness** and a differential suite: edit,
+  create, delete, rename, backend route change, dynamic-URL base change, ORM
+  table rename, a file becoming malformed and then repaired, invalid UTF-8,
+  revert/recreate cycles, and two independent mutations in one update. Each
+  asserts the incremental graph equals a clean rebuild of the mutated tree.
+- **Cache instrumentation** behind `tracing` — files seen, reused, parsed and
+  evicted. Counts only, never file contents. Not a CLI contract.
+
+### Measured
+
+Warm re-run of an unchanged tree, in process, graphs verified equal:
+full-stack-fastapi 159 ms → 35 ms (4.5×); zulip 16,980 ms → 5,625 ms (3.0×);
+zero files reparsed in both. A warm run now spends nearly all its time above
+the parse layer.
+
+### Known limitations
+
+- **Resolution is not incremental.** `ModuleIndex`, `RouteIndex`,
+  `ExportedConstants` and `OrmAnalysis` each read every file and are rebuilt on
+  every run. This is what makes the equality invariant hold by construction
+  here, and it is the remaining bottleneck.
+- **No persistence.** The cache lives in one process, so the CLI — which exits
+  after each run — cannot yet benefit. No on-disk format, no file watching.
+- Stable node identity across runs is still deferred (ADR-0011).
+- No latency target is claimed.
+
 ## [0.1.0] — 2026-08-22
 
 The first public release. Milestone M09.

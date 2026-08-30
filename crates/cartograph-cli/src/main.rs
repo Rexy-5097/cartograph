@@ -32,6 +32,7 @@ use clap::{Parser, Subcommand};
 
 mod discovery;
 mod error;
+mod incremental;
 mod json;
 mod match_cmd;
 mod normalize_cmd;

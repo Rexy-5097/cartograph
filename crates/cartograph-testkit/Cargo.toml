@@ -11,6 +11,10 @@ publish = false
 
 [dependencies]
 cartograph-core.workspace = true
+# Canonical graph equality (M10) compares whole graphs, so the utility needs
+# the graph type. Never a runtime dependency: this crate is `publish = false`
+# and is only ever used as a dev-dependency.
+cartograph-graph.workspace = true
 time.workspace = true
 
 [lints]
