@@ -657,6 +657,221 @@ mod differential {
         repo.assert_incremental_matches_clean(&mut cache, "two independent mutations");
     }
 
+    /// A frontend whose URL base lives in a *separate* module, so an import
+    /// change and an exported-symbol change are distinguishable mutations.
+    fn split_frontend(repo: &Repo) {
+        repo.write("web/config_a.ts", "export const BASE = '/api';\n")
+            .write("web/config_b.ts", "export const BASE = '/v2';\n")
+            .write(
+                "web/app.ts",
+                "import { BASE } from './config_a';\n\
+                 export async function listOrders() {\n\
+                 \x20 return fetch(`${BASE}/orders`, { method: 'GET' });\n\
+                 }\n",
+            )
+            .write(
+                "app/routes.py",
+                "from fastapi import APIRouter\n\
+                 router = APIRouter()\n\
+                 @router.get('/api/orders')\n\
+                 def list_orders():\n\
+                 \x20   return []\n",
+            );
+    }
+
+    /// The import target changes: `./config_a` → `./config_b`. The old
+    /// module's contribution must not survive in the resolved URL.
+    #[test]
+    fn an_import_change_repoints_the_dependency() {
+        let repo = Repo::new("import-change");
+        split_frontend(&repo);
+        let mut cache = FactCache::new();
+        let before = repo.incremental(&mut cache);
+        let before_edges = canonical(&before.graph).edges;
+
+        repo.write(
+            "web/app.ts",
+            "import { BASE } from './config_b';\n\
+             export async function listOrders() {\n\
+             \x20 return fetch(`${BASE}/orders`, { method: 'GET' });\n\
+             }\n",
+        );
+
+        let after = repo.incremental(&mut cache);
+        assert_eq!(cache.stats().parsed, 1, "only the importing file changed");
+        assert_eq!(cache.stats().reused, 3);
+        assert_ne!(
+            before_edges,
+            canonical(&after.graph).edges,
+            "repointing the import must change the resolved URL"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "import repointed");
+    }
+
+    /// The *exported symbol* changes name, so the importer's reference no
+    /// longer resolves. The dependent file was not edited.
+    #[test]
+    fn an_exported_symbol_change_propagates_to_importers() {
+        let repo = Repo::new("export-change");
+        split_frontend(&repo);
+        let mut cache = FactCache::new();
+        let before = repo.incremental(&mut cache);
+        let before_edges = canonical(&before.graph).edges;
+
+        repo.write("web/config_a.ts", "export const ROOT = '/api';\n");
+
+        let after = repo.incremental(&mut cache);
+        assert_eq!(cache.stats().parsed, 1, "only the exporting file changed");
+        assert_ne!(
+            before_edges,
+            canonical(&after.graph).edges,
+            "renaming the exported constant must change what the importer resolves"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "exported symbol renamed");
+    }
+
+    /// A router *prefix* change moves every route registered on it, without
+    /// any route decorator being edited.
+    #[test]
+    fn a_route_prefix_change_moves_the_routes_under_it() {
+        let repo = Repo::new("prefix");
+        repo.write(
+            "web/api.ts",
+            "export const BASE = '/api';\n\
+             export async function listOrders() {\n\
+             \x20 return fetch(`${BASE}/orders`, { method: 'GET' });\n\
+             }\n",
+        )
+        .write(
+            "app/routes.py",
+            "from fastapi import APIRouter\n\
+             router = APIRouter(prefix='/api')\n\
+             @router.get('/orders')\n\
+             def list_orders():\n\
+             \x20   return []\n",
+        );
+        let mut cache = FactCache::new();
+        let before = repo.incremental(&mut cache);
+        let before_edges = canonical(&before.graph).edges;
+
+        repo.write(
+            "app/routes.py",
+            "from fastapi import APIRouter\n\
+             router = APIRouter(prefix='/v2')\n\
+             @router.get('/orders')\n\
+             def list_orders():\n\
+             \x20   return []\n",
+        );
+
+        let after = repo.incremental(&mut cache);
+        assert_eq!(cache.stats().parsed, 1);
+        assert_ne!(
+            before_edges,
+            canonical(&after.graph).edges,
+            "changing the router prefix must move the served path"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "router prefix change");
+    }
+
+    /// Two changes that depend on each other, applied in one update: the
+    /// export is renamed *and* the importer follows it. Each alone would break
+    /// the chain; together they must restore exactly the original graph.
+    #[test]
+    fn multiple_dependent_changes_in_one_update_stay_consistent() {
+        let repo = Repo::new("dependent");
+        split_frontend(&repo);
+        let mut cache = FactCache::new();
+        let original = canonical(&repo.incremental(&mut cache).graph);
+
+        repo.write("web/config_a.ts", "export const ROOT = '/api';\n")
+            .write(
+                "web/app.ts",
+                "import { ROOT } from './config_a';\n\
+                 export async function listOrders() {\n\
+                 \x20 return fetch(`${ROOT}/orders`, { method: 'GET' });\n\
+                 }\n",
+            );
+
+        let after = repo.incremental(&mut cache);
+        assert_eq!(cache.stats().parsed, 2, "both dependent files");
+        assert_eq!(
+            original,
+            canonical(&after.graph),
+            "renaming a constant and its use together must be graph-neutral"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "dependent pair renamed");
+    }
+
+    /// Conservative-invalidation guard: a mutation confined to one subtree
+    /// must leave every unrelated node and edge byte-identical.
+    #[test]
+    fn an_unrelated_subtree_is_untouched_by_a_local_change() {
+        let repo = Repo::new("unrelated");
+        full_stack(&repo);
+        // A second, *complete* chain. An isolated model would not do: a model
+        // nothing accesses produces no node at all, so "unchanged" would be
+        // vacuously true and the test would prove nothing.
+        repo.write(
+            "web/invoices.ts",
+            "export const IBASE = '/api';\n\
+             export async function listInvoices() {\n\
+             \x20 return fetch(`${IBASE}/invoices`, { method: 'GET' });\n\
+             }\n",
+        )
+        .write(
+            "other/invoice_routes.py",
+            "from fastapi import APIRouter\n\
+             from .invoice_models import Invoice\n\
+             router = APIRouter()\n\
+             @router.get('/api/invoices')\n\
+             def list_invoices():\n\
+             \x20   return Invoice.query.all()\n",
+        )
+        .write(
+            "other/invoice_models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base2(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Invoice(Base2):\n\
+             \x20   __tablename__ = 'invoices'\n",
+        );
+        let mut cache = FactCache::new();
+        let before = canonical(&repo.incremental(&mut cache).graph);
+        let unrelated_before: Vec<_> = before
+            .nodes
+            .iter()
+            .filter(|n| n.contains("nvoice"))
+            .cloned()
+            .collect();
+        assert!(
+            !unrelated_before.is_empty(),
+            "fixture must have a second subtree in the graph, got {:?}",
+            before.nodes
+        );
+
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'renamed'\n",
+        );
+
+        let after = canonical(&repo.incremental(&mut cache).graph);
+        let unrelated_after: Vec<_> = after
+            .nodes
+            .iter()
+            .filter(|n| n.contains("nvoice"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            unrelated_before, unrelated_after,
+            "an unrelated subtree changed when it should not have"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "local change, unrelated subtree");
+    }
+
     /// PART 24 — the performance baseline, on a real repository.
     ///
     /// Opt-in and ignored by default: it needs a checkout this repository does
