@@ -56,8 +56,8 @@ pub struct Repository {
     /// The path exactly as the user typed it, when that is already relative.
     ///
     /// `.` and `../sibling` are safe to echo back and are what the user
-    /// recognises. An absolute path is replaced by `<absolute>` rather than
-    /// reproduced.
+    /// recognises. A rooted path — absolute, or Windows drive-less such as
+    /// `\rooted\secret` — is replaced by `<absolute>` rather than reproduced.
     pub requested: String,
 }
 
@@ -89,8 +89,10 @@ impl Repository {
     pub fn describe(requested: &Path, root: &Path) -> Self {
         let name = repository_name(requested, root);
 
-        let requested = if requested.is_absolute() {
-            // Never reproduced: an absolute path names this machine.
+        let requested = if discovery::is_rooted(requested) {
+            // Never reproduced: a rooted path names this machine. Rooted
+            // rather than absolute because a Windows `\rooted\secret` is not
+            // `is_absolute()` — see `discovery::is_rooted`.
             "<absolute>".to_owned()
         } else {
             requested.to_string_lossy().replace('\\', "/")

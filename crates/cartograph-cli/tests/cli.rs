@@ -842,6 +842,66 @@ fn an_absolute_repository_path_is_accepted_but_never_echoed() {
     assert_eq!(value["repository"]["requested"], "<absolute>");
 }
 
+/// A path rooted on the current drive, with no drive letter, is legal on
+/// Windows and is not `Path::is_absolute()`. It reached both the serialised
+/// `requested` field and the human-readable error before this was fixed.
+#[test]
+fn a_rooted_drive_less_path_never_reaches_serialised_output() {
+    // The forward-slash form is rooted on Unix too. The backslash form is a
+    // plain filename there, so asserting on it would be a Windows assumption.
+    #[cfg(windows)]
+    const ROOTED: &[&str] = &[
+        "/nonexistent-root-xyz/secret-project",
+        r"\nonexistent-root-xyz\secret-project",
+    ];
+    #[cfg(not(windows))]
+    const ROOTED: &[&str] = &["/nonexistent-root-xyz/secret-project"];
+
+    for &rooted in ROOTED {
+        let output = cartograph()
+            .arg("--json")
+            .arg(rooted)
+            .output()
+            .expect("binary runs");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !stdout.contains("nonexistent-root-xyz"),
+            "the rooted path leaked into JSON for {rooted}: {stdout}"
+        );
+        // Still a well-formed document reporting the failure, not a panic.
+        let value: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is pure JSON");
+        assert_eq!(value["schema_version"], "1.0");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("nonexistent-root-xyz"),
+            "the rooted path leaked into stderr for {rooted}: {stderr}"
+        );
+    }
+}
+
+/// The redaction must not be implemented by redacting everything: a
+/// repository-relative path is the user's own words and is echoed unchanged.
+#[test]
+fn a_relative_repository_path_is_still_echoed_as_typed() {
+    let parser_crate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("cartograph-parser");
+
+    let output = cartograph()
+        .arg("--json")
+        .arg("tests/fixtures")
+        .current_dir(&parser_crate)
+        .output()
+        .expect("binary runs");
+
+    assert!(output.status.success(), "exit status: {}", output.status);
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["repository"]["requested"], "tests/fixtures");
+}
+
 // ── stdout / stderr discipline ──────────────────────────────────────
 
 #[test]
