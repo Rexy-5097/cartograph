@@ -1,0 +1,264 @@
+/*
+ * The shell's appearance.
+ *
+ * This is the foundation pass, not the visual-polish pass: a readable type
+ * scale, states that are clearly distinct, focus that is always visible, and
+ * nothing that moves. Animation and identity come later, once there is a graph
+ * to design around.
+ *
+ * Both colour schemes are defined rather than assumed. A desktop application
+ * that ignores the system setting looks broken on half the machines it runs on.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --border: #d8dce3;
+  --text: #14181f;
+  --muted: #5a6472;
+  --accent: #1f4fd8;
+  --accent-text: #ffffff;
+  --danger: #a4262c;
+  --danger-surface: #fdf3f3;
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181f;
+    --surface: #1c222b;
+    --border: #2e3743;
+    --text: #eef1f5;
+    --muted: #9aa5b4;
+    --accent: #6f95ff;
+    --accent-text: #0d1117;
+    --danger: #ff9d9d;
+    --danger-surface: #2a1b1d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* One visible focus treatment everywhere. Removing outlines without replacing
+   them is the single most common way a desktop app becomes unusable by
+   keyboard, so the ring is defined once and never suppressed. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: 0 0 auto;
+}
+
+.wordmark {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.milestone {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* The stage centres its content but stays scrollable, so a long cluster list
+   on a short window is reachable rather than clipped. */
+.stage {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem 1.25rem 3rem;
+  text-align: center;
+}
+
+.heading {
+  font-size: 1.5rem;
+  font-weight: 620;
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+
+/* The heading receives focus on every phase change; it is not interactive, so
+   it must not look interactive. */
+.heading:focus {
+  outline: none;
+}
+
+.prose {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--muted);
+}
+
+.action {
+  font: inherit;
+  font-weight: 550;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.failure {
+  max-width: 46ch;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: var(--danger-surface);
+  text-align: left;
+}
+
+.failure-message {
+  margin: 0;
+  font-weight: 550;
+  color: var(--danger);
+}
+
+.failure-hint,
+.failure-code {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.result {
+  width: 100%;
+  max-width: 34rem;
+  text-align: left;
+}
+
+.repository {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.count {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+}
+
+.count dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.count dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  /* Tabular figures stop the numbers jittering between analyses. */
+  font-variant-numeric: tabular-nums;
+}
+
+.subheading {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+}
+
+.clusters {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.clusters li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.clusters li:last-child {
+  border-bottom: none;
+}
+
+.cluster-label {
+  /* Long directory paths must not push the count off the row. */
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 0.8125rem;
+}
+
+.cluster-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.note,
+.placeholder {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.placeholder {
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  text-align: center;
+}

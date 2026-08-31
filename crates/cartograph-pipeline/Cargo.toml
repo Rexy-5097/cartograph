@@ -1,6 +1,6 @@
 [package]
-name = "cartograph-cli"
-description = "The cartograph command-line interface."
+name = "cartograph-pipeline"
+description = "Repository analysis composed once for every Cartograph client."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,33 +8,21 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-[[bin]]
-name = "cartograph"
-path = "src/main.rs"
-
 [dependencies]
 cartograph-core.workspace = true
-# `cartograph parse` runs the M01 TypeScript extractor.
 cartograph-parser.workspace = true
-# `cartograph normalize` canonicalises the parser's observations (M03).
 cartograph-resolver.workspace = true
-# `cartograph match` builds the HttpCall edges an accepted match produces.
 cartograph-graph.workspace = true
-# Discovery, parsing, caching and resolution, composed once for every client
-# (ADR-0001). The CLI is one of those clients, not the owner of the sequence.
-cartograph-pipeline.workspace = true
-anyhow.workspace = true
-clap.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 [dev-dependencies]
 # Canonical graph equality for the M10 differential tests: `incremental ==
 # clean` needs a defined relation, and comparing raw graphs would compare
 # graph-local node ids (ADR-0011).
 cartograph-testkit.workspace = true
+# Error-payload serialisation assertions, moved with error.rs.
+serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "cartograph-desktop"
+description = "Repository lifecycle and session model for the Cartograph desktop application."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# The analysis sequence, shared with the CLI (ADR-0001). This crate orchestrates
+# it and holds no analysis of its own.
+cartograph-pipeline.workspace = true
+# `layout` — the drawing contract the window consumes (ADR-0015).
+cartograph-graph.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

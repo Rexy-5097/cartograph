@@ -167,3 +167,81 @@ jobs:
         env:
           CARTOGRAPH_BINARY: ${{ github.workspace }}/target/release/cartograph
         run: node test.js
+
+  # MAP's desktop shell (M11). It is a separate cargo workspace on purpose —
+  # `tauri` links a system webview, and the jobs above have never needed GUI
+  # libraries — so it gets its own job that installs what it needs rather than
+  # imposing that cost on every other job. See ADR-0016.
+  desktop:
+    name: desktop shell · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      # Tauri v2's Linux prerequisites. macOS builds against the system
+      # WebKit and needs none of this.
+      - name: Install webview dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev patchelf
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/src-tauri/target
+          key: cargo-desktop-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-desktop-${{ runner.os }}-
+
+      # `npm ci` rather than `npm install`: the lockfile is the contract, and a
+      # job that silently resolves different versions is not testing what ships.
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Type-check the frontend
+        working-directory: desktop
+        run: npm run typecheck
+
+      # `generate_context!` reads ../dist, so the frontend must be built before
+      # the Rust side will compile at all.
+      - name: Build the frontend
+        working-directory: desktop
+        run: npx vite build
+
+      # The reducer is the one piece of frontend logic that can be wrong, and
+      # tsc is happy with a state machine that returns the wrong state.
+      - name: Test the frontend
+        working-directory: desktop
+        run: npm test
+
+      - name: Clippy the Tauri shell, warnings denied
+        working-directory: desktop/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      # `cargo build`, not `cargo check`. Checking type-checks and expands the
+      # macros — which is where a bad icon surfaces — but it never links, so it
+      # cannot support the claim that the shell builds. The dependencies are
+      # already compiled by the clippy step above, so this costs the link and
+      # little else.
+      - name: Build the shell
+        working-directory: desktop/src-tauri
+        run: cargo build
