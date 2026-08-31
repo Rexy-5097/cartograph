@@ -453,6 +453,187 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M10 — Incremental analysis engine
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-08-31 by the project owner |
+| Base | `cartograph-m09` — commit `e8416f9` |
+| Branch | `feature/m10-incremental-engine` · PR [#17](https://github.com/Rexy-5097/cartograph/pull/17) (merged `8690ebf`) |
+| Provisional checkpoint | none — ADR-0010: none was needed |
+| **Accepted checkpoint** | **`cartograph-m10`** — commit `8690ebf`, immutable |
+| Scope record | [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) — **Accepted** |
+
+> **The milestone's scope line is wider than what shipped.** Of three named
+> scope items, one was built. ADR-0014 records the difference rather than
+> letting the milestone close over it, and is accepted as the governing record.
+> Read it before treating the milestone file's scope line as delivered.
+
+### Scope delivered
+
+A parse fact cache keyed by content hash; recorded semantic read-dependency
+tracking threaded through the resolver; a per-file Stage C ORM access cache
+with dependency-aware reuse; and failure-safe publication. The invariant
+throughout is `incremental_result == clean_rebuild_result`, checked by
+canonical semantic graph equality, with the clean rebuild **retained as the
+oracle** rather than replaced — a cache that becomes the only implementation
+cannot be checked against anything.
+
+A Stage C entry is reusable only when *all* hold: its recorded resolution
+context is `complete`; its own content identity matches; the model-set
+fingerprint matches; the path set matches *if it was consulted*; the alias set
+matches *if it was consulted*; and every recorded read still exists with the
+same content identity. There is no partial reuse. Completeness is a one-way
+switch — a resolution that could not fully record what it read is never reused.
+
+### Deferred, and not claimed (ADR-0014)
+
+| Item | Evidence it is absent |
+|---|---|
+| content-hash node identity | `crates/cartograph-core/src/id.rs` is byte-identical to `cartograph-m09` |
+| notify file watching | no `notify` dependency in `Cargo.lock` |
+| local graph database (ROADMAP 0.2) | no `redb` dependency in `Cargo.lock` |
+| broader global-index caching | measured, then deliberately declined — see below |
+| `<250 ms` per change | **superseded**: never adopted as a criterion |
+
+**Stable cross-run node identity carries a forward obligation.** ADR-0011
+deferred it *to M10*; M10 deferred it again, because the cache keys per-file
+results by content and dependency identity and never by `NodeId`, and canonical
+equality compares semantic identity rather than handles. Checked against the
+milestone definitions: **M13 (structural diff) requires it unconditionally** —
+two branches are two independent analyses, and
+`layout(prev_graph, new_graph, prev_positions)` is defined as a correspondence
+between them. **M12 (blast radius) does not**, by its stated acceptance:
+reverse reachability runs over one graph, which ADR-0011's within-graph
+identity already serves. ADR-0014 states the five-point gate the future
+identity slice must pass.
+
+### Why the remaining rebuilds are not cached
+
+Each was measured before a decision was taken, not assumed:
+`ExportedConstants::collect` 1.8 ms, `ModuleIndex::build` 0.29 ms,
+`RouteIndex::build` 0.032 ms, `RouterIndex::build` 0.005 ms — against a Stage C
+cost of 894.8 ms. Caching any of them buys the machinery and not the benefit.
+`ModuleIndex` was investigated in depth as the most plausible candidate: its
+`by_path` field derives nothing, and its `aliases` field decomposes into a
+per-file contribution plus a deterministic **stable** merge. Tests pin that
+decomposition, so a future change adding derived state fails loudly rather than
+silently invalidating the decision.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `8690ebf`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — 622 passed, 0 failed, 10 ignored |
+| `benchmarks/m08/test_calibration.py` | PASS — 23 tests |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100, 3 warnings |
+| CI on `8690ebf` | PASS — all six required checks |
+
+GNU `make` is unavailable on this Windows machine, so `make check`, `make
+gates` and `make validate` were run as their documented equivalents: the cargo
+targets above, `python agentos/tools/scripts/run_gates.py`, and `python
+agentos/tools/scripts/validate_agentos.py`.
+
+### Verification findings
+
+**M09 semantics are unchanged.** All eleven M09 resolver suites pass with their
+M09 counts: imports 15 · orm 38 · cross_stack 12 · full_stack 5 · matching 38 ·
+routers 12 · dynamic_resolution 15 · evaluator 21 · symbolic 18 ·
+client_trace 10 · canonicalization 59. ADR-0013 permitted resolver change
+provided M09's answers did not move; they did not. The CLI surface is
+identical — the `Command` enum matches `cartograph-m09` exactly, and the only
+change to `main.rs` is a single `mod incremental;` declaration.
+
+**Correctness.** 42 dedicated tests (23 differential · 12 access-cache · 7
+atomicity) plus 56 resolver dependency tests, every one comparing against a
+clean rebuild through canonical semantic equality — which excludes `NodeId`,
+`EdgeId`, insertion order and `created_at`, and nothing else. Every mutation
+class is covered: no-op, edit, create, delete, rename, dependency change,
+transitive dependency change, path-set change, model ambiguity, alias change,
+unrelated change, revert, recreate, multiple mutations, malformed and repaired.
+
+**Real-repository mutation differential, at pinned commits.** Canonical
+checkouts are never mutated: analysable files are copied into a disposable
+temporary tree, mutated there, and removed on drop.
+
+`zulip` (`0ce8f627`) — 1,539 files, 1,308 nodes, 1,469 edges, 1,067 bundles.
+Fourteen mutations, every one `incremental == clean`, and **every miss
+attributable to a dependency term**: 20 on a model-file edit (the file plus the
+19 bundles recording it as a read); 246 on any `.py` create or delete (the 245
+path-set consumers plus the new file); ~1,068 on any model-set change, coarse
+by construction because the model set is global. Creating a colliding path
+takes the graph to 1,263/1,421 and deleting it restores the baseline exactly;
+a competing model *adds* two nodes while removing a resolved access — a cache
+assuming "new file = more facts" would be wrong in both directions.
+
+`airflow` (`9b43d6abc0fc`) — 917 files, 920 nodes, 848 edges. Seven mutations,
+all equal to clean. Retargeting or removing the Vite aliases collapses the
+graph by 702 semantic differences and restoring returns it exactly, while
+**Stage C misses stay at zero throughout**: the 13 Python bundles never consult
+the alias list, so no TypeScript or alias mutation may invalidate them. That is
+the language separation proven on a real repository rather than asserted.
+
+**Failure atomicity.** `analyze` had no failure path, so one was built in order
+to be tested. Per-file results are computed into a local map; `self.entries =
+fresh` is the single publication point; a failure returns before it and the
+previous generation is untouched. `published` records whether an attempt became
+state, so no combination of hit and miss counts can imply success after an
+abandoned update. On zulip, failure injected **500 entries into a 1,068-entry
+recomputation** leaves the generation at 1,067 with `published=false`; the
+retry equals a clean rebuild; reverting restores 1,308/1,469 exactly. Building
+that test found a real mistake first — it originally edited one model file,
+which invalidates only about twenty entries, so a failure at 500 never fired
+and the test passed vacuously.
+
+**Performance is recorded as observation, not as a criterion.** Stage C 894.8 →
+4.34 ms; resolve total 950.9 → 60.4 ms on zulip. A warm run now spends 318.7 ms
+of 379 ms (84%) in filesystem walk, read and hash — the floor of any
+content-addressed design, escapable only with file watching. The claim is
+**work avoided** (1,067 hits / 0 misses on an unchanged tree), not
+milliseconds; absolute wall-times on this machine varied several-fold between
+sessions with page-cache state.
+
+**Real-repository evidence is recorded, not re-run at acceptance.** The pinned
+zulip and airflow mirrors live outside the repository and are not vendored; on
+the acceptance machine they were unavailable, so all ten opt-in harnesses
+(three real-repository, one warm-cache baseline, one profile, five resolver
+real-repository tests) were skipped rather than run. The tables above are the
+evidence recorded when those suites were executed during development, retained
+in `docs/development/incremental-engine.md`. Nothing was re-measured at
+acceptance and nothing is claimed to have been.
+
+### Accepted limitations
+
+- **Both caches are process-local.** The CLI exits after each run, so it cannot
+  benefit from either across invocations — every measured speedup is
+  in-process. Persistence is deferred.
+- `DefaultHasher` (SipHash-1-3) is an **internal invalidation identity only**;
+  it is not stable across Rust releases and is unsuitable for an on-disk
+  format. Persistence would need a pinned hash, a schema version and a
+  corruption story.
+- **Failure atomicity is proven at one injected boundary.** Failures inside
+  `discover_accesses` or graph construction are not injected, because no
+  current path there returns an error. Publication atomicity is what this
+  proves; arbitrary internal failure coverage is not claimed.
+- Model-set invalidation is coarse by construction — any model appearing or
+  disappearing invalidates every bundle.
+- Neither real repository exercises both mechanisms at full scale: airflow's
+  checkout is the UI subtree with 13 Python files, and zulip has no build
+  aliases.
+- **Stable cross-run node identity does not exist**, and is not claimed to.
+- M08's measurement limits carry forward unchanged; M10 shipped no accuracy
+  change.
+
+---
+
 ## M09 — CLI v0.1.0
 
 | Field | Value |

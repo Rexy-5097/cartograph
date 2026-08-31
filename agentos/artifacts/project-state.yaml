@@ -7,14 +7,24 @@ spec_frozen: 2026-08
 current_milestone: M09
 status: ACCEPTED
 current_branch: main
-next_allowed_milestone: M10    # UNLOCKED - M09 accepted; M11 locked until M10 is accepted
+next_allowed_milestone: M11    # UNLOCKED - M10 accepted; M12 locked until M11 is accepted
 # `current_milestone` names the milestone this tree implements, not the one
 # next in play: `cartograph_cli::version::MILESTONE` is checked against it by a
-# unit test, and that constant is what the binary actually implements (M09).
-# M10 is unlocked via next_allowed_milestone and its own NOT_STARTED entry.
-# Advancing this field to M10 belongs with the first M10 code, not with M09's
-# acceptance bookkeeping — moving it here would fail QG-004 or force a false
-# claim in `cartograph version`.
+# unit test (crates/cartograph-cli/src/version.rs), and that constant still
+# reads "M09".
+#
+# It stays M09 through M10's acceptance. M10 added no CLI surface - the
+# incremental engine is internal and both caches are process-local - so the
+# constant was never bumped, and the test asserts MILESTONE == this field.
+# Advancing the field alone fails QG-004; advancing it together with the
+# constant is a product-code change, which a bookkeeping commit may not make
+# (CHECKPOINTS.md, RULE 020 carve-out).
+#
+# FOLLOW-UP: the pair must move together in a pull request - the first M11 PR,
+# or a dedicated one. Setting this field to M11 would be false twice over:
+# M11 is NOT_STARTED, and the binary implements neither M11 nor M10's surface.
+# M10's acceptance is recorded under milestones.M10 and last_checkpoint; the
+# unlock is carried by next_allowed_milestone, exactly as M09 carried M10's.
 
 milestones:
   M00:
@@ -200,28 +210,88 @@ milestones:
       - M08's measurement limits carry forward unchanged
       - Windows is validated for development, not for release artifacts
   M10:
-    status: NOT_STARTED                   # unlocked; no code written
+    status: ACCEPTED
+    accepted: 2026-08-31
+    pull_request: 17
+    provisional_tag: null                 # ADR-0010: none needed
+    accepted_tag: cartograph-m10          # immutable
+    merge_commit: 8690ebf0ae4608a7187e7a9503e67b29da0a8b00
+    scope_adr: ADR-0014                   # Accepted; governs what M10 delivered
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      The milestone's three acceptance criteria are met: incremental latency
+      measured on the benchmark corpus, correctness against full re-analysis,
+      and gates pass. Its *scope* line is wider than what shipped, which
+      ADR-0014 records rather than leaving unstated.
+
+      Delivered: a parse fact cache keyed by content hash; recorded semantic
+      read-dependency tracking through the resolver; per-file Stage C ORM
+      access caching with dependency-aware reuse; and failure-safe
+      publication. The invariant throughout is
+      `incremental_result == clean_rebuild_result`, checked by canonical
+      semantic graph equality with the clean rebuild retained as oracle.
+    finding: |
+      Measurement chose the target rather than intuition. Stage C was 894.8 ms
+      of a 950.9 ms cold resolve on zulip (94.1%); cached, a warm resolve is
+      60.4 ms. The remaining derived structures were then measured and
+      deliberately NOT cached - ExportedConstants 1.8 ms, ModuleIndex 0.29 ms,
+      RouteIndex 0.032 ms, RouterIndex 0.005 ms - because caching them buys
+      machinery and not benefit.
+
+      The claim is work avoided, not milliseconds: 1,067 hits / 0 misses on an
+      unchanged tree. A warm run now spends 318.7 ms of 379 ms (84%) in
+      filesystem walk, read and hash, which is the floor of any
+      content-addressed design and is only escapable with file watching.
+    metrics:
+      tests: 622
+      differential_tests: 23
+      access_cache_tests: 12
+      atomicity_tests: 7
+      dependency_tests: 56
+      m09_resolver_suites_unchanged: 11
+      stage_c_cold_ms: 894.8
+      stage_c_warm_ms: 4.34
+      resolve_cold_ms: 950.9
+      resolve_warm_ms: 60.4
+      zulip_mutations: 14
+      airflow_mutations: 7
+    deferred:                      # ADR-0014 - NOT delivered, and not claimed
+      - content-hash node identity   # id.rs byte-identical to cartograph-m09
+      - notify file watching         # no `notify` dependency exists
+      - local graph database         # ROADMAP 0.2; no `redb` dependency exists
+      - broader global-index caching # measured, then deliberately declined
+    superseded:
+      - "<250 ms per change"       # never adopted as a criterion; correctness came first
+    accepted_limitations:
+      - both caches are process-local, so the CLI cannot benefit across invocations
+      - DefaultHasher is an internal invalidation identity, unsuitable on disk
+      - failure atomicity is proven at one injected boundary, not for arbitrary internal failure
+      - model-set invalidation is coarse by construction; the model set is global
+      - airflow's subtree holds 13 Python files and zulip has no build aliases, so neither exercises both mechanisms at full scale
+      - stable cross-run node identity does not exist; M13 requires it (ADR-0014)
+  M11:
+    status: NOT_STARTED                   # unlocked; no code written, no branch
     pull_request: null
     provisional_tag: null
     accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M09
+  milestone: M10
   class: accepted
-  tag: cartograph-m09
-  merge_commit: e8416f936c6c1f909922b5d5185d4347920ddf2c
+  tag: cartograph-m10
+  merge_commit: 8690ebf0ae4608a7187e7a9503e67b29da0a8b00
 
-gates:                           # main at e8416f9, 2026-08-31, on Windows (QG-001..009)
+gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 497 passed, 0 failed
+  tests: PASS                    # QG-004 - 622 passed, 0 failed, 10 ignored
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008
   agentos_validator: PASS        # 98/100, 3 warnings - see agentos_validator below
-  ci: PASS                       # e8416f9: all six required checks green
+  ci: PASS                       # 8690ebf: all six required checks green
 
 agentos_validator:
   score: 98                      # ADR-0009 recorded 99/100 at M00
@@ -237,8 +307,9 @@ agentos_validator:
     - .devcontainer/devcontainer.json                 # ADR-0009: not vendored
 
 tests:
-  total: 497
+  total: 622
   failed: 0
+  ignored: 10                    # opt-in real-repository and profiling harnesses
 
 benchmarks:
   harness: ts_extraction, py_extraction, canonicalization, matching, evaluation and orm groups run
@@ -282,6 +353,6 @@ open_risks:
   - orm-access-attribution-without-import-resolution  # 286 edges unconfirmable
   - http-call-and-orm-access-recall-unmeasured
   - uncalibrated-confidence
-  - graph-local-node-identity
+  - graph-local-node-identity                        # deferred again at M10; ADR-0014 names M13 as the consumer
   - ts-grammar-gaps
   - test-client-http-observations   # test-suite request builders count as HTTP observations

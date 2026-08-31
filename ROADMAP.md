@@ -34,8 +34,8 @@ real-repository validation.
 | M07 | Full verified chain on a real repository | Day 14 | **Accepted** (`cartograph-m07`) |
 | M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | **Accepted** (`cartograph-m08`) |
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | **Accepted** (`cartograph-m09`) |
-| M10 | Incremental engine | Week 8 | **Unlocked, not started** |
-| M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | Not started |
+| M10 | Incremental engine | Week 8 | **Accepted** (`cartograph-m10`) — Stage C only, see [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) |
+| M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | **Unlocked, not started** |
 | M12 | Blast radius across language boundaries | Week 13 | Not started |
 | M13 | Structural diff, branch against branch | Week 16 | Not started |
 | M14 | GitHub Action posting architecture review on PRs | Week 19 | Not started |

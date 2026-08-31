@@ -7,19 +7,55 @@
 
 | Field | Value |
 |---|---|
-| Active milestone | **M09 — CLI v0.1.0** (accepted; this tree implements M09) |
-| Status | M00–M09 **ACCEPTED**; M10 unlocked, no code written |
+| Last accepted milestone | **M10 — incremental analysis engine** (accepted 2026-08-31) |
+| Status | M00–M10 **ACCEPTED**; M11 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M10 — **unlocked**; M11 locked until M10 is accepted |
-| Last accepted checkpoint | `cartograph-m09` (immutable, commit `e8416f9`) |
+| Next permitted milestone | M11 — **unlocked**; M12 locked until M11 is accepted |
+| Last accepted checkpoint | `cartograph-m10` (immutable, commit `8690ebf`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger stays at M09 because it names what this
-> tree implements — `version::MILESTONE` is checked against it by a unit test.
-> M10 is unlocked through `next_allowed_milestone`; the field advances with the
-> first M10 code, not with M09's acceptance.
+> `current_milestone` in the ledger still reads **M09**, and that is deliberate.
+> It names what the binary reports: `version::MILESTONE` is `"M09"` and a unit
+> test in `crates/cartograph-cli/src/version.rs` asserts the two are equal. M10
+> added no CLI surface — the incremental engine is internal and both caches are
+> process-local — so the constant was never bumped.
+>
+> Advancing the field alone fails QG-004. Advancing it together with the
+> constant is a product-code change, which a bookkeeping commit may not make.
+> **The pair must move together in a pull request** — the first M11 PR, or a
+> dedicated one. Setting it to M11 would be false twice over: M11 is
+> NOT_STARTED, and the binary implements neither M11 nor M10's surface.
+> M10's acceptance is carried by `milestones.M10`, `last_checkpoint` and
+> `next_allowed_milestone`, exactly as M09 carried M10's unlock.
 
 ## What exists
+
+- **M10: ACCEPTED** — incremental analysis, delivered as correctness first.
+  A parse fact cache keyed by content hash, recorded semantic read-dependency
+  tracking through the resolver, a per-file Stage C ORM access cache with
+  dependency-aware reuse, and failure-safe publication. The invariant is
+  `incremental_result == clean_rebuild_result`, checked by canonical semantic
+  graph equality with the clean rebuild **retained as oracle**.
+
+  Measurement chose the target: Stage C was 894.8 ms of a 950.9 ms cold resolve
+  on zulip (94.1%), and is now 4.34 ms warm. The other derived structures were
+  measured and deliberately not cached — ExportedConstants 1.8 ms, ModuleIndex
+  0.29 ms, RouteIndex 0.032 ms, RouterIndex 0.005 ms. The claim is **work
+  avoided** (1,067 hits / 0 misses on an unchanged tree), not milliseconds;
+  `<250 ms` was never adopted as a criterion and is not claimed as met.
+
+  **Its scope line is wider than what shipped.**
+  [ADR-0014](../../docs/adr/ADR-0014-m10-scope-reconciliation.md) (Accepted)
+  records that content-hash node identity, notify file watching and the local
+  graph database are **deferred, not delivered**. Stable cross-run identity
+  carries a forward obligation: **M13 requires it unconditionally**; M12 does
+  not, by its stated acceptance. ADR-0014 states the gate that work must pass.
+
+  622 tests, 9/9 gates and 98/100 on Windows. Both caches are process-local, so
+  the CLI cannot yet benefit across invocations. The zulip and airflow mutation
+  evidence is **recorded, not re-run at acceptance** — the pinned mirrors live
+  outside the repository and were unavailable on the acceptance machine, so all
+  ten opt-in harnesses were skipped.
 
 - **M09: ACCEPTED** — the first developer-facing release. Six commands over
   one shared pipeline, a versioned `--json` document (`schema_version` 1.0)
