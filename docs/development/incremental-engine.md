@@ -715,3 +715,95 @@ are context.
 
 **No persistence.** The cache is process-local; the CLI exits after each run
 and cannot yet benefit. That remains a separate concern, deliberately.
+
+---
+
+## 15. Real-repository mutation differential results
+
+Fixtures establish the rules in the small. They cannot establish that they hold
+over a tree nobody wrote for the test — one with re-export hubs, barrel files,
+colliding module names and thousands of overlapping dependency sets.
+
+Every case runs: materialise a disposable copy → baseline → mutate one thing →
+incremental → clean rebuild → **canonical semantic comparison**. The canonical
+checkout is never touched; only analysable files are copied (a file the walker
+never opens cannot enter `by_path`, so this is faithful, not a shortcut), and
+the copy is removed on drop. Nothing is committed, uploaded or persisted.
+
+### Zulip `0ce8f627` — 1,539 files, 1,308 nodes, 1,469 edges, 1,067 bundles
+
+| Mutation | hits | misses | nodes | edges | vs baseline | incremental == clean |
+|---|---:|---:|---:|---:|---:|:--:|
+| no-op re-run | 1067 | **0** | 1308 | 1469 | — | ✓ |
+| edit a model file (comment only) | 1047 | **20** | 1308 | 1469 | 0 | ✓ |
+| revert it | 1047 | 20 | 1308 | 1469 | **0** | ✓ |
+| create an unrelated `.py` | 822 | 246 | 1308 | 1469 | 0 | ✓ |
+| create a colliding path | 823 | 246 | **1263** | **1421** | 97 | ✓ |
+| delete the colliding path | 823 | 245 | 1308 | 1469 | **0** | ✓ |
+| create a competing model | 0 | 1069 | **1310** | 1470 | 3 | ✓ |
+| remove the competing model | 0 | 1068 | 1308 | 1469 | **0** | ✓ |
+| rename a module | 0 | 1068 | 1263 | 1421 | 97 | ✓ |
+| rename it back | 0 | 1068 | 1308 | 1469 | **0** | ✓ |
+| introduce malformed source | 0 | 1068 | 1263 | 1421 | 97 | ✓ |
+| repair it | 0 | 1068 | 1308 | 1469 | **0** | ✓ |
+| two independent mutations | 823 | 247 | 1308 | 1469 | 0 | ✓ |
+| two dependent mutations | 825 | 247 | 1308 | 1469 | 0 | ✓ |
+
+**Every miss is attributable to a dependency term**, which is what makes the
+numbers evidence rather than noise:
+
+- **20** on a model-file edit — the file itself plus the 19 bundles that record
+  it as a read. Precise, and the reason per-file read sets were worth recording.
+- **246** on *any* `.py` create or delete — 245 bundles consult the path set,
+  plus the new file. Over-invalidation, correct and predicted: creating a file
+  can make an import ambiguous, so every path-set consumer must be reconsidered.
+- **~1,068** on any model-set change — the model fingerprint is a term in every
+  key, so a model appearing or disappearing invalidates all of them. Coarse by
+  construction; the model set is global.
+
+**Create removes, delete restores.** The colliding path takes the graph from
+1,308/1,469 to 1,263/1,421 and deleting it restores the baseline **exactly**.
+The competing model *adds* two nodes while removing the resolved access. A
+cache that assumed "new file = add facts" would be wrong in both directions.
+
+### Airflow `9b43d6abc0fc` — 917 files, 920 nodes, 848 edges
+
+| Mutation | hits | misses | nodes | edges | vs baseline | equal |
+|---|---:|---:|---:|---:|---:|:--:|
+| no-op re-run | 13 | 0 | 920 | 848 | — | ✓ |
+| unrelated TypeScript edit | 13 | **0** | 920 | 848 | 0 | ✓ |
+| retarget an alias | 13 | **0** | **612** | **454** | 702 | ✓ |
+| remove the aliases | 13 | 0 | 612 | 454 | 702 | ✓ |
+| add an alias | 13 | 0 | 920 | 848 | 0 | ✓ |
+| restore the config | 13 | 0 | 920 | 848 | **0** | ✓ |
+| edit an alias target file | 13 | 0 | 920 | 848 | 0 | ✓ |
+
+Retargeting or removing the aliases collapses the graph by 702 semantic
+differences and restoring brings it back **exactly** — the alias mechanism
+really does drive these edges. Meanwhile **Stage C misses stay at zero
+throughout**: the 13 Python bundles never consult the alias list, so no
+TypeScript or alias mutation may invalidate them. That is the language
+separation, proven on a real repository rather than a fixture.
+
+### Where an update becomes observable
+
+Preparation for the failure-injection slice, not a claim that atomicity is
+done. The sequence today:
+
+1. the previous `AccessCache` map is still in place and untouched;
+2. each file's result is computed into a **local** `fresh` map, with each entry
+   built completely before insertion;
+3. `self.entries = fresh` publishes the whole generation in one assignment;
+4. the caller builds the graph from the returned contributions.
+
+So the observable transition is step 3, and a panic before it leaves the
+previous generation intact. What is **not** yet proven is behaviour when
+recomputation fails *partway* — no current path returns an error from Stage C,
+so failure has to be injected. That is the next slice.
+
+### Limitations of this suite
+
+Airflow's checkout is the UI subtree, which holds only 13 Python files, so it
+exercises alias and graph correctness rather than Stage C cache invalidation.
+Zulip has no build aliases. Neither repository exercises both at full scale in
+one tree.

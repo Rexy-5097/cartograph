@@ -1794,3 +1794,494 @@ mod access_cache {
         repo.assert_matches_clean(&mut state, "dependency became unparseable");
     }
 }
+
+/// Real-repository mutation differential testing.
+///
+/// Fixtures establish that the invalidation rules are right in the small. They
+/// cannot establish that they hold over a repository nobody wrote for the
+/// test: a real tree has re-export hubs, barrel files, colliding module names
+/// and thousands of entries whose dependency sets overlap in ways no fixture
+/// anticipates.
+///
+/// Every case here runs the same shape:
+///
+/// ```text
+/// materialise pinned copy -> baseline analysis -> mutate one thing
+///   -> incremental analysis -> clean rebuild -> canonical comparison
+/// ```
+///
+/// The canonical copy is never touched: sources are copied into a disposable
+/// temporary tree and mutated there. Nothing is committed, uploaded or
+/// persisted, and the tree is removed on drop.
+///
+/// Opt-in and ignored by default — these need checkouts this repository does
+/// not vendor.
+#[cfg(test)]
+mod real_repository {
+    use super::*;
+    use crate::pipeline::{self, Options};
+    use cartograph_testkit::canonical::{CanonicalGraph, canonical, differences};
+
+    /// A disposable copy of a pinned repository.
+    struct Mutable {
+        root: std::path::PathBuf,
+        /// Files copied, for baseline integrity checks.
+        files: usize,
+    }
+
+    impl Mutable {
+        /// Copies every analysable file from `src`, preserving structure.
+        ///
+        /// Only files the analyser would read are copied. That is faithful
+        /// rather than a shortcut: a file the walker never opens cannot enter
+        /// `by_path`, so it cannot affect resolution or the path set either.
+        fn materialise(src: &std::path::Path, label: &str) -> Self {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir()
+                .join("cartograph-m10-mutation")
+                .join(format!("{label}-{}-{unique}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).expect("temporary root");
+
+            let mut files = 0usize;
+            copy_sources(src, src, &root, &mut files);
+            Self { root, files }
+        }
+
+        fn path(&self, rel: &str) -> std::path::PathBuf {
+            self.root.join(rel)
+        }
+
+        fn read(&self, rel: &str) -> String {
+            std::fs::read_to_string(self.path(rel)).expect("file exists")
+        }
+
+        fn write(&self, rel: &str, contents: &str) {
+            let path = self.path(rel);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("parent");
+            }
+            std::fs::write(path, contents).expect("write");
+        }
+
+        fn delete(&self, rel: &str) {
+            std::fs::remove_file(self.path(rel)).expect("delete");
+        }
+
+        fn rename(&self, from: &str, to: &str) {
+            let target = self.path(to);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).expect("parent");
+            }
+            std::fs::rename(self.path(from), target).expect("rename");
+        }
+
+        fn incremental(&self, state: &mut IncrementalState) -> pipeline::Analysis {
+            pipeline::run_with_cache(&self.root, Options { quiet: true }, state)
+                .expect("incremental analysis")
+        }
+
+        fn clean(&self) -> pipeline::Analysis {
+            pipeline::run(&self.root, Options { quiet: true }).expect("clean analysis")
+        }
+    }
+
+    impl Drop for Mutable {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn copy_sources(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        dest_root: &std::path::Path,
+        count: &mut usize,
+    ) {
+        const SKIP: [&str; 11] = [
+            "node_modules",
+            ".git",
+            "dist",
+            "build",
+            "coverage",
+            "target",
+            "__pycache__",
+            "site-packages",
+            "venv",
+            ".venv",
+            "migrations",
+        ];
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                if name.starts_with('.') || SKIP.contains(&name) {
+                    continue;
+                }
+                copy_sources(root, &path, dest_root, count);
+            } else if matches!(
+                std::path::Path::new(name)
+                    .extension()
+                    .and_then(|e| e.to_str()),
+                Some("py" | "pyi" | "ts" | "tsx" | "mts" | "cts")
+            ) {
+                if let Ok(rel) = path.strip_prefix(root) {
+                    let target = dest_root.join(rel);
+                    if let Some(parent) = target.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if std::fs::copy(&path, &target).is_ok() {
+                        *count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// What one mutation did, for the report.
+    struct Outcome {
+        hits: usize,
+        misses: usize,
+        graph: CanonicalGraph,
+    }
+
+    /// Applies `mutate`, runs incremental and clean, and requires equality.
+    ///
+    /// The comparison is canonical semantic equality — a graph with equal
+    /// counts but different edges fails.
+    fn mutate_and_compare(
+        repo: &Mutable,
+        state: &mut IncrementalState,
+        label: &str,
+        mutate: impl FnOnce(&Mutable),
+    ) -> Outcome {
+        mutate(repo);
+        let incremental = repo.incremental(state);
+        let counters = state.accesses.stats();
+        let clean = repo.clean();
+
+        let (left, right) = (canonical(&incremental.graph), canonical(&clean.graph));
+        assert_eq!(
+            left,
+            right,
+            "{label}: incremental != clean\n{}",
+            differences(&left, &right).join("\n")
+        );
+        Outcome {
+            hits: counters.hits,
+            misses: counters.misses,
+            graph: left,
+        }
+    }
+
+    fn report(label: &str, out: &Outcome, before: &CanonicalGraph) {
+        let diff = differences(before, &out.graph).len();
+        println!(
+            "  {label:<44} hits={:<5} misses={:<5} nodes={:<5} edges={:<5} changed={diff}",
+            out.hits,
+            out.misses,
+            out.graph.nodes.len(),
+            out.graph.edges.len()
+        );
+    }
+
+    /// PART 5 — the Zulip mutation catalogue.
+    #[test]
+    #[ignore = "needs CARTOGRAPH_MUTATION_ZULIP; real-repository differential suite"]
+    fn zulip_mutations_keep_incremental_equal_to_clean() {
+        let Ok(src) = std::env::var("CARTOGRAPH_MUTATION_ZULIP") else {
+            return;
+        };
+        let repo = Mutable::materialise(std::path::Path::new(&src), "zulip");
+        assert!(
+            repo.files > 1000,
+            "precondition: expected a real checkout, copied {}",
+            repo.files
+        );
+
+        let mut state = IncrementalState::new();
+        let baseline = repo.incremental(&mut state);
+        let base_graph = canonical(&baseline.graph);
+        let cold = state.accesses.stats();
+        println!(
+            "zulip baseline: files={} nodes={} edges={} stageC_misses={}",
+            baseline.totals.files,
+            base_graph.nodes.len(),
+            base_graph.edges.len(),
+            cold.misses
+        );
+        assert!(
+            !base_graph.edges.is_empty(),
+            "precondition: the baseline must produce edges to mutate"
+        );
+
+        // PART 7 — a second pass over an unchanged tree must reuse everything.
+        let second = repo.incremental(&mut state);
+        assert_eq!(
+            state.accesses.stats().misses,
+            0,
+            "an unchanged real repository must recompute no Stage C result"
+        );
+        assert_eq!(state.accesses.stats().hits, cold.misses);
+        assert_eq!(
+            base_graph,
+            canonical(&second.graph),
+            "a no-op re-run must produce the same graph"
+        );
+        println!(
+            "  {:<44} hits={} misses=0",
+            "no-op re-run",
+            state.accesses.stats().hits
+        );
+
+        // A real file that declares models, and one that accesses them.
+        let models_rel = "zerver/models/messages.py";
+        let original_models = repo.read(models_rel);
+
+        // 1. Edit a real ORM model file (a recorded transitive dependency for
+        //    every file importing through zerver/models/__init__.py).
+        let out = mutate_and_compare(&repo, &mut state, "edit model file", |r| {
+            r.write(
+                models_rel,
+                &format!("{original_models}\n# cartograph M10 mutation probe\n"),
+            );
+        });
+        report("edit model file (comment only)", &out, &base_graph);
+        assert!(
+            out.misses > 0,
+            "editing a recorded dependency must invalidate"
+        );
+
+        // 2. Revert it: the graph must return exactly.
+        let out = mutate_and_compare(&repo, &mut state, "revert model file", |r| {
+            r.write(models_rel, &original_models);
+        });
+        assert_eq!(
+            base_graph, out.graph,
+            "a revert must restore the graph exactly"
+        );
+        report("revert model file", &out, &base_graph);
+
+        // 3. An unrelated new Python file that resolves nothing.
+        let out = mutate_and_compare(&repo, &mut state, "create unrelated file", |r| {
+            r.write("cartograph_probe_unrelated.py", "PROBE = 1\n");
+        });
+        report("create unrelated file", &out, &base_graph);
+
+        // 4. PART 14 — a colliding Python path, inert content.
+        let out = mutate_and_compare(&repo, &mut state, "create colliding path", |r| {
+            r.write("vendor/zerver/models/messages.py", "PROBE = 1\n");
+        });
+        report("create colliding path", &out, &base_graph);
+        assert!(out.misses > 0, "a path-set change must invalidate");
+
+        // 5. PART 10/14 — delete it; the previous resolution must return.
+        let out = mutate_and_compare(&repo, &mut state, "delete colliding path", |r| {
+            r.delete("vendor/zerver/models/messages.py");
+        });
+        report("delete colliding path", &out, &base_graph);
+
+        // 6. PART 11 — a competing model creating real ambiguity.
+        let out = mutate_and_compare(&repo, &mut state, "create competing model", |r| {
+            r.write(
+                "cartograph_probe_rival.py",
+                "from django.db import models\nclass Message(models.Model):\n    class Meta:\n        db_table = 'probe_messages'\n",
+            );
+        });
+        report("create competing model (ambiguity)", &out, &base_graph);
+
+        // 7. ...and remove it; the unique model must come back.
+        let out = mutate_and_compare(&repo, &mut state, "remove competing model", |r| {
+            r.delete("cartograph_probe_rival.py");
+        });
+        report("remove competing model", &out, &base_graph);
+
+        zulip_lifecycle_mutations(&repo, &mut state, &base_graph, &original_models, models_rel);
+    }
+
+    /// The rename / malformed / multi-file half of the Zulip catalogue.
+    ///
+    /// Split out so each function stays readable; it shares the materialised
+    /// copy and cache state with its caller rather than paying to rebuild them.
+    fn zulip_lifecycle_mutations(
+        repo: &Mutable,
+        state: &mut IncrementalState,
+        base_graph: &CanonicalGraph,
+        original_models: &str,
+        models_rel: &str,
+    ) {
+        // 8. PART 13 — rename a real module: no stale path may survive.
+        let out = mutate_and_compare(repo, state, "rename module", |r| {
+            r.rename(models_rel, "zerver/models/messages_renamed.py");
+        });
+        report("rename module", &out, base_graph);
+        assert!(
+            !out.graph.nodes.iter().any(|n| n.contains(models_rel))
+                && !out.graph.edges.iter().any(|e| e.contains(models_rel)),
+            "the old path survived the rename"
+        );
+
+        // 9. Rename back.
+        let out = mutate_and_compare(repo, state, "rename back", |r| {
+            r.rename("zerver/models/messages_renamed.py", models_rel);
+        });
+        assert_eq!(
+            *base_graph, out.graph,
+            "renaming back must restore the graph"
+        );
+        report("rename back", &out, base_graph);
+
+        // 10. Introduce malformed source, then repair it.
+        let out = mutate_and_compare(repo, state, "malformed source", |r| {
+            r.write(models_rel, "class Broken(:\n    pass\n");
+        });
+        report("introduce malformed source", &out, base_graph);
+
+        let out = mutate_and_compare(repo, state, "repair source", |r| {
+            r.write(models_rel, original_models);
+        });
+        assert_eq!(
+            *base_graph, out.graph,
+            "repairing must restore the graph exactly"
+        );
+        report("repair source", &out, base_graph);
+
+        // 11. Two independent mutations in one update.
+        let out = mutate_and_compare(repo, state, "two independent", |r| {
+            r.write("cartograph_probe_a.py", "A = 1\n");
+            r.write("cartograph_probe_b.py", "B = 1\n");
+        });
+        report("two independent mutations", &out, base_graph);
+
+        // 12. Two dependent mutations: a module and its importer together.
+        let out = mutate_and_compare(repo, state, "two dependent", |r| {
+            r.write("cartograph_probe_dep.py", "class Probe:\n    pass\n");
+            r.write(
+                "cartograph_probe_use.py",
+                "from cartograph_probe_dep import Probe\ndef make():\n    return Probe()\n",
+            );
+        });
+        report("two dependent mutations", &out, base_graph);
+    }
+
+    /// PART 6/15 — the Airflow alias mutation catalogue.
+    #[test]
+    #[ignore = "needs CARTOGRAPH_MUTATION_AIRFLOW; real-repository differential suite"]
+    fn airflow_alias_mutations_keep_incremental_equal_to_clean() {
+        let Ok(src) = std::env::var("CARTOGRAPH_MUTATION_AIRFLOW") else {
+            return;
+        };
+        let repo = Mutable::materialise(std::path::Path::new(&src), "airflow");
+        assert!(
+            repo.files > 500,
+            "precondition: expected a real frontend, copied {}",
+            repo.files
+        );
+
+        let config = "airflow-core/src/airflow/ui/vite.config.ts";
+        let original_config = repo.read(config);
+        assert!(
+            original_config.contains(r#"alias: { openapi: "/openapi-gen", src: "/src" }"#),
+            "precondition: the pinned config must declare the aliases this suite mutates"
+        );
+
+        let mut state = IncrementalState::new();
+        let baseline = repo.incremental(&mut state);
+        let base_graph = canonical(&baseline.graph);
+        let cold = state.accesses.stats();
+        println!(
+            "airflow baseline: files={} nodes={} edges={}",
+            baseline.totals.files,
+            base_graph.nodes.len(),
+            base_graph.edges.len()
+        );
+
+        let second = repo.incremental(&mut state);
+        assert_eq!(state.accesses.stats().misses, 0, "no-op must reuse");
+        assert_eq!(
+            base_graph,
+            canonical(&second.graph),
+            "a no-op re-run must produce the same graph"
+        );
+        println!("  {:<44} hits={} misses=0", "no-op re-run", cold.misses);
+
+        // 1. An unrelated TypeScript edit.
+        let out = mutate_and_compare(&repo, &mut state, "unrelated ts edit", |r| {
+            let rel = "airflow-core/src/airflow/ui/src/components/ActionErrors.tsx";
+            let body = r.read(rel);
+            r.write(
+                rel,
+                &format!("{body}\nexport const CARTOGRAPH_PROBE = 1;\n"),
+            );
+        });
+        report("unrelated TypeScript edit", &out, &base_graph);
+
+        // 2. Retarget an alias.
+        let out = mutate_and_compare(&repo, &mut state, "retarget alias", |r| {
+            r.write(
+                config,
+                &original_config.replace(
+                    r#"alias: { openapi: "/openapi-gen", src: "/src" }"#,
+                    r#"alias: { openapi: "/elsewhere-gen", src: "/src" }"#,
+                ),
+            );
+        });
+        report("retarget alias", &out, &base_graph);
+
+        // 3. Remove the aliases entirely.
+        let out = mutate_and_compare(&repo, &mut state, "remove aliases", |r| {
+            r.write(
+                config,
+                &original_config.replace(
+                    r#"  resolve: { alias: { openapi: "/openapi-gen", src: "/src" } },"#,
+                    "",
+                ),
+            );
+        });
+        report("remove aliases", &out, &base_graph);
+
+        // 4. Add a third alias.
+        let out = mutate_and_compare(&repo, &mut state, "add alias", |r| {
+            r.write(
+                config,
+                &original_config.replace(
+                    r#"alias: { openapi: "/openapi-gen", src: "/src" }"#,
+                    r#"alias: { openapi: "/openapi-gen", src: "/src", extra: "/extra" }"#,
+                ),
+            );
+        });
+        report("add alias", &out, &base_graph);
+
+        // 5. Restore: the graph must return exactly.
+        let out = mutate_and_compare(&repo, &mut state, "restore config", |r| {
+            r.write(config, &original_config);
+        });
+        assert_eq!(
+            base_graph, out.graph,
+            "restoring the configuration must restore the graph exactly"
+        );
+        report("restore config", &out, &base_graph);
+
+        // 6. Edit a real alias *target* file.
+        let out = mutate_and_compare(&repo, &mut state, "edit alias target", |r| {
+            let rel = "airflow-core/src/airflow/ui/openapi-gen/requests/types.gen.ts";
+            if let Ok(body) = std::fs::read_to_string(r.path(rel)) {
+                r.write(rel, &format!("{body}\nexport type CartographProbe = 1;\n"));
+            }
+        });
+        report("edit alias target file", &out, &base_graph);
+    }
+}
