@@ -1001,6 +1001,126 @@ mod differential {
         );
     }
 
+    /// A fixture that actually exercises ORM *access* resolution.
+    ///
+    /// `Order.query.all()` does not: `classify_access` recognises Django
+    /// `.objects` chains and construction, so a Flask-SQLAlchemy `.query`
+    /// chain yields no access and any test built on it would prove nothing
+    /// about `resolves_to_the_model`. Construction does reach it.
+    fn orm_access(repo: &Repo) {
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'orders'\n",
+        )
+        .write(
+            "app/handlers.py",
+            "from .models import Order\n\
+             def create_order(name):\n\
+             \x20   o = Order(name=name)\n\
+             \x20   return o\n",
+        );
+    }
+
+    fn has_access_edge(graph: &cartograph_graph::ArchitectureGraph) -> bool {
+        canonical(graph)
+            .edges
+            .iter()
+            .any(|e| e.contains("OrmAccess"))
+    }
+
+    /// Python module resolution scans **file paths**, so a file whose path
+    /// collides as a suffix makes the import ambiguous — even when its
+    /// contents are inert. Adding `pkg/app/models.py` makes `from .models
+    /// import Order` resolve to two candidates, and `resolve_python_module`
+    /// answers `None` rather than choose. The access edge disappears.
+    ///
+    /// This is a dependency on the repository's **path set**, not on any
+    /// file's content, and it is the case most likely to be missed by an
+    /// invalidation rule written from content hashes alone.
+    #[test]
+    fn a_path_collision_removes_an_access_edge_without_touching_any_content() {
+        let repo = Repo::new("path-collision");
+        orm_access(&repo);
+        let mut cache = FactCache::new();
+        let before = repo.incremental(&mut cache);
+        assert!(
+            has_access_edge(&before.graph),
+            "the fixture must produce an ORM access edge to begin with: {:?}",
+            canonical(&before.graph).edges
+        );
+
+        // Inert content. Only the path matters.
+        repo.write("pkg/app/models.py", "VERSION = 1\n");
+
+        let after = repo.incremental(&mut cache);
+        assert!(
+            !has_access_edge(&after.graph),
+            "an ambiguous module path must withdraw the access edge: {:?}",
+            canonical(&after.graph).edges
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "module path collision created");
+    }
+
+    /// ...and removing the colliding path restores it.
+    #[test]
+    fn removing_a_path_collision_restores_the_access_edge() {
+        let repo = Repo::new("path-collision-undo");
+        orm_access(&repo);
+        repo.write("pkg/app/models.py", "VERSION = 1\n");
+        let mut cache = FactCache::new();
+        let collided = repo.incremental(&mut cache);
+        assert!(
+            !has_access_edge(&collided.graph),
+            "the fixture must start collided"
+        );
+
+        repo.delete("pkg/app/models.py");
+
+        let after = repo.incremental(&mut cache);
+        assert!(
+            has_access_edge(&after.graph),
+            "removing the colliding path must restore the access edge: {:?}",
+            canonical(&after.graph).edges
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "module path collision removed");
+    }
+
+    /// Python module resolution never consults module aliases —
+    /// `resolve_python_module` does not call `apply_alias`, which is reached
+    /// only from `follow_typescript`. So a TypeScript file, with or without a
+    /// build alias, cannot change a Python ORM result. Pinned because the
+    /// opposite was assumed during design, and an invalidation rule built on
+    /// that assumption would recompute every Python access on every
+    /// TypeScript edit.
+    #[test]
+    fn typescript_files_and_aliases_do_not_affect_python_orm_resolution() {
+        let repo = Repo::new("ts-inert");
+        orm_access(&repo);
+        let mut cache = FactCache::new();
+        let before = canonical(&repo.incremental(&mut cache).graph);
+        assert!(
+            before.edges.iter().any(|e| e.contains("OrmAccess")),
+            "precondition: an access edge must exist"
+        );
+
+        repo.write("web/unrelated.ts", "export const X = 1;\n")
+            .write(
+                "web/tsconfig.json",
+                "{\"compilerOptions\":{\"baseUrl\":\".\",\"paths\":{\"@app/*\":[\"app/*\"]}}}\n",
+            );
+
+        let after = canonical(&repo.incremental(&mut cache).graph);
+        assert_eq!(
+            before, after,
+            "a TypeScript file and a build alias must leave Python ORM results untouched"
+        );
+        repo.assert_incremental_matches_clean(&mut cache, "typescript added");
+    }
+
     /// PART 24 — the performance baseline, on a real repository.
     ///
     /// Opt-in and ignored by default: it needs a checkout this repository does
