@@ -27,6 +27,8 @@ use std::collections::HashMap;
 
 use cartograph_parser::model::{FileAnalysis, SourceLanguage, Symbol, SymbolKind};
 
+use crate::dependencies::ResolutionContext;
+
 /// Where a name's declaration is, or why that is not known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
@@ -197,15 +199,38 @@ impl<'a> ModuleIndex<'a> {
     /// Resolves a Python name used in `from` to its declaration.
     #[must_use]
     pub fn resolve_python(&self, from: &FileAnalysis, name: &str) -> Resolution {
+        self.resolve_python_tracked(from, name, &mut ResolutionContext::new())
+    }
+
+    /// [`resolve_python`](Self::resolve_python), recording what it read.
+    ///
+    /// The untracked form delegates here, so there is exactly one
+    /// implementation of Python resolution and the recorded dependencies
+    /// cannot drift away from the behaviour they describe.
+    pub fn resolve_python_tracked(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
+        // The asking file's own symbols decide whether the name is local, so
+        // its contents are a dependency of every answer.
+        deps.record_file(&from.path);
         if let Some(symbol) = declaration_in(from, name) {
             return Resolution::Local {
                 line: symbol.span.start_line,
             };
         }
-        self.follow_python(from, name, 0)
+        self.follow_python(from, name, 0, deps)
     }
 
-    fn follow_python(&self, from: &FileAnalysis, name: &str, hop: usize) -> Resolution {
+    fn follow_python(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        hop: usize,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
         if hop >= MAX_REEXPORT_HOPS {
             return Resolution::Unresolved {
                 module: from.path.clone(),
@@ -213,6 +238,8 @@ impl<'a> ModuleIndex<'a> {
             };
         }
 
+        // This hop reads `from`'s import statements.
+        deps.record_file(&from.path);
         let Some(import) = python_import_binding(from, name) else {
             return Resolution::NotBound;
         };
@@ -223,12 +250,17 @@ impl<'a> ModuleIndex<'a> {
             .find(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
             .map_or(name, |n| n.imported.as_str());
 
+        // Matching a dotted specifier scans the repository's file paths and
+        // answers only when exactly one matches, so the answer depends on
+        // which files exist — not on any file's contents.
+        deps.record_path_set();
         let Some(target) = self.resolve_python_module(&import.specifier, &from.path) else {
             return Resolution::Unresolved {
                 module: import.specifier.clone(),
                 reason: "is not a module this project contains".to_owned(),
             };
         };
+        deps.record_file(&target);
         let Some(module) = self.file(&target) else {
             return Resolution::Unresolved {
                 module: import.specifier.clone(),
@@ -247,7 +279,7 @@ impl<'a> ModuleIndex<'a> {
         // in the route so the evidence shows the whole path a reader would
         // have to walk by hand, not just its last step.
         let hop_taken = format!("`from {} import {exported}`", import.specifier);
-        match self.follow_python(module, exported, hop + 1) {
+        match self.follow_python(module, exported, hop + 1, deps) {
             Resolution::Local { line } => Resolution::Declared {
                 file: module.path.clone(),
                 line,

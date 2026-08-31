@@ -390,3 +390,55 @@ files; deleting one of them and asserting the survivor's model *reappears*;
 creating a colliding declaration and asserting the existing model *disappears*;
 and renaming a class into and out of a collision. Each compared against a clean
 rebuild.
+
+---
+
+## 9. Governance change, and what replaced the byte-identical rule
+
+M10 originally required the analyser to stay byte-identical to
+`cartograph-m09`. That rule blocked the milestone once tracing proved a Stage C
+result depends on recorded reads and on the repository's path set — neither
+predictable from a content hash, and both produced by code inside
+`cartograph-resolver`.
+
+[ADR-0013](../adr/ADR-0013-m10-resolver-semantic-compatibility.md) replaces it:
+**the implementation may change; M09's semantics may not.** The verification
+step is now canonical graph equality against the clean-rebuild oracle plus the
+full regression suite, rather than an empty diffstat. `cartograph-m09` itself
+is untouched.
+
+## 10. Recorded read dependencies
+
+`ResolutionContext` (`cartograph-resolver::dependencies`) records what a
+resolution actually consulted. It stores three things and nothing else:
+
+| Field | Meaning | Why it is separate |
+|---|---|---|
+| `files` | repository-relative paths whose **contents** were read | a change to any of them can change the answer |
+| `path_set_consulted` | whether the answer depended on **which files exist** | a file creation or deletion can change the answer with no content change anywhere |
+| `complete` | whether every dependency was tracked | a result whose dependencies are not fully known must never be reused |
+
+Ordering is a `BTreeSet`, so two runs over the same repository produce
+byte-identical dependency sets and a future key cannot depend on hash iteration
+order. Nothing else is stored: no source text, no absolute paths, no
+timestamps, no environment values.
+
+`resolve_python` now delegates to `resolve_python_tracked`, so there is one
+implementation and tracking cannot drift from the behaviour it describes. The
+reads recorded are the asking file (its symbols decide locality, its imports
+decide the next hop), the path set (whenever a module specifier is matched),
+and every module walked in a re-export chain.
+
+`complete` is a one-way switch, and `absorb` propagates incompleteness. This
+matters before any cache exists: the invariant that an untracked dependency
+disqualifies reuse has to be built in from the start, not retrofitted.
+
+### What this implies for a future cache key
+
+A Stage C entry would need: the file's own content identity, the merged model
+fingerprint, the content identities of every recorded read, **and** a
+fingerprint of the repository's Python path set whenever
+`path_set_consulted` is true. A key without the last term is unsound — proven
+by fixture, not argued.
+
+**No cache is implemented.** This slice records dependencies and nothing more.

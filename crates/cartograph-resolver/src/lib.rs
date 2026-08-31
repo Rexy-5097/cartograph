@@ -54,6 +54,7 @@
 
 pub mod canonical;
 pub mod client_trace;
+pub mod dependencies;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
@@ -69,6 +70,7 @@ pub use canonical::{
     ObservationKind, RouteProvenance, Segment,
 };
 pub use client_trace::{ClientFunction, add_client_call_edges, client_functions};
+pub use dependencies::ResolutionContext;
 pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,
