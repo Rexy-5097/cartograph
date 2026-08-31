@@ -701,3 +701,391 @@ fn incompleteness_propagates_through_nested_absorption() {
         vec!["clean.py", "deep.py", "mid.py", "outer.py"]
     );
 }
+
+// ── merged model set: canonical form and fingerprint ────────────────────
+
+use cartograph_resolver::{ModelSetFingerprint, OrmAnalysis, canonical_model_set};
+
+fn model_set(files: &[(&str, &str)]) -> (Vec<String>, ModelSetFingerprint) {
+    let analyses = analyze(files);
+    let orm = OrmAnalysis::build(&analyses);
+    (canonical_model_set(&orm.models), orm.model_fingerprint)
+}
+
+const BASE_HDR: &str =
+    "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\n";
+
+/// One model: canonical form is `name@file`, sorted, repository-relative.
+#[test]
+fn the_canonical_model_set_is_name_and_declaring_file() {
+    let (canonical, _) = model_set(&[(
+        "app/models.py",
+        &format!("{BASE_HDR}class Order(Base):\n    __tablename__ = 'orders'\n"),
+    )]);
+    assert!(
+        canonical.contains(&"Order@app/models.py".to_owned()),
+        "canonical set: {canonical:?}"
+    );
+    for entry in &canonical {
+        assert!(!entry.contains(':'), "no absolute path may appear: {entry}");
+    }
+}
+
+/// Two runs over the same repository must agree exactly.
+#[test]
+fn the_fingerprint_is_deterministic() {
+    let files: &[(&str, &str)] = &[
+        (
+            "app/a.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n",
+        ),
+        (
+            "app/b.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Ledger(DeclarativeBase):\n    pass\nclass Receipt(Ledger):\n    __tablename__ = 'receipts'\n",
+        ),
+    ];
+    let (c1, f1) = model_set(files);
+    let (c2, f2) = model_set(files);
+    assert_eq!(c1, c2);
+    assert_eq!(f1, f2);
+}
+
+/// Declaration order in the repository must not change the fingerprint: the
+/// canonical form is sorted, not insertion-ordered.
+#[test]
+fn declaration_order_does_not_change_the_fingerprint() {
+    let a = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+    let b = "from sqlalchemy.orm import DeclarativeBase\nclass Ledger(DeclarativeBase):\n    pass\nclass Receipt(Ledger):\n    __tablename__ = 'receipts'\n";
+    let (_, forward) = model_set(&[("app/a.py", a), ("app/b.py", b)]);
+    let (_, reverse) = model_set(&[("app/b.py", b), ("app/a.py", a)]);
+    assert_eq!(forward, reverse, "sorting must remove order sensitivity");
+}
+
+/// Adding a model changes the fingerprint.
+#[test]
+fn adding_a_model_changes_the_fingerprint() {
+    let one = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+    let (_, before) = model_set(&[("app/a.py", one)]);
+    let (_, after) = model_set(&[
+        ("app/a.py", one),
+        (
+            "app/b.py",
+            "from sqlalchemy.orm import DeclarativeBase\nclass Ledger(DeclarativeBase):\n    pass\nclass Receipt(Ledger):\n    __tablename__ = 'receipts'\n",
+        ),
+    ]);
+    assert_ne!(before, after);
+}
+
+/// Renaming a model changes the fingerprint.
+#[test]
+fn renaming_a_model_changes_the_fingerprint() {
+    let (_, before) = model_set(&[(
+        "app/a.py",
+        "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n",
+    )]);
+    let (_, after) = model_set(&[(
+        "app/a.py",
+        "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Invoice(Base):\n    __tablename__ = 'orders'\n",
+    )]);
+    assert_ne!(before, after);
+}
+
+/// Moving a model to another file changes the fingerprint, because
+/// `resolves_to_the_model` compares the declaring file.
+#[test]
+fn moving_a_model_to_another_file_changes_the_fingerprint() {
+    let body = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+    let (canon_a, here) = model_set(&[("app/a.py", body)]);
+    let (canon_b, there) = model_set(&[("app/b.py", body)]);
+    assert_ne!(
+        canon_a, canon_b,
+        "the declaring file is part of the identity"
+    );
+    assert_ne!(here, there);
+}
+
+/// Ambiguity needs no field of its own: an ambiguous name leaves the merged
+/// map, so the canonical set shrinks and the fingerprint moves.
+#[test]
+fn creating_and_removing_ambiguity_moves_the_fingerprint() {
+    let a = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+    let rival = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'other'\n";
+
+    let (canon_one, unique) = model_set(&[("app/a.py", a)]);
+    assert!(
+        canon_one.iter().any(|e| e.starts_with("Order@")),
+        "precondition: exactly one Order must resolve first, got {canon_one:?}"
+    );
+
+    let (canon_two, ambiguous) = model_set(&[("app/a.py", a), ("app/dup.py", rival)]);
+    assert!(
+        !canon_two.iter().any(|e| e.starts_with("Order@")),
+        "precondition: the duplicate must make Order ambiguous, got {canon_two:?}"
+    );
+    assert_ne!(unique, ambiguous, "ambiguity must move the fingerprint");
+
+    // ...and removing the rival restores the original identity exactly.
+    let (canon_back, restored) = model_set(&[("app/a.py", a)]);
+    assert_eq!(canon_one, canon_back);
+    assert_eq!(unique, restored, "removing ambiguity must restore it");
+}
+
+/// A table rename must NOT move the fingerprint. Stage C never reads `table`,
+/// so folding it in would invalidate every access entry for a change that
+/// cannot alter a single access. Proven by tracing, pinned here.
+#[test]
+fn a_table_rename_does_not_move_the_stage_c_fingerprint() {
+    let (_, orders) = model_set(&[(
+        "app/a.py",
+        "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n",
+    )]);
+    let (_, renamed) = model_set(&[(
+        "app/a.py",
+        "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'purchase_orders'\n",
+    )]);
+    assert_eq!(
+        orders, renamed,
+        "the table is not a Stage C input; including it would over-invalidate"
+    );
+}
+
+/// A file that declares no model leaves the fingerprint untouched.
+#[test]
+fn an_unrelated_non_model_file_does_not_move_the_fingerprint() {
+    let a = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+    let (_, without) = model_set(&[("app/a.py", a)]);
+    let (_, with_extra) = model_set(&[("app/a.py", a), ("app/notes.py", "VALUE = 1\n")]);
+    assert_eq!(without, with_extra);
+}
+
+// ── per-file aggregation ────────────────────────────────────────────────
+
+/// Every Python file gets a bundle, including files with no accesses, and the
+/// flattened `accesses` list is exactly the concatenation of the per-file
+/// lists — the grouping regroups, it does not recompute.
+#[test]
+fn per_file_bundles_partition_the_flattened_accesses() {
+    let files = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+        ("app/quiet.py", "VALUE = 1\n"),
+        ("web/thing.ts", "export const X = 1;\n"),
+    ];
+    let analyses = analyze(files);
+    let orm = OrmAnalysis::build(&analyses);
+
+    assert!(
+        !orm.accesses.is_empty(),
+        "precondition: the fixture must produce at least one access"
+    );
+    let regrouped: Vec<_> = orm
+        .per_file
+        .iter()
+        .flat_map(|f| f.accesses.iter().cloned())
+        .collect();
+    assert_eq!(
+        format!("{:?}", orm.accesses),
+        format!("{regrouped:?}"),
+        "the flattened list must equal the concatenation of the bundles"
+    );
+
+    let paths: Vec<&str> = orm.per_file.iter().map(|f| f.file.as_str()).collect();
+    assert!(paths.contains(&"app/quiet.py"), "bundles: {paths:?}");
+    assert!(
+        !paths.contains(&"web/thing.ts"),
+        "TypeScript files are not part of the ORM stage: {paths:?}"
+    );
+}
+
+/// Each bundle carries the dependencies of its own file, and only those.
+#[test]
+fn each_bundle_carries_its_own_dependencies() {
+    let files = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+        ("app/quiet.py", "VALUE = 1\n"),
+    ];
+    let analyses = analyze(files);
+    let orm = OrmAnalysis::build(&analyses);
+
+    let handlers = orm
+        .per_file
+        .iter()
+        .find(|f| f.file == "app/handlers.py")
+        .expect("handlers bundle");
+    assert!(
+        !handlers.accesses.is_empty(),
+        "precondition: handlers.py must produce an access"
+    );
+    assert!(handlers.dependencies.reads("app/handlers.py"));
+    assert!(handlers.dependencies.reads("app/models.py"));
+    assert!(handlers.dependencies.consults_path_set());
+    assert!(handlers.dependencies.is_complete());
+    assert!(
+        !handlers.dependencies.reads("app/quiet.py"),
+        "reads: {:?}",
+        handlers.dependencies.files().collect::<Vec<_>>()
+    );
+
+    let quiet = orm
+        .per_file
+        .iter()
+        .find(|f| f.file == "app/quiet.py")
+        .expect("quiet bundle");
+    assert!(quiet.accesses.is_empty());
+    assert_eq!(
+        quiet.dependencies.files().collect::<Vec<_>>(),
+        vec!["app/quiet.py"]
+    );
+}
+
+/// Aggregation must be deterministic across runs: same bundles, same order,
+/// same dependency sets, same fingerprint.
+#[test]
+fn aggregation_is_deterministic_across_runs() {
+    let files: &[(&str, &str)] = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+    ];
+    let first = OrmAnalysis::build(&analyze(files));
+    let second = OrmAnalysis::build(&analyze(files));
+
+    assert_eq!(first.model_fingerprint, second.model_fingerprint);
+    assert_eq!(first.per_file.len(), second.per_file.len());
+    for (a, b) in first.per_file.iter().zip(second.per_file.iter()) {
+        assert_eq!(a.file, b.file);
+        assert_eq!(format!("{:?}", a.accesses), format!("{:?}", b.accesses));
+        assert_eq!(a.dependencies, b.dependencies);
+    }
+}
+
+/// Failure safety: the aggregation layer must never launder an incomplete
+/// context into a complete one. Simulated by marking a bundle's context
+/// incomplete and absorbing it, the way a cache-eligibility check would.
+#[test]
+fn aggregation_preserves_incompleteness() {
+    let files = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+    ];
+    let analyses = analyze(files);
+    let orm = OrmAnalysis::build(&analyses);
+    assert!(
+        orm.per_file.iter().all(|f| f.dependencies.is_complete()),
+        "precondition: this fixture tracks everything"
+    );
+
+    let mut rolled_up = ResolutionContext::new();
+    for bundle in &orm.per_file {
+        rolled_up.absorb(&bundle.dependencies);
+    }
+    assert!(rolled_up.is_complete());
+
+    // One incomplete contribution must disqualify the whole roll-up.
+    let mut broken = orm.per_file[0].dependencies.clone();
+    broken.mark_incomplete();
+    let mut with_broken = ResolutionContext::new();
+    with_broken.absorb(&broken);
+    for bundle in orm.per_file.iter().skip(1) {
+        with_broken.absorb(&bundle.dependencies);
+    }
+    assert!(
+        !with_broken.is_complete(),
+        "an incomplete contribution must never be laundered by absorbing complete ones"
+    );
+}
+
+/// Per-file Stage C bundles and the model fingerprint on a real repository.
+///
+/// Opt-in; ignored by default. Lives in `tests/` because QG-008 forbids the
+/// resolver's sources from reading the environment.
+#[test]
+#[ignore = "needs CARTOGRAPH_READSET_REPO; inspects rather than asserts"]
+fn per_file_bundles_on_a_real_repository() {
+    let Ok(repo) = std::env::var("CARTOGRAPH_READSET_REPO") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(repo);
+    let mut paths = Vec::new();
+    walk(&root, &root, &mut paths);
+    paths.sort();
+
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analyses: Vec<FileAnalysis> = paths
+        .iter()
+        .filter_map(|rel| analyzer.analyze_file(&root, rel).ok())
+        .collect();
+
+    let orm = OrmAnalysis::build(&analyses);
+
+    let mut histogram: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    let mut path_set = 0usize;
+    let mut alias_set = 0usize;
+    let mut incomplete = 0usize;
+    let mut with_accesses = 0usize;
+    for bundle in &orm.per_file {
+        *histogram
+            .entry(bundle.dependencies.file_count())
+            .or_default() += 1;
+        if bundle.dependencies.consults_path_set() {
+            path_set += 1;
+        }
+        if bundle.dependencies.consults_alias_set() {
+            alias_set += 1;
+        }
+        if !bundle.dependencies.is_complete() {
+            incomplete += 1;
+        }
+        if !bundle.accesses.is_empty() {
+            with_accesses += 1;
+        }
+    }
+
+    println!("python files        : {}", analyses.len());
+    println!("per-file bundles    : {}", orm.per_file.len());
+    println!("bundles w/ accesses : {with_accesses}");
+    println!("total accesses      : {}", orm.accesses.len());
+    println!(
+        "models / ambiguous  : {} / {}",
+        orm.models.len(),
+        orm.ambiguous.len()
+    );
+    println!("model fingerprint   : {:016x}", orm.model_fingerprint.get());
+    println!("consulted path set  : {path_set}");
+    println!("consulted alias set : {alias_set}");
+    println!("incomplete bundles  : {incomplete}");
+    println!("dependency-set size histogram (files -> bundles):");
+    for (size, count) in &histogram {
+        println!("  {size:3} -> {count}");
+    }
+    println!("largest bundles:");
+    let mut by_size: Vec<_> = orm.per_file.iter().collect();
+    by_size.sort_by_key(|b| std::cmp::Reverse(b.dependencies.file_count()));
+    for bundle in by_size.iter().take(3) {
+        println!(
+            "  {} accesses={} reads={} path_set={} complete={}",
+            bundle.file,
+            bundle.accesses.len(),
+            bundle.dependencies.file_count(),
+            bundle.dependencies.consults_path_set(),
+            bundle.dependencies.is_complete()
+        );
+        for read in bundle.dependencies.files().take(6) {
+            println!("      {read}");
+        }
+    }
+
+    // The flattened list must be exactly the concatenation of the bundles,
+    // on a real repository and not only on fixtures.
+    let regrouped: usize = orm.per_file.iter().map(|b| b.accesses.len()).sum();
+    assert_eq!(
+        regrouped,
+        orm.accesses.len(),
+        "bundles must partition the flattened accesses"
+    );
+    // TypeScript must never depend on the Python ORM path.
+    assert_eq!(
+        alias_set, 0,
+        "Python ORM bundles must not consult build aliases"
+    );
+}

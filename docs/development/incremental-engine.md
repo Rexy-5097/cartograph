@@ -442,3 +442,91 @@ fingerprint of the repository's Python path set whenever
 by fixture, not argued.
 
 **No cache is implemented.** This slice records dependencies and nothing more.
+
+---
+
+## 11. The cacheable unit, and the future Stage C key
+
+### `PerFileAccessAnalysis`
+
+One file's whole ORM access contribution, plus what producing it read:
+
+```
+PerFileAccessAnalysis {
+    file:         repository-relative path
+    accesses:     Vec<OrmAccessSite>      // same values as the flattened list
+    dependencies: ResolutionContext       // files, path_set, alias_set, complete
+}
+```
+
+`OrmAnalysis::accesses` is unchanged and is exactly the concatenation of the
+bundles in order — the grouping regroups, it does not recompute. Files that
+produce no access still get a bundle: editing one is precisely what could
+introduce an access, so it has a dependency set worth holding.
+
+### The model-set fingerprint — deliberately narrow
+
+Tracing `discover_accesses` proves access resolution consults exactly two
+things about a model: whether its **name** is a key of the merged map
+(`classify_access`), and which **file declares it** (`resolves_to_the_model`,
+comparing `declared.file`). It never reads `flavor`, `base`, `table` or the
+model's span.
+
+So the canonical form is `name@file`, sorted, and the fingerprint covers that
+and nothing else. **Including the table would be an oversized dependency**: a
+table rename changes the model-to-table edge that `add_table_edges` builds, but
+cannot change which accesses resolve, and folding it in would spuriously
+invalidate every access entry on an unrelated rename. A test pins that a table
+rename leaves the fingerprint alone.
+
+Ambiguity needs no field: an ambiguous name is *removed* from the merged map,
+so it stops appearing in the canonical set and the fingerprint moves on its
+own — in both directions.
+
+`DefaultHasher`, with the entry count hashed first so no set can hash as a
+prefix of a larger one. An internal invalidation identity, not a security
+primitive; no collision-resistance is claimed.
+
+### The future Stage C cache key
+
+An entry for file *F* would be valid only while **all** of:
+
+| Term | Source |
+|---|---|
+| F's content identity | parse cache hash |
+| model-set fingerprint | `OrmAnalysis::model_fingerprint` |
+| content identity of **every** recorded read | `dependencies.files()` |
+| Python path-set fingerprint | required **only if** `consults_path_set()` |
+| ordered alias-list fingerprint | required **only if** `consults_alias_set()` |
+
+**A cache entry whose `dependencies.is_complete()` is false MUST NOT be
+reused**, whatever the other terms say. Completeness is a one-way switch and
+`absorb` propagates it, so a single untracked contribution disqualifies the
+roll-up.
+
+### Measured invalidation scope
+
+zulip `0ce8f627`, 1,066 Python files, 1,066 bundles, 254 with accesses, 1,959
+accesses, 74 models, 0 ambiguous, 0 incomplete:
+
+| Dependency-set size | Bundles |
+|---:|---:|
+| 1 (itself only) | 820 |
+| 2–5 | 221 |
+| 6–21 | 25 |
+
+**245 of 1,066 bundles consult the path set** — not all of them. An earlier
+note in this document put it at "16,727 of 16,740", which was the per-*query*
+figure; per cacheable unit it is 23%. A Python file creation or deletion
+invalidates those 245, not the whole repository. Content edits invalidate only
+bundles whose read set names the edited file, and 820 bundles read nothing but
+themselves.
+
+**0 bundles consult the alias set**, confirming at scale that Python results do
+not depend on TypeScript build configuration.
+
+full-stack-fastapi `162344da`: 47 files, 47 bundles, 0 accesses, 0 models — the
+degenerate case, and it degrades cleanly rather than erroring.
+
+**No cache is implemented.** This slice produces the unit, its dependencies and
+the fingerprint; nothing looks anything up.
