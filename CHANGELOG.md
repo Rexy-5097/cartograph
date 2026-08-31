@@ -7,6 +7,73 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M11, deterministic layout in the Rust core
+
+First M11 slice. No UI: Tauri, React, Sigma.js and Zustand are **not** added
+here. The slice establishes the boundary those will later consume, because
+[ADR-0001](docs/adr/ADR-0001-rust-core-is-the-product.md) and
+[ADR-0006](docs/adr/ADR-0006-sigma-before-custom-renderer.md) both place layout
+in the core and give the frontend `{id, x, y, cluster}` to draw and nothing
+else. Building the renderer first would have formed that boundary in the wrong
+place.
+
+- **`cartograph_graph::layout`** — positions every node of an architecture
+  graph. `layout(&graph, &params) -> Layout`, where a `LayoutNode` is exactly
+  `{id, x, y, cluster}` and a `Cluster` is `{id, label}`. No name, kind,
+  confidence, provenance, evidence or location appears in the payload, and a
+  test asserts the serialised key set so that adding one fails the build.
+- **Clustering by directory.** A located node joins the cluster named by its
+  repository-relative parent directory; a node without a location — a table, an
+  external service, an environment variable — joins a cluster named for its
+  kind. Cluster ids are assigned by sorting labels, so they follow content
+  rather than traversal order.
+- **Per-cluster Fruchterman–Reingold relaxation** inside a frame whose area
+  equals the cluster's population, with cluster centres on a phyllotaxis spiral
+  spaced relative to the largest cluster. Cross-cluster edges deliberately
+  exert no force; see [ADR-0015](docs/adr/ADR-0015-layout-contract.md).
+- **Determinism, earned rather than hoped for.** Ordering is by semantic
+  identity and never by `NodeId`; every map is a `BTreeMap`; edge pairs are
+  de-duplicated into a sorted set; the iteration count is fixed; initial
+  positions come from an FNV-1a hash written out in the module rather than from
+  a random number generator or `DefaultHasher`. Two independent analyses of one
+  tree therefore lay out identically — which is **not** stable cross-run node
+  identity, and does not disturb ADR-0014.
+- **19 contract tests and a real-repository test.** Totality (one record per
+  node, no duplicates, no strangers), well-formedness (finite, inside the
+  requested extent, every cluster resolvable), the empty / one-node / coincident
+  / disconnected / zero-iteration cases, insertion-order and edge-order
+  independence, a duplicated edge not pulling harder, a golden layout, and the
+  serialised payload's key set.
+
+### Measured — M11 layout baseline
+
+Layout time only. **This says nothing about M11's "10k nodes at 60 FPS"
+criterion**, which concerns a rendering application that does not exist yet.
+
+| Graph | Time |
+|---|---|
+| 100 nodes, 1 directory per 100 | 1.57 ms |
+| 1,000 nodes | 15.8 ms |
+| 10,000 nodes | **1.06 s** |
+| 2,000 nodes over 200 directories | 10.6 ms |
+| 2,000 nodes over 1 directory | **758 ms** |
+
+Distribution matters more than size: relaxation is quadratic within a cluster
+and does no work between clusters.
+
+### Known limitations — M11 layout
+
+- Cross-cluster edges do not attract, so a frontend calling a backend is not
+  drawn nearer to it.
+- A repository that keeps everything in one directory is the pathological case.
+- Real-repository evidence is thin: the analyser handles TypeScript, TSX and
+  Python, and this repository is mostly Rust, so its own graph is 10 nodes. The
+  pinned corpora are not vendored and were unavailable; the test accepts
+  `CARTOGRAPH_LAYOUT_REPO`.
+- `serde_json` writes an f64 exactly but its parser is not always correctly
+  rounded — one fixture coordinate returns 1 ULP high. Recorded in the
+  round-trip test rather than fought.
+
 Milestone **M10 — incremental analysis engine**. First slice: the parse cache.
 No product behaviour changes; the analyser is byte-identical to
 `cartograph-m09`.

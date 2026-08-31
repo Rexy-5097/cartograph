@@ -121,6 +121,7 @@ dependencies = [
  "criterion",
  "petgraph",
  "serde",
+ "serde_json",
  "thiserror",
  "time",
 ]

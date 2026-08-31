@@ -16,6 +16,8 @@
 //!
 //! See `docs/adr/ADR-0003-cartograph-owns-the-graph.md`.
 
+pub mod layout;
+
 use std::collections::HashMap;
 
 use cartograph_core::{

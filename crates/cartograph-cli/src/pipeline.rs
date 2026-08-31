@@ -595,3 +595,157 @@ fn finish_totals(totals: &mut Totals, graph: &ArchitectureGraph, analyses: &[Fil
         })
         .count();
 }
+
+/// Layout over graphs the real analyser produced, not over fixtures.
+///
+/// A fixture graph is built by the test that then checks it, so it can only
+/// contain shapes the author thought of. A graph the analyser produced from a
+/// real tree contains what is actually there: files at the repository root,
+/// artefacts with no source location, directories holding one node and
+/// directories holding many, and names nobody would have invented.
+///
+/// The default subject is **this repository**, which is always present, so
+/// these run everywhere rather than being skipped when a corpus is missing.
+/// `CARTOGRAPH_LAYOUT_REPO` points the second case at another tree; the pinned
+/// benchmark corpora are the interesting subject and are opt-in because this
+/// repository does not vendor them.
+///
+/// Nothing here mutates the tree it analyses — the analyser only reads.
+#[cfg(test)]
+mod layout_real_repository {
+    use std::path::{Path, PathBuf};
+
+    use cartograph_graph::layout::{LayoutParams, layout};
+
+    use crate::pipeline::{self, Options};
+
+    /// The repository this crate lives in.
+    fn own_repository() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the crate sits two levels below the repository root")
+            .to_path_buf()
+    }
+
+    /// Analyses `root`, lays the graph out, and asserts what must hold for
+    /// every real graph.
+    fn check(root: &Path, label: &str) {
+        let analysis = pipeline::run(root, Options { quiet: true }).expect("the tree analyses");
+        let graph = &analysis.graph;
+
+        assert!(
+            graph.node_count() > 0,
+            "precondition: {label} must produce a non-empty graph, or this proves nothing"
+        );
+
+        let params = LayoutParams::default();
+        let result = layout(graph, &params);
+
+        // Totality: one record per node, no duplicates, no strangers.
+        assert_eq!(
+            result.node_count(),
+            graph.node_count(),
+            "{label}: every node must receive exactly one layout record"
+        );
+        let mut seen = std::collections::BTreeSet::new();
+        for node in &result.nodes {
+            assert!(seen.insert(node.id), "{label}: {} laid out twice", node.id);
+            assert!(
+                graph.node(node.id).is_some(),
+                "{label}: {} is not in the source graph",
+                node.id
+            );
+        }
+        for node in graph.nodes() {
+            assert!(
+                seen.contains(&node.id()),
+                "{label}: {} received no layout record",
+                node.id()
+            );
+        }
+
+        // Well-formedness: finite, bounded, every cluster resolvable.
+        for node in &result.nodes {
+            assert!(
+                node.x.is_finite() && node.y.is_finite(),
+                "{label}: {} is at ({}, {})",
+                node.id,
+                node.x,
+                node.y
+            );
+            assert!(
+                node.x.abs() <= params.extent + 1e-9 && node.y.abs() <= params.extent + 1e-9,
+                "{label}: {} escaped the extent at ({}, {})",
+                node.id,
+                node.x,
+                node.y
+            );
+            assert!(
+                result.clusters.iter().any(|c| c.id == node.cluster),
+                "{label}: {} names a cluster outside the table",
+                node.id
+            );
+        }
+
+        // Every cluster is named, and every cluster is used.
+        for cluster in &result.clusters {
+            assert!(
+                !cluster.label.is_empty(),
+                "{label}: cluster {} has no name",
+                cluster.id
+            );
+            assert!(
+                result.nodes.iter().any(|n| n.cluster == cluster.id),
+                "{label}: cluster {} ({}) has no members",
+                cluster.id,
+                cluster.label
+            );
+        }
+
+        // Determinism over one graph.
+        assert_eq!(
+            result,
+            layout(graph, &params),
+            "{label}: two layouts of one graph must be identical"
+        );
+
+        // Determinism across a *second independent analysis* of the same tree.
+        // The two graphs allocate their handles independently, so this is what
+        // shows the geometry follows the content rather than the numbering.
+        let reanalysed = pipeline::run(root, Options { quiet: true }).expect("analyses twice");
+        let second = layout(&reanalysed.graph, &params);
+        let first_points: Vec<(f64, f64)> = result.nodes.iter().map(|n| (n.x, n.y)).collect();
+        let second_points: Vec<(f64, f64)> = second.nodes.iter().map(|n| (n.x, n.y)).collect();
+        assert_eq!(
+            result.clusters, second.clusters,
+            "{label}: an independent analysis must produce the same clusters"
+        );
+        assert_eq!(
+            first_points, second_points,
+            "{label}: an independent analysis must produce the same positions"
+        );
+
+        println!(
+            "{label}: {} nodes, {} edges -> {} positioned in {} clusters",
+            graph.node_count(),
+            graph.edge_count(),
+            result.node_count(),
+            result.cluster_count()
+        );
+    }
+
+    #[test]
+    fn the_cartograph_repository_lays_out() {
+        check(&own_repository(), "cartograph");
+    }
+
+    #[test]
+    #[ignore = "needs CARTOGRAPH_LAYOUT_REPO; the pinned corpora are not vendored here"]
+    fn a_pinned_corpus_lays_out() {
+        let Ok(path) = std::env::var("CARTOGRAPH_LAYOUT_REPO") else {
+            return;
+        };
+        check(Path::new(&path), "corpus");
+    }
+}
