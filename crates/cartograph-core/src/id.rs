@@ -8,18 +8,21 @@ use crate::error::CoreError;
 ///
 /// Opaque and assigned by the graph that owns the node. Identity is *not* yet
 /// content-addressed: two analyses of the same repository may assign different
-/// `NodeId`s to the same function. Stable, content-derived identity is a
-/// requirement of the incremental engine and is deferred to M10, where the
-/// invalidation model is designed deliberately rather than inherited by
-/// accident.
+/// `NodeId`s to the same function.
+///
+/// M10 built its incremental engine without it — per-file results are keyed by
+/// content and dependency identity, never by `NodeId`, and graphs are compared
+/// by semantic identity rather than by handle — so stable identity is deferred
+/// again, with its consumers named: M12 (blast radius) and M13 (structural
+/// diff) both require it. See ADR-0014.
 ///
 /// # Handles are graph-local
 ///
 /// Ids are allocated per graph and start from zero, so the same `NodeId` names
 /// different artefacts in two different graphs. Passing a handle from one
 /// graph to another does not fail loudly — it silently addresses whatever
-/// happens to occupy that slot. Until identity becomes content-addressed at
-/// M10, do not mix handles across graphs.
+/// happens to occupy that slot. Until identity becomes content-addressed, do
+/// not mix handles across graphs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NodeId(u64);

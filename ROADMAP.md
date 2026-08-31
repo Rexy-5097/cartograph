@@ -61,8 +61,8 @@ v1.0.
 | Version | Brings | Milestone |
 |---|---|---|
 | 0.1 | CLI | M09 |
-| 0.2 | Local graph database | M10 |
-| 0.3 | Incremental analysis | M10 |
+| 0.2 | Local graph database | M10 — **deferred**, see [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) |
+| 0.3 | Incremental analysis | M10 — Stage C only; see ADR-0014 |
 | **0.4** | **MAP** — the desktop application | M11 |
 | 0.5 | Blast radius | M12 |
 | **0.6** | **DIFF** — the retention surface | M13 |
