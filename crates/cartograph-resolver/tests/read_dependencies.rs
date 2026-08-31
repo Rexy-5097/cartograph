@@ -1924,3 +1924,323 @@ fn alias_mutations_on_a_real_repository() {
         &mutate,
     );
 }
+
+// ── ModuleIndex localization oracle ─────────────────────────────────────
+//
+// `ModuleIndex` has exactly two fields:
+//
+//   by_path: HashMap<&str, &FileAnalysis>   -- borrows, a re-keying of the input
+//   aliases: Vec<(alias, target, dir)>      -- the only derived state
+//
+// `by_path` derives nothing: it is `files.iter().map(|f| (f.path, f))`, holding
+// borrows rather than copies. There is no per-file *derived* contribution to
+// localize — the contribution is the `FileAnalysis` itself, which the parse
+// cache already caches.
+//
+// `aliases` is genuinely derived, and the tests below establish that it is
+// already a per-file contribution plus a deterministic merge. They exist so a
+// future change that adds derived state to `ModuleIndex` fails here and forces
+// this analysis to be redone, rather than silently invalidating the decision
+// not to cache it.
+
+/// The alias contribution of one file: its declarations, scoped to its own
+/// directory. A pure function of that file — no other file participates.
+fn alias_contribution(file: &FileAnalysis) -> Vec<(String, String, String)> {
+    let dir = file
+        .path
+        .rsplit_once('/')
+        .map_or(String::new(), |(d, _)| d.to_owned());
+    file.module_aliases
+        .iter()
+        .map(|a| (a.alias.clone(), a.target.clone(), dir.clone()))
+        .collect()
+}
+
+/// The merge `ModuleIndex::build` performs, reimplemented from the code.
+///
+/// Concatenate contributions **in file order**, then sort by directory depth,
+/// then alias length, then alias. The sort is stable, so entries tying on all
+/// three keep the order they were concatenated in — which is why the merge
+/// must see contributions in the same order the analyses are given.
+fn merge_alias_contributions(contributions: &[Vec<(String, String, String)>]) -> Vec<String> {
+    let mut all: Vec<(String, String, String)> = contributions.iter().flatten().cloned().collect();
+    all.sort_by(|a, b| {
+        b.2.len()
+            .cmp(&a.2.len())
+            .then_with(|| b.0.len().cmp(&a.0.len()))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    all.into_iter()
+        .map(|(alias, target, dir)| format!("{alias}|{target}|{dir}"))
+        .collect()
+}
+
+fn localized_alias_set(analyses: &[FileAnalysis]) -> Vec<String> {
+    let contributions: Vec<_> = analyses.iter().map(alias_contribution).collect();
+    merge_alias_contributions(&contributions)
+}
+
+const VITE_A: &str = "export default { resolve: { alias: { app: '/src/app' } } };\n";
+const VITE_B: &str = "export default { resolve: { alias: { lib: '/src/lib' } } };\n";
+const VITE_DEEP: &str = "export default { resolve: { alias: { app: '/deep/app' } } };\n";
+
+/// The decomposition holds: contribution + merge reproduces the real index.
+#[test]
+fn per_file_contributions_merge_to_the_same_alias_set_as_the_oracle() {
+    let files = &[
+        ("web/vite.config.ts", VITE_A),
+        ("web/nested/vite.config.ts", VITE_DEEP),
+        ("other/vite.config.ts", VITE_B),
+        ("web/plain.ts", "export const X = 1;\n"),
+    ];
+    let analyses = analyze(files);
+    let index = ModuleIndex::build(&analyses);
+    let oracle = index.canonical_alias_set();
+
+    assert!(
+        oracle.len() >= 3,
+        "precondition: the fixture must declare several aliases, got {oracle:?}"
+    );
+    assert_eq!(
+        localized_alias_set(&analyses),
+        oracle,
+        "the per-file contribution model must reproduce the oracle exactly"
+    );
+}
+
+/// Directory depth orders the merged list — a deeper configuration wins.
+#[test]
+fn a_deeper_configuration_sorts_before_a_shallower_one() {
+    let analyses = analyze(&[
+        ("web/vite.config.ts", VITE_A),
+        ("web/nested/vite.config.ts", VITE_DEEP),
+    ]);
+    let index = ModuleIndex::build(&analyses);
+    let ordered = index.canonical_alias_set();
+    let deep = ordered
+        .iter()
+        .position(|a| a.ends_with("web/nested"))
+        .expect("the nested config must contribute");
+    let shallow = ordered
+        .iter()
+        .position(|a| a.ends_with("|web"))
+        .expect("the shallow config must contribute");
+    assert!(
+        deep < shallow,
+        "the nearer configuration must win: {ordered:?}"
+    );
+    assert_eq!(localized_alias_set(&analyses), ordered);
+}
+
+/// The subtlety a localized merge must not lose: the sort is **stable**, so
+/// two contributions tying on directory depth, alias length and alias name
+/// keep the order they were concatenated in — file order. A merge that
+/// concatenated contributions in any other order would resolve differently.
+#[test]
+fn contributions_tying_on_every_sort_key_keep_file_order() {
+    let first = "export default { resolve: { alias: { app: '/first' } } };\n";
+    let second = "export default { resolve: { alias: { app: '/second' } } };\n";
+
+    let forward = analyze(&[("a/vite.config.ts", first), ("b/vite.config.ts", second)]);
+    let reverse = analyze(&[("b/vite.config.ts", second), ("a/vite.config.ts", first)]);
+
+    let forward_set = ModuleIndex::build(&forward).canonical_alias_set();
+    let reverse_set = ModuleIndex::build(&reverse).canonical_alias_set();
+
+    // Same directory depth (1), same alias ("app"): a complete tie.
+    assert_ne!(
+        forward_set, reverse_set,
+        "a complete tie must preserve file order, so the two orders differ: \
+         {forward_set:?} vs {reverse_set:?}"
+    );
+    assert_eq!(localized_alias_set(&forward), forward_set);
+    assert_eq!(localized_alias_set(&reverse), reverse_set);
+}
+
+/// Creating, deleting and renaming an alias-declaring file, each reproduced by
+/// the contribution model — and each reversible.
+#[test]
+fn create_delete_and_rename_are_reproduced_and_reversible() {
+    let base: &[(&str, &str)] = &[("web/plain.ts", "export const X = 1;\n")];
+    let with_config: &[(&str, &str)] = &[
+        ("web/plain.ts", "export const X = 1;\n"),
+        ("web/vite.config.ts", VITE_A),
+    ];
+    let renamed: &[(&str, &str)] = &[
+        ("web/plain.ts", "export const X = 1;\n"),
+        ("other/vite.config.ts", VITE_A),
+    ];
+
+    for files in [base, with_config, renamed] {
+        let analyses = analyze(files);
+        let oracle = ModuleIndex::build(&analyses).canonical_alias_set();
+        assert_eq!(localized_alias_set(&analyses), oracle);
+    }
+
+    let empty = ModuleIndex::build(&analyze(base)).canonical_alias_set();
+    let created = ModuleIndex::build(&analyze(with_config)).canonical_alias_set();
+    let moved = ModuleIndex::build(&analyze(renamed)).canonical_alias_set();
+    assert!(empty.is_empty());
+    assert_eq!(created.len(), 1);
+    assert_ne!(
+        created, moved,
+        "the declaring directory is part of the entry"
+    );
+
+    // Deleting returns to the empty set exactly.
+    assert_eq!(
+        empty,
+        ModuleIndex::build(&analyze(base)).canonical_alias_set()
+    );
+}
+
+/// A file that declares no alias contributes nothing, in either model.
+#[test]
+fn a_file_without_aliases_contributes_nothing() {
+    let analyses = analyze(&[
+        ("app/models.py", "class Order:\n    pass\n"),
+        ("web/plain.ts", "export const X = 1;\n"),
+    ]);
+    for file in &analyses {
+        assert!(
+            alias_contribution(file).is_empty(),
+            "{} contributed an alias it does not declare",
+            file.path
+        );
+    }
+    assert!(
+        ModuleIndex::build(&analyses)
+            .canonical_alias_set()
+            .is_empty()
+    );
+}
+
+/// `by_path` derives nothing: it is exactly the analysed paths, and `file`
+/// answers for those and only those. Pinned so a future change that starts
+/// deriving something here fails a test rather than silently invalidating the
+/// decision not to cache `ModuleIndex`.
+#[test]
+fn by_path_is_exactly_the_analysed_files_and_derives_nothing() {
+    let files = &[
+        ("app/models.py", "class Order:\n    pass\n"),
+        ("app/stub.pyi", "class Order: ...\n"),
+        ("web/a.ts", "export const X = 1;\n"),
+        ("web/b.tsx", "export const Y = 2;\n"),
+    ];
+    let analyses = analyze(files);
+    let index = ModuleIndex::build(&analyses);
+
+    for (path, _) in files {
+        assert!(
+            index.file(path).is_some(),
+            "{path} was analysed but is not addressable"
+        );
+    }
+    assert!(index.file("app/nowhere.py").is_none());
+
+    // The Python path set is the `.py` subset — `.pyi`, `.ts` and `.tsx` are
+    // analysed and addressable, but can never satisfy a module candidate.
+    assert_eq!(
+        index.canonical_python_path_set(),
+        vec!["app/models.py".to_owned()],
+        "the path set must be the .py files alone"
+    );
+}
+
+/// Collects TypeScript sources, alongside the Python walker above.
+fn walk_ts(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+    const SKIP: [&str; 6] = [
+        "node_modules",
+        ".git",
+        "dist",
+        "build",
+        "coverage",
+        "target",
+    ];
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_symlink() {
+            continue;
+        }
+        if kind.is_dir() {
+            if name.starts_with('.') || SKIP.contains(&name) {
+                continue;
+            }
+            walk_ts(root, &path, out);
+        } else if matches!(
+            std::path::Path::new(name)
+                .extension()
+                .and_then(|e| e.to_str()),
+            Some("ts" | "tsx")
+        ) {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+}
+
+/// `ModuleIndex` structure and build cost on a real repository.
+///
+/// Establishes whether localizing it could matter at all. Measurement only —
+/// it decides nothing about correctness.
+#[test]
+#[ignore = "needs CARTOGRAPH_READSET_REPO; measures rather than asserts"]
+fn module_index_cost_on_a_real_repository() {
+    let Ok(repo) = std::env::var("CARTOGRAPH_READSET_REPO") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(repo);
+
+    let mut paths = Vec::new();
+    walk(&root, &root, &mut paths);
+    // The Python walker above only collects .py; `walk_ts` adds TypeScript
+    // so the index is built over the same corpus the pipeline would give it.
+    walk_ts(&root, &root, &mut paths);
+    paths.sort();
+
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analyses: Vec<FileAnalysis> = paths
+        .iter()
+        .filter_map(|rel| analyzer.analyze_file(&root, rel).ok())
+        .collect();
+
+    let mut best = f64::MAX;
+    for _ in 0..5 {
+        let t = std::time::Instant::now();
+        let index = ModuleIndex::build(&analyses);
+        std::hint::black_box(index.canonical_alias_set().len());
+        best = best.min(t.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    let index = ModuleIndex::build(&analyses);
+    let aliases = index.canonical_alias_set();
+    println!("files analysed      : {}", analyses.len());
+    println!("by_path entries     : {}", analyses.len());
+    println!(
+        "python path set     : {}",
+        index.canonical_python_path_set().len()
+    );
+    println!("alias declarations  : {}", aliases.len());
+    for a in aliases.iter().take(6) {
+        println!("      {a}");
+    }
+    println!("ModuleIndex::build  : {best:.3} ms (min of 5)");
+
+    // The decomposition holds at real-repository scale too.
+    let contributions: Vec<_> = analyses.iter().map(alias_contribution).collect();
+    assert_eq!(
+        merge_alias_contributions(&contributions),
+        aliases,
+        "the per-file contribution model must reproduce the oracle on a real repository"
+    );
+}

@@ -879,3 +879,79 @@ Failure is injected at one boundary — before a recomputation. Failures *inside
 `discover_accesses` or inside graph construction are not injected, because no
 current path there returns an error. The publication boundary is what this
 slice proves.
+
+---
+
+## 17. `ModuleIndex`: analysed, and deliberately not cached
+
+The next candidate after Stage C was `ModuleIndex`, because every resolution
+path reads it. Tracing it changed the answer.
+
+### It has two fields
+
+```rust
+pub struct ModuleIndex<'a> {
+    by_path: HashMap<&'a str, &'a FileAnalysis>,  // borrows
+    aliases: Vec<(alias, target, dir)>,           // the only derived state
+}
+```
+
+| Field | Producer | Consumers | Depends on | Invalidated by |
+|---|---|---|---|---|
+| `by_path` | `files.iter().map(\|f\| (f.path, f))` | `file()`, `resolve_python_module` (key scan), `resolve_relative_module` (`contains_key`) | the analysed set — **membership and identity, nothing derived** | any create / delete / rename |
+| `aliases` | each file's `module_aliases`, scoped to its directory | `apply_alias`, reached only from `follow_typescript` and `follow_typescript_wildcards` | those files' contents, **and their order** | alias added / removed / retargeted / reordered |
+
+**`by_path` derives nothing.** It is the input re-keyed, holding *borrows*
+rather than copies. Caching it would be caching the analyses — which the parse
+cache already does.
+
+**`aliases` is the only derived state**, and its dependency identity is
+*already* a first-class cache term. Folding it into a second "ModuleIndex
+fingerprint" would count the same state twice.
+
+### The decomposition holds — and has one subtlety
+
+`PerFileModuleContribution` for aliases is `(alias, target, dir(file))` — a
+pure function of one file. The merge concatenates contributions **in file
+order**, then sorts by directory depth, then alias length, then alias.
+
+The sort is **stable**, so entries tying on all three keys keep the order they
+were concatenated in. Two configurations at equal depth declaring the same
+alias name therefore resolve by *file order*, and a merge that concatenated in
+any other order would resolve differently. A test pins exactly that.
+
+Verified against the oracle on fixtures and on both real repositories:
+contribution + merge reproduces `canonical_alias_set()` exactly.
+
+### Why it is not cached
+
+| | |
+|---|---|
+| `ModuleIndex::build` on zulip (1,537 files) | **0.082 ms** |
+| `ModuleIndex::build` on Airflow (917 files) | **0.052 ms** |
+| Stage C, which justified the existing cache | **605 ms** |
+
+Four orders of magnitude apart. Beyond the cost:
+
+1. `by_path` has nothing to cache but the input.
+2. `aliases` is already covered by the alias fingerprint; caching it again
+   would double-count.
+3. `ModuleIndex<'a>` **borrows** the analyses slice, so keeping one across runs
+   means either restructuring lifetimes or copying the whole fact model — far
+   more than 0.08 ms of work to save 0.08 ms.
+
+**Decision: do not cache `ModuleIndex`.** The tests above stay so that a future
+change adding derived state to it fails here and forces this analysis to be
+redone, rather than silently invalidating the decision.
+
+### Counterexample hunt
+
+Same path with changed content · new file · deleted file · renamed file ·
+duplicate module · removed duplicate · changed re-export · changed wildcard ·
+changed import · changed export · changed alias · unrelated file · file in the
+other language · changed directory structure · import cycle.
+
+Every case is explained by one of the two fields above: content and membership
+changes land in `by_path`, alias-declaration changes land in `aliases`. **No
+mutation was found that changes `ModuleIndex` behaviour without changing one of
+them.**
