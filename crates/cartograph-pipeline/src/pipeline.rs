@@ -87,6 +87,7 @@ impl Repository {
     /// conformance tests caught `parse` emitting a bare string here while the
     /// summary emitted an object — two shapes for one field is how a contract
     /// quietly breaks.
+    #[must_use]
     pub fn describe(requested: &Path, root: &Path) -> Self {
         let name = repository_name(requested, root);
 

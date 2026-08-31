@@ -192,6 +192,15 @@ impl FactCache {
         self.entries.len()
     }
 
+    /// Whether the cache holds nothing.
+    ///
+    /// True on a fresh cache and after eviction removes the last entry. A
+    /// cold run is not an error, so callers ask rather than infer.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Content identity of every file analysed this run.
     ///
     /// The Stage C cache validates its recorded reads against these, so both

@@ -30,18 +30,20 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-mod discovery;
-mod error;
-mod incremental;
 mod json;
 mod match_cmd;
 mod normalize_cmd;
 mod output;
 mod parse_cmd;
-mod pipeline;
 mod summary_cmd;
 mod trace_cmd;
 mod version;
+
+// Analysis is composed once, in `cartograph-pipeline`, and every client uses
+// that sequence rather than its own. Re-exported at the crate root so the
+// command modules keep addressing them as `crate::pipeline` and friends: the
+// move changed where the code lives, not what the CLI does with it.
+pub(crate) use cartograph_pipeline::{discovery, error, pipeline};
 
 use error::{CliError, ExitCode};
 

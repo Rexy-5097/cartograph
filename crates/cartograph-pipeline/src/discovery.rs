@@ -115,7 +115,14 @@ pub fn discover(path: &Path) -> Result<(PathBuf, Vec<String>), CliError> {
 /// no-op there rather than a platform branch. Every relative form stays
 /// relative: `..\secret`, `.\secret` and the drive-relative `C:secret` are all
 /// `false`, so repository-relative paths are still echoed as typed.
-pub(crate) fn is_rooted(path: &Path) -> bool {
+///
+/// Public because it is a *rule*, not a helper. Every client that shows a path
+/// back to the user owes the same redaction, and a second client answering the
+/// question its own way is how the M09 defect would return — that one came
+/// from two call sites disagreeing about what "absolute" meant. There is one
+/// predicate, and it lives here.
+#[must_use]
+pub fn is_rooted(path: &Path) -> bool {
     path.is_absolute() || path.has_root()
 }
 

@@ -40,6 +40,12 @@ __pycache__/
 
 # ─── Node (desktop application, from M11) ──────────────────────────────────
 node_modules/
+
+# The Tauri shell is its own cargo workspace (ADR-0016), so the root-anchored
+# /target/ rule above does not reach it.
+desktop/src-tauri/target/
+# tauri-build regenerates the permission schemas on every build.
+desktop/src-tauri/gen/
 dist/
 *.tsbuildinfo
 

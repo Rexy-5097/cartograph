@@ -1,8 +1,8 @@
 # ADR-0015 — The layout contract: directory clusters, per-cluster relaxation, determinism without stability
 
-**Status:** Proposed · 2026-09-01 · Implements [ADR-0001](ADR-0001-rust-core-is-the-product.md)
-and [ADR-0006](ADR-0006-sigma-before-custom-renderer.md) · Requires the project
-owner's acceptance
+**Status:** Accepted · 2026-09-01 · Implements [ADR-0001](ADR-0001-rust-core-is-the-product.md)
+and [ADR-0006](ADR-0006-sigma-before-custom-renderer.md) · Accepted by the
+project owner with M11 Slice 1
 
 ## Context
 
@@ -129,3 +129,32 @@ rather than quietly becoming a channel for analysis data in the client
 - 10k nodes take roughly one second to lay out on the development machine. That
   is a per-analysis pause, not a per-frame cost, and it is **not** a claim about
   M11's 60 FPS criterion, which concerns an application that does not exist yet.
+
+## Accepted limitations
+
+Recorded on acceptance. **This layout is not claimed to be optimal, or even
+good, for every repository** — it is claimed to be correct, deterministic, and
+adequate to build a renderer against.
+
+1. **Cross-cluster edges exert no force.** A TypeScript component calling a
+   Python handler is not drawn nearer to it. The cross-stack relationship —
+   which is the product's whole subject — is expressed only by the edge itself,
+   never by proximity. If MAP fails to answer *"what is this system?"*, this is
+   the first decision to revisit.
+2. **A single-directory repository is pathological.** Relaxation is quadratic
+   within a cluster and does no work between clusters, so 2,000 nodes in one
+   directory cost 758 ms against 10.6 ms for the same 2,000 across 200. A
+   repository that files everything together gets the worst case of both
+   properties: one enormous cluster, and no structure to show.
+3. **Community detection remains deferred, not rejected.** Directory structure
+   records what the authors filed together, which is not always what is
+   actually coupled. Leiden or Louvain would answer the better question, at the
+   cost of a research-grade component whose output moves under small graph
+   changes. Revisit when a renderer and a reader can judge the difference.
+4. **Determinism is not stability.** Adding one node moves every node in its
+   cluster. Preserving a mental map across two different graphs is M13's
+   problem and additionally needs the cross-run correspondence ADR-0014 defers.
+5. **Real-repository evidence is thin.** The layout has been exercised on
+   fixtures, a 10-node graph from this repository, and synthetic graphs to
+   10,000 nodes. It has not been run over a pinned benchmark corpus, because
+   those are not vendored here.
