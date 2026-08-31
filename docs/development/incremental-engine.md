@@ -955,3 +955,90 @@ Every case is explained by one of the two fields above: content and membership
 changes land in `by_path`, alias-declaration changes land in `aliases`. **No
 mutation was found that changes `ModuleIndex` behaviour without changing one of
 them.**
+
+---
+
+## 18. Post-cache profile, and what M10 still needs
+
+The Stage C cache changed the system, so every earlier wall-clock figure is
+stale as architectural evidence. This is a fresh, controlled measurement.
+
+**Protocol.** One untimed warm-up pass, then the **minimum of 5 timed
+iterations**, reported with the iteration count and used consistently rather
+than mixed with medians. The stage sequence mirrors `pipeline::resolve`
+exactly, through the public resolver API. Absolute wall-times on this machine
+have moved several-fold between sessions with OS page-cache state, so **ratios
+within one run are the evidence and the milliseconds are context.** Work counts
+are reported alongside time, because timing alone cannot distinguish an
+expensive stage from a slowly observed one.
+
+### Zulip `0ce8f627` — 1,539 files
+
+| Stage | cold | warm | warm share | work |
+|---|---:|---:|---:|---|
+| discovery | 84.2 ms | — | — | 1,539 files |
+| parse | 6,062.8 ms | **234.5 ms** | — | cold 1,539 parsed → warm 1,539 reused |
+| `ExportedConstants::collect` | 1.94 | 1.80 | 3.0% | |
+| `ModuleIndex::build` | 0.28 | 0.29 | 0.5% | 1,539 entries |
+| `RouterIndex::build` | 0.005 | 0.007 | 0.0% | |
+| normalize routes + resolve URLs | 7.12 | 7.05 | 11.7% | 235 routes, 165 clients |
+| `RouteIndex::build` | 0.032 | 0.032 | 0.1% | 235 routes |
+| `match_client` | 0.196 | 0.202 | 0.3% | 165 matched |
+| **HTTP + client-call edges** | 43.6 | **43.4** | **71.9%** | 11 http, 120 client |
+| **Stage C (cached)** | **894.8 (94.1%)** | **4.34** | 7.2% | hits 1,067 / misses 0 |
+| ORM edges | 2.86 | 3.24 | 5.4% | 1,338 edges |
+| **resolve total** | **950.9 ms** | **60.4 ms** | | 1,308 nodes, 1,469 edges |
+
+**Stage C caching took resolve from 951 ms to 60 ms — 15.7×** — and moved the
+bottleneck entirely.
+
+### Airflow `9b43d6abc0fc` — 917 files
+
+resolve total 25.7 ms cold, 26.2 ms warm. `HTTP + client-call edges` is 79.7%
+of it (20.9 ms, 848 client edges); Stage C is 1.3% because the UI subtree holds
+only 13 Python files.
+
+### Where the time actually is now
+
+| | Zulip warm | Airflow warm |
+|---|---:|---:|
+| discovery + parse validation (walk, read, hash) | 318.7 ms (**84%**) | 103.7 ms (**80%**) |
+| all resolve stages | 60.4 ms (16%) | 26.2 ms (20%) |
+
+A warm run is dominated by **I/O the engine cannot avoid**: it must walk the
+tree and read every file to know whether anything changed. That is the floor of
+any content-addressed design, not a stage awaiting a cache.
+
+### Classification
+
+| Structure | warm cost | category | decision |
+|---|---:|---|---|
+| Stage C (`OrmAnalysis` accesses) | 4.3 ms | **B — already incremental** | cached; done |
+| HTTP + client-call edges | 43.4 ms | C — global, cheap | **do not cache** |
+| normalize routes + resolve URLs | 7.1 ms | C — global, cheap | **do not cache** |
+| `ExportedConstants` | 1.8 ms | A — negligible | **do not cache** |
+| ORM edges | 3.2 ms | A — negligible | **do not cache** |
+| `ModuleIndex` | 0.29 ms | A — negligible | **do not cache** (§17) |
+| `RouteIndex` | 0.032 ms | A — negligible | **do not cache** |
+| `RouterIndex` | 0.005 ms | A — negligible | **do not cache** |
+
+Their shapes, for the record: `ExportedConstants` is
+`HashMap<file, HashMap<name, SymbolicValue>>` — already a per-file map with a
+trivial merge; `RouterIndex` is `HashMap<RouterId, PrefixResolution>` built
+from files plus `ModuleIndex` (cross-file through `include_router` chains);
+`RouteIndex` is a `Vec<CanonicalRoute>` with arity and wildcard side-indexes
+over routes that are themselves already per-file derived. All three decompose
+cleanly — and all three cost between 0.005 ms and 1.8 ms, so decomposing them
+would add stale-state surface for no measurable return.
+
+### Recommended M10 scope: **Option A**
+
+Stage C incrementalization is sufficient. The largest remaining resolve stage
+is 43 ms — 11% of a warm Zulip run — against 319 ms of unavoidable filesystem
+work. Caching it would add a dependency identity to prove, invalidate and test,
+for at best a tenth of a warm run, in a milestone whose stated priority is
+correctness over speed.
+
+**A simpler correct system is preferable to a larger fragile one.** The
+globally recomputed stages listed above are recomputed *deliberately*: each is
+cheap, and each recomputation is one fewer place a stale result can hide.

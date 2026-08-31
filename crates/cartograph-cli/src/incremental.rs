@@ -2764,3 +2764,308 @@ mod atomicity {
         assert_eq!(counters.misses, 0);
     }
 }
+
+/// Controlled per-stage profiling of the post-cache pipeline.
+///
+/// The system changed when the Stage C cache landed, so every earlier
+/// wall-clock figure is stale as architectural evidence. This measures each
+/// stage separately, and measures **work** alongside time — counts of items
+/// produced, reused and recomputed — because timing alone cannot say whether a
+/// stage is expensive or merely slow to observe.
+///
+/// # Protocol
+///
+/// - one untimed warm-up pass, so the OS page cache and allocator are warm and
+///   the numbers describe the code rather than the first touch of the disk;
+/// - **minimum of N timed iterations**, reported with N. The minimum is the
+///   least noisy summary of a warm run: it is the sample least disturbed by
+///   scheduling and background load, and it is used consistently everywhere
+///   below rather than mixed with medians.
+/// - absolute wall-times on this machine have varied several-fold between
+///   sessions with page-cache state. Ratios *within one run* are the evidence;
+///   the milliseconds are context.
+///
+/// The stage sequence mirrors `pipeline::resolve` exactly, using the public
+/// resolver API, so the profile describes the real pipeline rather than an
+/// idealised one.
+#[cfg(test)]
+mod profile {
+    use super::*;
+    use cartograph_graph::ArchitectureGraph;
+    use cartograph_resolver::{
+        ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, add_client_call_edges,
+        add_edge_for_match, add_orm_edges, collect_exported_constants, match_client,
+        normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
+        with_composed_prefix, with_resolved_url,
+    };
+    use std::time::Instant;
+
+    const ITERATIONS: usize = 5;
+
+    #[derive(Default)]
+    struct Stage {
+        name: &'static str,
+        ms: f64,
+        work: String,
+    }
+
+    fn ms(t: Instant) -> f64 {
+        t.elapsed().as_secs_f64() * 1000.0
+    }
+
+    /// Runs the resolve stages once, timing each. Returns the stage table.
+    #[allow(clippy::too_many_lines)]
+    fn resolve_stages(analyses: &[FileAnalysis], state: &mut IncrementalState) -> Vec<Stage> {
+        let mut stages = Vec::new();
+
+        let t = Instant::now();
+        let exported = collect_exported_constants(analyses);
+        stages.push(Stage {
+            name: "ExportedConstants::collect",
+            ms: ms(t),
+            work: String::new(),
+        });
+
+        let t = Instant::now();
+        let modules = ModuleIndex::build(analyses);
+        stages.push(Stage {
+            name: "ModuleIndex::build",
+            ms: ms(t),
+            work: format!("{} entries", analyses.len()),
+        });
+
+        let t = Instant::now();
+        let routers = RouterIndex::build(analyses, &modules);
+        stages.push(Stage {
+            name: "RouterIndex::build",
+            ms: ms(t),
+            work: String::new(),
+        });
+
+        // Per-file route composition and client URL resolution, exactly as
+        // `resolve` performs them.
+        let t = Instant::now();
+        let mut backend = Vec::new();
+        let mut clients = Vec::new();
+        let mut composed_count = 0usize;
+        for analysis in analyses {
+            let scope = scope_for_file(analysis, &exported);
+            for route in &analysis.routes {
+                let composed = route
+                    .receiver
+                    .as_ref()
+                    .and_then(|r| routers.prefix_for(&analysis.path, r))
+                    .and_then(|resolution| with_composed_prefix(route, resolution));
+                if composed.is_some() {
+                    composed_count += 1;
+                }
+                backend.push(normalize_route_declaration(
+                    composed.as_ref().unwrap_or(route),
+                    &analysis.path,
+                    analysis.language,
+                ));
+            }
+            for call in &analysis.http_calls {
+                let resolved = resolve_url(call, analysis, &scope);
+                let effective = resolved
+                    .as_ref()
+                    .map_or_else(|| call.clone(), |r| with_resolved_url(call, r));
+                clients.push(normalize_client_call(
+                    &effective,
+                    &analysis.path,
+                    analysis.language,
+                ));
+            }
+        }
+        stages.push(Stage {
+            name: "normalize routes + resolve URLs",
+            ms: ms(t),
+            work: format!(
+                "{} routes ({composed_count} composed), {} clients",
+                backend.len(),
+                clients.len()
+            ),
+        });
+
+        let route_count = backend.len();
+        let t = Instant::now();
+        let index = RouteIndex::build(backend);
+        stages.push(Stage {
+            name: "RouteIndex::build",
+            ms: ms(t),
+            work: format!("{route_count} routes"),
+        });
+
+        let t = Instant::now();
+        let results: Vec<_> = clients.iter().map(|c| match_client(c, &index)).collect();
+        stages.push(Stage {
+            name: "match_client (all clients)",
+            ms: ms(t),
+            work: format!("{} matched", results.len()),
+        });
+
+        let t = Instant::now();
+        let mut graph = ArchitectureGraph::new();
+        let mut http_edges = 0usize;
+        for result in &results {
+            if add_edge_for_match(&mut graph, result, None)
+                .expect("endpoints exist")
+                .is_some()
+            {
+                http_edges += 1;
+            }
+        }
+        let client_edges =
+            add_client_call_edges(&mut graph, analyses, &modules, None).expect("endpoints exist");
+        stages.push(Stage {
+            name: "HTTP + client-call edges",
+            ms: ms(t),
+            work: format!("{http_edges} http, {client_edges} client"),
+        });
+
+        let t = Instant::now();
+        let identities = state.facts.identities();
+        let orm = OrmAnalysis::build_cached(analyses, &mut state.accesses, &identities)
+            .expect("no failure hook installed");
+        let orm_stats = state.accesses.stats();
+        stages.push(Stage {
+            name: "OrmAnalysis (Stage C, cached)",
+            ms: ms(t),
+            work: format!(
+                "{} models, {} accesses, hits={} misses={}",
+                orm.models.len(),
+                orm.accesses.len(),
+                orm_stats.hits,
+                orm_stats.misses
+            ),
+        });
+
+        let t = Instant::now();
+        let orm_edges = add_orm_edges(&mut graph, &orm, None).expect("endpoints exist");
+        stages.push(Stage {
+            name: "ORM edges",
+            ms: ms(t),
+            work: format!("{orm_edges} edges"),
+        });
+
+        stages.push(Stage {
+            name: "  (graph totals)",
+            ms: 0.0,
+            work: format!("{} nodes, {} edges", graph.node_count(), graph.edge_count()),
+        });
+
+        stages
+    }
+
+    fn report(label: &str, stages: &[Stage]) {
+        let total: f64 = stages.iter().map(|s| s.ms).sum();
+        println!("--- {label} (min of {ITERATIONS}) ---");
+        for stage in stages {
+            if stage.ms == 0.0 && stage.name.starts_with("  ") {
+                println!("  {:<34} {:>10}   {}", stage.name, "", stage.work);
+                continue;
+            }
+            println!(
+                "  {:<34} {:>8.3} ms  {:>5.1}%  {}",
+                stage.name,
+                stage.ms,
+                100.0 * stage.ms / total,
+                stage.work
+            );
+        }
+        println!("  {:<34} {:>8.3} ms", "TOTAL (resolve stages)", total);
+    }
+
+    /// Takes the per-stage minimum across iterations.
+    fn best_of(runs: Vec<Vec<Stage>>) -> Vec<Stage> {
+        let mut best = runs.into_iter().reduce(|mut acc, run| {
+            for (a, b) in acc.iter_mut().zip(run) {
+                if b.ms < a.ms {
+                    a.ms = b.ms;
+                }
+                a.work = b.work;
+            }
+            acc
+        });
+        best.take().unwrap_or_default()
+    }
+
+    #[test]
+    #[ignore = "needs CARTOGRAPH_PROFILE_REPO; measures rather than asserts"]
+    fn post_cache_pipeline_profile() {
+        let Ok(repo) = std::env::var("CARTOGRAPH_PROFILE_REPO") else {
+            return;
+        };
+        let root = std::path::PathBuf::from(repo);
+
+        // 1. Discovery.
+        let t = Instant::now();
+        let (root, files) = crate::discovery::discover(&root).expect("discoverable");
+        let discovery_ms = ms(t);
+
+        // 2. Cold parse (cache empty).
+        let mut state = IncrementalState::new();
+        let mut analyzer = cartograph_parser::Analyzer::new().expect("grammars");
+        let t = Instant::now();
+        let analyses = state
+            .facts
+            .analyze(&mut analyzer, &root, &files, |_| {})
+            .expect("parses");
+        let cold_parse_ms = ms(t);
+        let cold_parse = state.facts.stats();
+
+        // 3. Warm parse (cache full, nothing changed).
+        let t = Instant::now();
+        let analyses_warm = state
+            .facts
+            .analyze(&mut analyzer, &root, &files, |_| {})
+            .expect("parses");
+        let warm_parse_ms = ms(t);
+        let warm_parse = state.facts.stats();
+
+        println!("repository          : {} files", files.len());
+        println!("discovery           : {discovery_ms:8.3} ms");
+        println!(
+            "parse  cold         : {cold_parse_ms:8.3} ms  parsed={} reused={}",
+            cold_parse.parsed, cold_parse.reused
+        );
+        println!(
+            "parse  warm         : {warm_parse_ms:8.3} ms  parsed={} reused={}",
+            warm_parse.parsed, warm_parse.reused
+        );
+        println!();
+
+        // 4. Resolve stages, cold cache: warm-up then ITERATIONS timed runs.
+        let mut cold_state = IncrementalState::new();
+        let _ = cold_state
+            .facts
+            .analyze(&mut analyzer, &root, &files, |_| {})
+            .expect("parses");
+        let _ = resolve_stages(&analyses, &mut cold_state); // warm-up
+        let cold_runs: Vec<_> = (0..ITERATIONS)
+            .map(|_| {
+                let mut fresh = IncrementalState::new();
+                let _ = fresh
+                    .facts
+                    .analyze(&mut analyzer, &root, &files, |_| {})
+                    .expect("parses");
+                resolve_stages(&analyses, &mut fresh)
+            })
+            .collect();
+        report("resolve stages, COLD Stage C cache", &best_of(cold_runs));
+        println!();
+
+        // 5. Resolve stages, warm cache.
+        let mut warm_state = IncrementalState::new();
+        let _ = warm_state
+            .facts
+            .analyze(&mut analyzer, &root, &files, |_| {})
+            .expect("parses");
+        let _ = resolve_stages(&analyses_warm, &mut warm_state); // populate
+        let _ = resolve_stages(&analyses_warm, &mut warm_state); // warm-up
+        let warm_runs: Vec<_> = (0..ITERATIONS)
+            .map(|_| resolve_stages(&analyses_warm, &mut warm_state))
+            .collect();
+        report("resolve stages, WARM Stage C cache", &best_of(warm_runs));
+    }
+}
