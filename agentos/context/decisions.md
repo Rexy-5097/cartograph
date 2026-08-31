@@ -19,3 +19,4 @@
 | [0012](../../docs/adr/ADR-0012-the-client-wrapper-is-a-node.md) | The client wrapper is a node | Accepted |
 | [0013](../../docs/adr/ADR-0013-m10-resolver-semantic-compatibility.md) | M10 may change the resolver, but not M09's semantics | Accepted |
 | [0014](../../docs/adr/ADR-0014-m10-scope-reconciliation.md) | M10 delivers incremental Stage C; three scope items deferred | Accepted |
+| [0015](../../docs/adr/ADR-0015-layout-contract.md) | The layout contract: directory clusters, per-cluster relaxation, determinism without stability | Proposed |
