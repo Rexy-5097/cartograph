@@ -1,6 +1,7 @@
 # ADR-0014 — M10 delivers incremental Stage C; three scope items are deferred
 
-**Status:** Proposed · 2026-08-31 · Requires the project owner's acceptance
+**Status:** Accepted · 2026-08-31 · Accepted by the project owner as the
+governing record of M10's delivered scope
 
 ## Context
 
@@ -31,25 +32,83 @@ M10's delivered scope is **correct incremental analysis of the Stage C
 per-file ORM access contribution**, with the clean rebuild retained as oracle
 and `incremental == clean` as the acceptance invariant.
 
+**M10 may be accepted without stable cross-run node identity.** M10's cache
+correctness rests on semantic dependency identities and semantic graph
+equality, never on persistent `NodeId` values — verified below, not asserted.
+
 The following are **deferred, not delivered**:
 
-### 1. Content-hash node identity — deferred
+### 1. Content-hash node identity — deferred, with a prerequisite gate
 
 `NodeId` remains graph-local. `cartograph-core/src/id.rs` is byte-identical to
 `cartograph-m09`.
 
-This is the one deferral that is a **capability**, not a target, and it carries
-forward a promise: ADR-0011 deferred stable identity *to M10*, and `id.rs` says
-so in its own documentation. Deferring it again means:
+**Why M10 does not need it.** Two independent mechanisms were checked in the
+code rather than assumed:
 
-- graphs still cannot be compared across runs by node handle;
-- **M12 (blast radius) and M13 (structural diff) both need cross-run identity**
-  and will have to deliver it, or receive it from a dedicated slice first.
+- `access_cache::Entry` keys a cached per-file result on `file_content`,
+  `model_set`, a read-set of `(repository-relative path, content identity)`
+  pairs, and the optional `path_set` / `alias_set` fingerprints. Every
+  component is a `u64` content identity or a relative path. No `NodeId`
+  participates in cache identity or in reuse eligibility.
+- `cartograph-testkit::canonical` compares graphs by *semantic* identity and
+  **excludes `NodeId`, `EdgeId`, insertion order and `created_at`** by
+  construction. The differential suite therefore already corresponds nodes
+  between two independently built graphs.
 
-It was not needed for Stage C caching, because the cache keys per-file results
-by content and dependency identity and never by `NodeId`, and because canonical
-graph equality compares semantic identity rather than handles. That is why the
-milestone could be built without it — not a reason it stops mattering.
+**What is actually missing is a stable content-addressed *handle*, not the
+ability to correspond nodes across runs.** That distinction matters for
+planning the successor work, and it narrows it.
+
+**Where the deferral binds.** ADR-0011 deferred stable identity *to M10*, so
+deferring again requires naming who inherits it. Checked against the milestone
+definitions rather than against this ADR's earlier assumption:
+
+| Milestone | Stated acceptance | Requires cross-run identity? |
+|---|---|---|
+| M12 — blast radius | "blast query on benchmark repos returns cross-stack impact sets with evidence" | **Not by the criterion as written.** Reverse reachability is computed over *one* graph, and ADR-0011's within-graph identity is what makes the cross-stack chain walkable. A prerequisite arises only if M12's implementation compares across analyses or holds handles across incremental updates. |
+| M13 — structural DIFF | "diff of two real branches lists added/removed/changed edges"; `layout(prev_graph, new_graph, prev_positions)` | **Yes, unconditionally.** Two branches are two independent analyses. Both the diff and the mental-map-stable layout are defined as functions of a correspondence between a previous and a new graph. |
+
+M13 additionally needs *more* than what exists today, which the existing keys
+do not supply:
+
+- `canonical::node_identity` is `(kind, name, file:line)`. A function that
+  moves three lines down is a different identity, so a diff built on it would
+  report a removal plus an addition for an unchanged function.
+- `node_for`'s identity is `(kind, name, file)` — line-independent, and
+  therefore closer — but it still cannot express a moved file or a renamed
+  artefact as the *same* node.
+
+So identity work is a real slice with real design content, not a rename of an
+existing key.
+
+**Acceptance gate for future identity work.** Before any milestone that
+requires correspondence between the same node across independent analyses, a
+stable semantic identity slice must land and be checkpointed. It is accepted
+only when:
+
+1. identity is derived from content and location semantics, never from
+   insertion order or allocation;
+2. two independent analyses of the same commit assign the same identity to
+   every node — asserted on a real repository, not a fixture alone;
+3. identity is stable under a change elsewhere in the file, so an unrelated
+   edit does not renumber unaffected nodes;
+4. the move and rename cases are given a defined answer — matched, or
+   deliberately reported as remove-plus-add — and that answer is tested;
+5. the existing canonical equality relation continues to hold, so the M10
+   differential suite still passes unchanged.
+
+**Sequencing.**
+
+- **M10** — deferred, as recorded here.
+- **M12** — must open with an explicit determination of whether its
+  implementation needs cross-run correspondence. If it does, it begins with the
+  identity slice above; if it does not, it records that and proceeds. It is a
+  decision point at kickoff, not an assumed prerequisite.
+- **M13** — **may not assume stable identity exists.** Unless M12 delivered and
+  checkpointed it, M13 begins with the identity slice above.
+
+Historical milestones are not renumbered and M10's history is not rewritten.
 
 ### 2. Notify file watching — deferred
 
@@ -85,12 +144,20 @@ concerns a per-file change in a watching process, which does not exist.
 - M10's **scope** is narrower than written. Anyone reading the milestone file
   alone would over-estimate what shipped, so that file and `ROADMAP.md` are
   updated to point here.
-- `id.rs` currently tells the reader stable identity arrives at M10. That
-  sentence becomes false on acceptance and is corrected to name this ADR.
-- M12 and M13 inherit the node-identity requirement. Sequencing it is the
-  project owner's decision, not this ADR's.
+- Four places told the reader that stable identity arrives at M10 —
+  `cartograph-core/src/id.rs`, `cartograph-core/src/lib.rs`,
+  `cartograph-graph/src/lib.rs` and `docs/graph/README.md`. Those sentences
+  become false on acceptance and are corrected to name this ADR and the gate
+  above, so that no file promises something no milestone owns.
+- ADR-0011 records the same deferral and is now partly overtaken; it carries a
+  forward pointer here. Its own decision — within-graph identity — is
+  unaffected and still stands.
+- **M13 inherits a hard prerequisite; M12 inherits a decision point.** This is
+  narrower than the claim this ADR made while it was Proposed, which asserted
+  that both required cross-run identity. M12's stated acceptance does not.
 - Persistence and watching remain available as a later slice, and the
   dependency model built here is what they would need first.
+- No claim is made anywhere that stable identity is implemented. It is not.
 
 ## Alternatives
 
@@ -101,5 +168,9 @@ concerns a per-file change in a watching process, which does not exist.
   an unstated gap is how the M09 acceptance bookkeeping was lost, and how
   `id.rs` would come to promise something no milestone owns.
 - **Accept content-hash identity as out of scope permanently** — rejected: it
-  is a real requirement with named downstream consumers, so it is deferred with
-  those consumers recorded rather than removed.
+  is a real requirement with a named downstream consumer, so it is deferred
+  with that consumer and an acceptance gate recorded rather than removed.
+- **Declare identity a blanket prerequisite for both M12 and M13** — rejected
+  as unverified. M12's acceptance criterion is reverse reachability over one
+  graph, which ADR-0011 already serves. Recording a prerequisite that the
+  milestone definition does not support would front-load work on a guess.

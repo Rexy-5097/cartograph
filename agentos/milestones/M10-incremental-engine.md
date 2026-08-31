@@ -24,7 +24,7 @@ measurement showed was 94.1% of a cold resolve on zulip.
 
 | Item | Status | Why |
 |---|---|---|
-| content-hash node identity | **deferred** | not needed by the cache; **M12 and M13 require it** |
+| content-hash node identity | **deferred** | not needed by the cache, which keys on content and compares graphs semantically; **M13 requires it unconditionally**, M12 must decide at kickoff whether it does. ADR-0014 states the acceptance gate |
 | notify file watching | **deferred** | a lifecycle feature; needs persistence, which is also deferred |
 | local graph database (ROADMAP 0.2) | **deferred** | needs a pinned hash, schema version and corruption story |
 | `<250 ms` per change | **superseded as a criterion** | never adopted; the priority was correctness over speed, and the evidence is work avoided |

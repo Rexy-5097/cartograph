@@ -17,8 +17,9 @@
 //!
 //! At M00 there is no parsing, no resolution and no storage. This crate is the
 //! type foundation those milestones build on. Node identity is assigned by the
-//! graph and is not yet content-addressed; that arrives with the incremental
-//! engine (M10).
+//! graph and is not yet content-addressed. M10 built its incremental engine
+//! without it and deferred it again; see [`id::NodeId`] and ADR-0014, which
+//! names the consumer (M13) and the gate the work must pass.
 
 pub mod confidence;
 pub mod edge;

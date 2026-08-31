@@ -76,7 +76,7 @@ the corresponding process status.
 | `line` | integer? | One-based. |
 
 Ids are **not** stable across runs or versions. Identity is
-`(kind, name, file)` — see [ADR-0011](../adr/ADR-0011-node-identity.md). Two
+`(kind, name, file)` — see [ADR-0011](../adr/ADR-0011-node-identity-within-a-graph.md). Two
 edges naming the same handler are part of one chain only if they share a node
 id, which is why ids are exposed at all: no name-based encoding can express it.
 

@@ -31,5 +31,9 @@ a value).
 ## Identity caveat
 
 `NodeId`/`EdgeId` are allocated per graph from zero. Handles must not cross
-graphs; content-addressed identity is an M10 deliverable, designed alongside
-the invalidation model rather than inherited by accident.
+graphs. Content-addressed identity was an M10 deliverable and was **deferred**
+there: the incremental engine keys results by content and dependency identity
+and compares graphs semantically, so it never needed a stable handle. See
+[ADR-0014](../adr/ADR-0014-m10-scope-reconciliation.md), which records the
+deferral, names M13 (structural diff) as the milestone that requires it, and
+states the gate the work must pass.

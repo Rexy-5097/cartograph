@@ -15,4 +15,7 @@
 | [0008](../../docs/adr/ADR-0008-external-ssd-workspace.md) | Repository and build artifacts on external SSD | Accepted |
 | [0009](../../docs/adr/ADR-0009-vendored-agentos.md) | AgentOS vendored under `agentos/` with minimal modification | Accepted |
 | [0010](../../docs/adr/ADR-0010-checkpoint-tag-policy.md) | Provisional vs accepted checkpoint tags | Accepted |
-| [0011](../../docs/adr/ADR-0011-node-identity-within-a-graph.md) | Node identity within a graph: (kind, name, file) | Accepted |
+| [0011](../../docs/adr/ADR-0011-node-identity-within-a-graph.md) | Node identity within a graph: (kind, name, file) | Accepted · partly overtaken by 0014 |
+| [0012](../../docs/adr/ADR-0012-the-client-wrapper-is-a-node.md) | The client wrapper is a node | Accepted |
+| [0013](../../docs/adr/ADR-0013-m10-resolver-semantic-compatibility.md) | M10 may change the resolver, but not M09's semantics | Accepted |
+| [0014](../../docs/adr/ADR-0014-m10-scope-reconciliation.md) | M10 delivers incremental Stage C; three scope items deferred | Accepted |
