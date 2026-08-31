@@ -32,7 +32,7 @@ use serde::Serialize;
 
 use crate::discovery;
 use crate::error::{CliError, ErrorCode};
-use crate::incremental::FactCache;
+use crate::incremental::IncrementalState;
 
 /// Progress is reported once every this many files.
 ///
@@ -276,7 +276,7 @@ pub fn run(path: &Path, options: Options) -> Result<Analysis, CliError> {
     // A clean run is an incremental run against an empty cache. Deliberately
     // the same code path: two implementations of "analyse a repository" is how
     // `incremental == clean` would quietly stop being true (M10).
-    run_with_cache(path, options, &mut FactCache::new())
+    run_with_cache(path, options, &mut IncrementalState::new())
 }
 
 /// Runs the pipeline, reusing per-file facts that are still valid.
@@ -292,7 +292,7 @@ pub fn run(path: &Path, options: Options) -> Result<Analysis, CliError> {
 pub fn run_with_cache(
     path: &Path,
     options: Options,
-    cache: &mut FactCache,
+    state: &mut IncrementalState,
 ) -> Result<Analysis, CliError> {
     let (root, files) = discovery::discover(path)?;
     let repository = Repository::describe(path, &root);
@@ -330,7 +330,8 @@ pub fn run_with_cache(
     // A per-file problem is a diagnostic on the FileAnalysis, not a reason to
     // abandon the repository; only an unexpected analyser fault errors here.
     let total = files.len();
-    let analyses = cache
+    let analyses = state
+        .facts
         .analyze(&mut analyzer, &root, &files, |index| {
             if progress && index > 0 && index % PROGRESS_EVERY == 0 {
                 eprintln!("  analysing… {index}/{total} files");
@@ -351,17 +352,17 @@ pub fn run_with_cache(
     // path beyond the repository-relative ones already in the fact model. Not
     // a CLI contract: this is behind `-v` for correctness and performance work
     // on the cache, and nothing parses it.
-    let stats = cache.stats();
+    let parse_stats = state.facts.stats();
     tracing::debug!(
-        files_seen = stats.seen,
-        files_reused = stats.reused,
-        files_parsed = stats.parsed,
-        entries_evicted = stats.evicted,
-        cached_entries = cache.len(),
+        files_seen = parse_stats.seen,
+        files_reused = parse_stats.reused,
+        files_parsed = parse_stats.parsed,
+        entries_evicted = parse_stats.evicted,
+        cached_entries = state.facts.len(),
         "parse cache"
     );
 
-    let (graph, results, orm, mut totals) = resolve(&analyses)?;
+    let (graph, results, orm, mut totals) = resolve(&analyses, Some(state))?;
     let (languages, diagnostics) = tally_files(&analyses, &mut totals);
     finish_totals(&mut totals, &graph, &analyses);
 
@@ -380,6 +381,7 @@ pub fn run_with_cache(
 /// Resolution and graph construction — the part that decides nothing itself.
 fn resolve(
     analyses: &[FileAnalysis],
+    state: Option<&mut IncrementalState>,
 ) -> Result<(ArchitectureGraph, Vec<MatchResult>, OrmAnalysis, Totals), CliError> {
     let mut totals = Totals::default();
     let exported = collect_exported_constants(analyses);
@@ -462,7 +464,16 @@ fn resolve(
     totals.client_call_edges = add_client_call_edges(&mut graph, analyses, &modules, None)
         .map_err(|e| graph_failure(&e))?;
 
-    let orm = OrmAnalysis::build(analyses);
+    // Stage C is the only resolution stage with a proven dependency identity,
+    // so it is the only one that reads a cache. Everything else in this
+    // function is still recomputed in full.
+    let orm = match state {
+        Some(state) => {
+            let identities = state.facts.identities();
+            OrmAnalysis::build_cached(analyses, &mut state.accesses, &identities)
+        }
+        None => OrmAnalysis::build(analyses),
+    };
     totals.orm_models = orm.models.len();
     totals.orm_tables = orm
         .models

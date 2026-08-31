@@ -52,6 +52,7 @@
 //! language model participates in any of it, ever: see RULE 007 and
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
 
+pub mod access_cache;
 pub mod canonical;
 pub mod client_trace;
 pub mod dependencies;
@@ -65,6 +66,7 @@ pub mod orm;
 pub mod routers;
 pub mod symbolic;
 
+pub use access_cache::{AccessCache, AccessCacheStats, GlobalFingerprints};
 pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,

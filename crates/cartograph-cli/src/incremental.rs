@@ -95,12 +95,6 @@ struct Entry {
 }
 
 impl FactCache {
-    /// An empty cache. The first run through it is a cold run.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Facts for every file in `files`, reusing what is still valid.
     ///
     /// Files are returned in the order given, so the analyses vector is
@@ -197,6 +191,41 @@ impl FactCache {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Content identity of every file analysed this run.
+    ///
+    /// The Stage C cache validates its recorded reads against these, so both
+    /// caches share one notion of file identity rather than each hashing
+    /// separately and drifting.
+    #[must_use]
+    pub fn identities(&self) -> HashMap<String, u64> {
+        self.entries
+            .iter()
+            .map(|(path, entry)| (path.clone(), entry.hash))
+            .collect()
+    }
+}
+
+/// Everything one incremental session remembers between runs.
+///
+/// Two caches with different units: `facts` holds parsed files, `accesses`
+/// holds per-file Stage C results. They are kept together so a caller cannot
+/// warm one and forget the other, which would silently validate Stage C
+/// entries against identities nobody refreshed.
+#[derive(Debug, Default)]
+pub struct IncrementalState {
+    /// Parsed per-file facts.
+    pub facts: FactCache,
+    /// Per-file ORM access results.
+    pub accesses: cartograph_resolver::AccessCache,
+}
+
+impl IncrementalState {
+    /// State that remembers nothing. The first run through it is cold.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(test)]
@@ -236,7 +265,7 @@ mod tests {
 
     #[test]
     fn a_new_cache_is_empty() {
-        let cache = FactCache::new();
+        let cache = FactCache::default();
         assert_eq!(cache.len(), 0);
         assert_eq!(cache.stats(), CacheStats::default());
     }
@@ -301,7 +330,7 @@ mod differential {
         }
 
         /// Analysis through `cache`, i.e. incremental once the cache is warm.
-        fn incremental(&self, cache: &mut FactCache) -> pipeline::Analysis {
+        fn incremental(&self, cache: &mut IncrementalState) -> pipeline::Analysis {
             pipeline::run_with_cache(&self.root, Options { quiet: true }, cache)
                 .expect("incremental analysis")
         }
@@ -312,7 +341,7 @@ mod differential {
         }
 
         /// The whole point: after a mutation, the two must agree.
-        fn assert_incremental_matches_clean(&self, cache: &mut FactCache, context: &str) {
+        fn assert_incremental_matches_clean(&self, cache: &mut IncrementalState, context: &str) {
             let incremental = self.incremental(cache);
             let clean = self.clean();
             assert_graphs_equal(&incremental.graph, &clean.graph, context);
@@ -369,16 +398,16 @@ mod differential {
     fn an_unchanged_repository_reuses_every_file() {
         let repo = Repo::new("noop");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
 
         let first = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 3, "cold run must parse all 3");
-        assert_eq!(cache.stats().reused, 0);
+        assert_eq!(cache.facts.stats().parsed, 3, "cold run must parse all 3");
+        assert_eq!(cache.facts.stats().reused, 0);
 
         let second = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 0, "warm run must parse nothing");
-        assert_eq!(cache.stats().reused, 3);
-        assert_eq!(cache.stats().evicted, 0);
+        assert_eq!(cache.facts.stats().parsed, 0, "warm run must parse nothing");
+        assert_eq!(cache.facts.stats().reused, 3);
+        assert_eq!(cache.facts.stats().evicted, 0);
 
         assert_graphs_equal(&first.graph, &second.graph, "no-op re-run");
         repo.assert_incremental_matches_clean(&mut cache, "no-op");
@@ -390,7 +419,7 @@ mod differential {
     fn one_changed_file_reparses_only_itself() {
         let repo = Repo::new("one-file");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.write(
@@ -403,8 +432,8 @@ mod differential {
         );
 
         repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1, "only the edited file");
-        assert_eq!(cache.stats().reused, 2);
+        assert_eq!(cache.facts.stats().parsed, 1, "only the edited file");
+        assert_eq!(cache.facts.stats().reused, 2);
         repo.assert_incremental_matches_clean(&mut cache, "single-file edit");
     }
 
@@ -413,7 +442,7 @@ mod differential {
     fn a_created_file_is_analysed_and_others_are_reused() {
         let repo = Repo::new("create");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.write(
@@ -423,9 +452,9 @@ mod differential {
         );
 
         repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1, "only the new file");
-        assert_eq!(cache.stats().reused, 3);
-        assert_eq!(cache.len(), 4);
+        assert_eq!(cache.facts.stats().parsed, 1, "only the new file");
+        assert_eq!(cache.facts.stats().reused, 3);
+        assert_eq!(cache.facts.len(), 4);
         repo.assert_incremental_matches_clean(&mut cache, "file creation");
     }
 
@@ -434,7 +463,7 @@ mod differential {
     fn a_deleted_file_leaves_no_trace() {
         let repo = Repo::new("delete");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         assert!(
             canonical(&before.graph)
@@ -447,8 +476,8 @@ mod differential {
         repo.delete("app/models.py");
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().evicted, 1);
-        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.facts.stats().evicted, 1);
+        assert_eq!(cache.facts.len(), 2);
         assert!(
             !canonical(&after.graph)
                 .nodes
@@ -464,14 +493,14 @@ mod differential {
     fn a_renamed_file_leaves_no_stale_path() {
         let repo = Repo::new("rename");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.rename("app/models.py", "app/schema.py");
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().evicted, 1, "the old path is dropped");
-        assert_eq!(cache.stats().parsed, 1, "the new path is parsed");
+        assert_eq!(cache.facts.stats().evicted, 1, "the old path is dropped");
+        assert_eq!(cache.facts.stats().parsed, 1, "the new path is parsed");
         let nodes = canonical(&after.graph).nodes;
         assert!(
             !nodes.iter().any(|n| n.contains("app/models.py")),
@@ -486,7 +515,7 @@ mod differential {
     fn a_backend_route_change_propagates_to_the_http_edge() {
         let repo = Repo::new("route");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         assert!(
             canonical(&before.graph)
@@ -507,7 +536,7 @@ mod differential {
         );
 
         repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1, "only the route file");
+        assert_eq!(cache.facts.stats().parsed, 1, "only the route file");
         // The frontend was not reparsed, yet its edge must be reconsidered.
         repo.assert_incremental_matches_clean(&mut cache, "backend route change");
     }
@@ -518,7 +547,7 @@ mod differential {
     fn a_dynamic_url_base_change_propagates() {
         let repo = Repo::new("dynamic");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.write(
@@ -530,7 +559,7 @@ mod differential {
         );
 
         repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1);
+        assert_eq!(cache.facts.stats().parsed, 1);
         repo.assert_incremental_matches_clean(&mut cache, "dynamic URL base change");
     }
 
@@ -539,7 +568,7 @@ mod differential {
     fn an_orm_table_change_propagates() {
         let repo = Repo::new("orm");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.write(
@@ -552,7 +581,7 @@ mod differential {
         );
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1);
+        assert_eq!(cache.facts.stats().parsed, 1);
         let nodes = canonical(&after.graph).nodes;
         assert!(
             !nodes.iter().any(|n| n.contains("|orders|")),
@@ -567,7 +596,7 @@ mod differential {
     fn diagnostics_appear_and_disappear_with_the_file() {
         let repo = Repo::new("diagnostics");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let clean_first = repo.incremental(&mut cache);
         let baseline_diagnostics = clean_first.diagnostics.len();
 
@@ -603,7 +632,7 @@ mod differential {
     fn revert_and_recreate_cycles_end_exactly_where_they_started() {
         let repo = Repo::new("stale");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let original = canonical(&repo.incremental(&mut cache).graph);
 
         // 1. changed twice before the next analysis: only the last state counts
@@ -638,7 +667,7 @@ mod differential {
         let repo = Repo::new("independent");
         full_stack(&repo);
         repo.write("web/other.ts", "export const X = 1;\n");
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         repo.write("web/other.ts", "export const X = 2;\n");
@@ -652,8 +681,8 @@ mod differential {
         );
 
         repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 2, "both edits, nothing else");
-        assert_eq!(cache.stats().reused, 2);
+        assert_eq!(cache.facts.stats().parsed, 2, "both edits, nothing else");
+        assert_eq!(cache.facts.stats().reused, 2);
         repo.assert_incremental_matches_clean(&mut cache, "two independent mutations");
     }
 
@@ -685,7 +714,7 @@ mod differential {
     fn an_import_change_repoints_the_dependency() {
         let repo = Repo::new("import-change");
         split_frontend(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         let before_edges = canonical(&before.graph).edges;
 
@@ -698,8 +727,12 @@ mod differential {
         );
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1, "only the importing file changed");
-        assert_eq!(cache.stats().reused, 3);
+        assert_eq!(
+            cache.facts.stats().parsed,
+            1,
+            "only the importing file changed"
+        );
+        assert_eq!(cache.facts.stats().reused, 3);
         assert_ne!(
             before_edges,
             canonical(&after.graph).edges,
@@ -714,14 +747,18 @@ mod differential {
     fn an_exported_symbol_change_propagates_to_importers() {
         let repo = Repo::new("export-change");
         split_frontend(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         let before_edges = canonical(&before.graph).edges;
 
         repo.write("web/config_a.ts", "export const ROOT = '/api';\n");
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1, "only the exporting file changed");
+        assert_eq!(
+            cache.facts.stats().parsed,
+            1,
+            "only the exporting file changed"
+        );
         assert_ne!(
             before_edges,
             canonical(&after.graph).edges,
@@ -750,7 +787,7 @@ mod differential {
              def list_orders():\n\
              \x20   return []\n",
         );
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         let before_edges = canonical(&before.graph).edges;
 
@@ -764,7 +801,7 @@ mod differential {
         );
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 1);
+        assert_eq!(cache.facts.stats().parsed, 1);
         assert_ne!(
             before_edges,
             canonical(&after.graph).edges,
@@ -780,7 +817,7 @@ mod differential {
     fn multiple_dependent_changes_in_one_update_stay_consistent() {
         let repo = Repo::new("dependent");
         split_frontend(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let original = canonical(&repo.incremental(&mut cache).graph);
 
         repo.write("web/config_a.ts", "export const ROOT = '/api';\n")
@@ -793,7 +830,7 @@ mod differential {
             );
 
         let after = repo.incremental(&mut cache);
-        assert_eq!(cache.stats().parsed, 2, "both dependent files");
+        assert_eq!(cache.facts.stats().parsed, 2, "both dependent files");
         assert_eq!(
             original,
             canonical(&after.graph),
@@ -835,7 +872,7 @@ mod differential {
              class Invoice(Base2):\n\
              \x20   __tablename__ = 'invoices'\n",
         );
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = canonical(&repo.incremental(&mut cache).graph);
         let unrelated_before: Vec<_> = before
             .nodes
@@ -920,7 +957,7 @@ mod differential {
     fn a_colliding_declaration_removes_the_model_it_collides_with() {
         let repo = Repo::new("collide-create");
         colliding_models(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = canonical(&repo.incremental(&mut cache).graph);
         assert!(
             before.nodes.iter().any(|n| n.contains("|orders|")),
@@ -946,7 +983,7 @@ mod differential {
         let repo = Repo::new("collide-delete");
         colliding_models(&repo);
         repo.write("app/duplicate.py", RIVAL);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let ambiguous = canonical(&repo.incremental(&mut cache).graph);
         assert!(
             !ambiguous.nodes.iter().any(|n| n.contains("|orders|")),
@@ -970,7 +1007,7 @@ mod differential {
     fn renaming_a_class_into_and_out_of_a_collision_is_symmetric() {
         let repo = Repo::new("collide-rename");
         colliding_models(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let original = canonical(&repo.incremental(&mut cache).graph);
 
         repo.write("app/duplicate.py", RIVAL);
@@ -1045,7 +1082,7 @@ mod differential {
     fn a_path_collision_removes_an_access_edge_without_touching_any_content() {
         let repo = Repo::new("path-collision");
         orm_access(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = repo.incremental(&mut cache);
         assert!(
             has_access_edge(&before.graph),
@@ -1071,7 +1108,7 @@ mod differential {
         let repo = Repo::new("path-collision-undo");
         orm_access(&repo);
         repo.write("pkg/app/models.py", "VERSION = 1\n");
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let collided = repo.incremental(&mut cache);
         assert!(
             !has_access_edge(&collided.graph),
@@ -1100,7 +1137,7 @@ mod differential {
     fn typescript_files_and_aliases_do_not_affect_python_orm_resolution() {
         let repo = Repo::new("ts-inert");
         orm_access(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         let before = canonical(&repo.incremental(&mut cache).graph);
         assert!(
             before.edges.iter().any(|e| e.contains("OrmAccess")),
@@ -1141,19 +1178,21 @@ mod differential {
             return;
         };
         let root = std::path::PathBuf::from(path);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
 
         let t = std::time::Instant::now();
         let cold = pipeline::run_with_cache(&root, Options { quiet: true }, &mut cache)
             .expect("cold analysis");
         let cold_ms = t.elapsed().as_secs_f64() * 1000.0;
-        let cold_stats = cache.stats();
+        let cold_stats = cache.facts.stats();
+        let cold_access = cache.accesses.stats();
 
         let t = std::time::Instant::now();
         let warm = pipeline::run_with_cache(&root, Options { quiet: true }, &mut cache)
             .expect("warm analysis");
         let warm_ms = t.elapsed().as_secs_f64() * 1000.0;
-        let warm_stats = cache.stats();
+        let warm_stats = cache.facts.stats();
+        let warm_access = cache.accesses.stats();
 
         println!("files            : {}", cold.totals.files);
         println!(
@@ -1169,6 +1208,18 @@ mod differential {
             warm_stats.parsed, warm_stats.reused
         );
         println!("speedup          : {:.1}x", cold_ms / warm_ms.max(0.001));
+        println!(
+            "stage C cold     : hits={} misses={}",
+            cold_access.hits, cold_access.misses
+        );
+        println!(
+            "stage C warm     : hits={} misses={} refused_to_store={}",
+            warm_access.hits, warm_access.misses, warm_access.refused_to_store
+        );
+        assert_eq!(
+            warm_access.misses, 0,
+            "a warm run over an unchanged tree must recompute no Stage C result"
+        );
 
         // The one thing that is asserted, because it is correctness and not
         // timing: a warm run over an unchanged tree reparses nothing, and the
@@ -1187,7 +1238,7 @@ mod differential {
     fn a_file_that_becomes_unparseable_does_not_keep_its_old_facts() {
         let repo = Repo::new("unreadable");
         full_stack(&repo);
-        let mut cache = FactCache::new();
+        let mut cache = IncrementalState::new();
         repo.incremental(&mut cache);
 
         // Invalid UTF-8: readable bytes, undecodable content.
@@ -1203,5 +1254,543 @@ mod differential {
             "facts from the previously valid file survived"
         );
         repo.assert_incremental_matches_clean(&mut cache, "file became invalid UTF-8");
+    }
+}
+
+/// Stage C cache behaviour, asserted on counters rather than time.
+///
+/// Every test here first proves its precondition — that the fixture produces
+/// the access the mutation is supposed to disturb — because a cache test over
+/// a repository with no accesses would pass whatever the cache did.
+#[cfg(test)]
+mod access_cache {
+    use super::*;
+    use crate::pipeline::{self, Options};
+    use cartograph_testkit::canonical::{assert_graphs_equal, canonical};
+
+    /// A repository on disk that a test can mutate. Same harness the
+    /// differential suite uses.
+    struct Repo {
+        root: std::path::PathBuf,
+    }
+
+    impl Repo {
+        fn new(name: &str) -> Self {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir()
+                .join("cartograph-m10-cache")
+                .join(format!("{name}-{}-{unique}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).expect("fixture root");
+            Self { root }
+        }
+
+        fn write(&self, rel: &str, contents: &str) -> &Self {
+            let path = self.root.join(rel);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("fixture parent");
+            }
+            std::fs::write(path, contents).expect("write fixture");
+            self
+        }
+
+        fn delete(&self, rel: &str) -> &Self {
+            std::fs::remove_file(self.root.join(rel)).expect("delete fixture");
+            self
+        }
+
+        fn rename(&self, from: &str, to: &str) -> &Self {
+            std::fs::rename(self.root.join(from), self.root.join(to)).expect("rename");
+            self
+        }
+
+        fn run(&self, state: &mut IncrementalState) -> pipeline::Analysis {
+            pipeline::run_with_cache(&self.root, Options { quiet: true }, state)
+                .expect("incremental analysis")
+        }
+
+        fn clean(&self) -> pipeline::Analysis {
+            pipeline::run(&self.root, Options { quiet: true }).expect("clean analysis")
+        }
+
+        fn assert_matches_clean(&self, state: &mut IncrementalState, context: &str) {
+            let incremental = self.run(state);
+            let clean = self.clean();
+            assert_graphs_equal(&incremental.graph, &clean.graph, context);
+        }
+    }
+
+    impl Drop for Repo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    const MODELS: &str = "from sqlalchemy.orm import DeclarativeBase\n\
+                          class Base(DeclarativeBase):\n\
+                          \x20   pass\n\
+                          class Order(Base):\n\
+                          \x20   __tablename__ = 'orders'\n";
+
+    /// A -> B -> C, so a transitive dependency change can be tested.
+    fn chain(repo: &Repo) {
+        repo.write("app/models.py", MODELS)
+            .write("app/mid.py", "from .models import Order\n")
+            .write(
+                "app/handlers.py",
+                "from .mid import Order\n\
+                 def make():\n\
+                 \x20   return Order(x=1)\n",
+            );
+    }
+
+    fn has_access(graph: &cartograph_graph::ArchitectureGraph) -> bool {
+        canonical(graph)
+            .edges
+            .iter()
+            .any(|e| e.contains("OrmAccess"))
+    }
+
+    /// PART 8 — a second run over an unchanged tree reuses every entry.
+    #[test]
+    fn an_unchanged_repository_reuses_every_stage_c_entry() {
+        let repo = Repo::new("noop");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+
+        let first = repo.run(&mut state);
+        assert!(
+            has_access(&first.graph),
+            "precondition: the fixture must produce an ORM access"
+        );
+        assert_eq!(state.accesses.stats().hits, 0, "cold run cannot hit");
+        let cold_misses = state.accesses.stats().misses;
+        assert!(cold_misses > 0);
+
+        let second = repo.run(&mut state);
+        assert_eq!(
+            state.accesses.stats().misses,
+            0,
+            "a warm run over an unchanged tree must recompute nothing"
+        );
+        assert_eq!(state.accesses.stats().hits, cold_misses);
+        assert_graphs_equal(&first.graph, &second.graph, "no-op re-run");
+    }
+
+    /// PART 9 — editing the file that holds the accesses invalidates its own
+    /// entry, and only its own.
+    #[test]
+    fn editing_the_accessing_file_misses_only_that_entry() {
+        let repo = Repo::new("own-edit");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        repo.run(&mut state);
+        let total = state.accesses.stats().misses;
+
+        repo.write(
+            "app/handlers.py",
+            "from .mid import Order\n\
+             def make():\n\
+             \x20   return Order(x=2)\n",
+        );
+        repo.run(&mut state);
+        assert_eq!(state.accesses.stats().misses, 1, "only the edited file");
+        assert_eq!(state.accesses.stats().hits, total - 1);
+        repo.assert_matches_clean(&mut state, "own file edited");
+    }
+
+    /// PART 10 — mandatory. A -> B -> C; change only C. The entry for A must
+    /// miss, because C's recorded content identity moved.
+    #[test]
+    fn a_transitive_dependency_change_invalidates_the_dependent_entry() {
+        let repo = Repo::new("transitive");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let before = repo.run(&mut state);
+        assert!(
+            has_access(&before.graph),
+            "precondition: the chain must resolve to an access"
+        );
+
+        // Change only the far end of the chain.
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'renamed_orders'\n",
+        );
+        repo.run(&mut state);
+
+        // models.py itself missed, and handlers.py missed because it reads it.
+        assert!(
+            state.accesses.stats().misses >= 2,
+            "the dependent entry must miss too, not just the edited file: {:?}",
+            state.accesses.stats()
+        );
+        repo.assert_matches_clean(&mut state, "transitive dependency changed");
+    }
+
+    /// PART 11 — an unrelated file must not invalidate an entry.
+    #[test]
+    fn an_unrelated_file_change_leaves_the_entry_reusable() {
+        let repo = Repo::new("unrelated");
+        chain(&repo);
+        repo.write("app/other.py", "VALUE = 1\n");
+        let mut state = IncrementalState::new();
+        repo.run(&mut state);
+        let total = state.accesses.stats().misses;
+
+        repo.write("app/other.py", "VALUE = 2\n");
+        repo.run(&mut state);
+        assert_eq!(
+            state.accesses.stats().misses,
+            1,
+            "only the edited file may miss: {:?}",
+            state.accesses.stats()
+        );
+        assert_eq!(state.accesses.stats().hits, total - 1);
+        repo.assert_matches_clean(&mut state, "unrelated file changed");
+    }
+
+    /// PART 12/13 — a path collision changes the path-set fingerprint, so the
+    /// entries that consulted it miss; removing it restores the result.
+    #[test]
+    fn a_path_collision_invalidates_and_its_removal_restores() {
+        let repo = Repo::new("path-set");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let before = canonical(&repo.run(&mut state).graph);
+        assert!(
+            before.edges.iter().any(|e| e.contains("OrmAccess")),
+            "precondition: an access must exist first"
+        );
+
+        repo.write("vendor/app/models.py", "VERSION = 1\n");
+        let collided = repo.run(&mut state);
+        assert!(
+            state.accesses.stats().misses > 0,
+            "a path-set change must invalidate the entries that consulted it"
+        );
+        assert!(
+            !has_access(&collided.graph),
+            "the ambiguous module path must withdraw the access"
+        );
+        repo.assert_matches_clean(&mut state, "path collision created");
+
+        repo.delete("vendor/app/models.py");
+        let restored = canonical(&repo.run(&mut state).graph);
+        assert_eq!(
+            before, restored,
+            "removing the collision must restore the graph"
+        );
+        repo.assert_matches_clean(&mut state, "path collision removed");
+    }
+
+    /// PART 14 — model ambiguity in both directions.
+    #[test]
+    fn model_ambiguity_invalidates_and_its_removal_restores() {
+        let repo = Repo::new("ambiguity");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let before = canonical(&repo.run(&mut state).graph);
+        assert!(before.nodes.iter().any(|n| n.contains("|orders|")));
+
+        repo.write(
+            "app/dup.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'other'\n",
+        );
+        let ambiguous = repo.run(&mut state);
+        assert!(
+            state.accesses.stats().misses > 0,
+            "a model-set change must invalidate"
+        );
+        assert!(
+            !canonical(&ambiguous.graph)
+                .nodes
+                .iter()
+                .any(|n| n.contains("|orders|")),
+            "the ambiguous model must resolve to nothing"
+        );
+        repo.assert_matches_clean(&mut state, "ambiguity created");
+
+        repo.delete("app/dup.py");
+        let restored = canonical(&repo.run(&mut state).graph);
+        assert_eq!(
+            before, restored,
+            "removing the rival must restore the graph"
+        );
+    }
+
+    /// PART 15 — the critical separation test. A table rename must NOT
+    /// invalidate Stage C, because access resolution never reads the table —
+    /// but the graph's table edge must still change.
+    #[test]
+    fn a_table_rename_does_not_invalidate_stage_c_but_does_change_the_graph() {
+        let repo = Repo::new("table");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let before = canonical(&repo.run(&mut state).graph);
+        assert!(
+            before.nodes.iter().any(|n| n.contains("|orders|")),
+            "precondition: the table must resolve first"
+        );
+
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'purchase_orders'\n",
+        );
+        let after = repo.run(&mut state);
+
+        // models.py's own entry misses (its content changed) and handlers.py
+        // misses because it reads models.py — but the *reason* is the read,
+        // not the table. What matters here is the graph.
+        let renamed = canonical(&after.graph);
+        assert!(
+            renamed
+                .nodes
+                .iter()
+                .any(|n| n.contains("|purchase_orders|")),
+            "the table edge must reflect the rename: {:?}",
+            renamed.nodes
+        );
+        assert!(
+            !renamed.nodes.iter().any(|n| n.contains("|orders|")),
+            "the old table must be gone"
+        );
+        repo.assert_matches_clean(&mut state, "table renamed");
+    }
+
+    /// PART 20/21/22 — deleted, recreated and renamed dependencies.
+    #[test]
+    fn deleted_recreated_and_renamed_dependencies_are_never_trusted() {
+        let repo = Repo::new("dep-lifecycle");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let original = canonical(&repo.run(&mut state).graph);
+
+        // Delete the far dependency.
+        repo.delete("app/models.py");
+        repo.run(&mut state);
+        repo.assert_matches_clean(&mut state, "dependency deleted");
+
+        // Recreate it with different contents.
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'recreated'\n",
+        );
+        repo.assert_matches_clean(&mut state, "dependency recreated differently");
+
+        // Restore the original and confirm the graph comes back exactly.
+        repo.write("app/models.py", MODELS);
+        let restored = canonical(&repo.run(&mut state).graph);
+        assert_eq!(
+            original, restored,
+            "restoring the content must restore the graph"
+        );
+
+        // Rename it away: no stale path may survive.
+        repo.rename("app/models.py", "app/schema.py");
+        let renamed = repo.run(&mut state);
+        assert!(
+            !canonical(&renamed.graph)
+                .nodes
+                .iter()
+                .any(|n| n.contains("app/models.py")),
+            "the old path survived the rename"
+        );
+        repo.assert_matches_clean(&mut state, "dependency renamed");
+    }
+
+    /// PART 23 — rapid mutations including a revert. The cache must always
+    /// reflect current content, never a timestamp or an assumption of
+    /// monotonicity.
+    #[test]
+    fn rapid_mutations_and_a_revert_always_reflect_current_content() {
+        let repo = Repo::new("rapid");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let original = canonical(&repo.run(&mut state).graph);
+
+        let variant = |table: &str| {
+            format!(
+                "from sqlalchemy.orm import DeclarativeBase\n\
+                 class Base(DeclarativeBase):\n\
+                 \x20   pass\n\
+                 class Order(Base):\n\
+                 \x20   __tablename__ = '{table}'\n"
+            )
+        };
+
+        repo.write("app/models.py", &variant("one"));
+        repo.run(&mut state);
+        repo.write("app/models.py", &variant("two"));
+        repo.run(&mut state);
+        repo.write("app/models.py", MODELS); // revert
+        let reverted = canonical(&repo.run(&mut state).graph);
+        assert_eq!(
+            original, reverted,
+            "a revert must restore the original graph"
+        );
+        repo.write("app/models.py", &variant("three"));
+        repo.assert_matches_clean(&mut state, "after rapid mutation");
+    }
+
+    /// PART 24 — two independent chains. Changing one must not invalidate the
+    /// other, in either direction.
+    #[test]
+    fn independent_subgraphs_invalidate_independently() {
+        let repo = Repo::new("independent");
+        chain(&repo);
+        repo.write(
+            "other/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Ledger(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Receipt(Ledger):\n\
+             \x20   __tablename__ = 'receipts'\n",
+        )
+        .write(
+            "other/handlers.py",
+            "from .models import Receipt\n\
+             def make():\n\
+             \x20   return Receipt(x=1)\n",
+        );
+        let mut state = IncrementalState::new();
+        repo.run(&mut state);
+        let total = state.accesses.stats().misses;
+        assert!(total >= 4, "precondition: both chains must be present");
+
+        // Touch only the first chain's leaf.
+        repo.write(
+            "app/handlers.py",
+            "from .mid import Order\ndef make():\n    return Order(x=9)\n",
+        );
+        repo.run(&mut state);
+        assert_eq!(
+            state.accesses.stats().misses,
+            1,
+            "the other chain must stay reusable: {:?}",
+            state.accesses.stats()
+        );
+
+        // Now touch only the second chain's leaf.
+        repo.write(
+            "other/handlers.py",
+            "from .models import Receipt\ndef make():\n    return Receipt(x=9)\n",
+        );
+        repo.run(&mut state);
+        assert_eq!(
+            state.accesses.stats().misses,
+            1,
+            "and the first chain must stay reusable: {:?}",
+            state.accesses.stats()
+        );
+        repo.assert_matches_clean(&mut state, "independent subgraphs");
+    }
+
+    /// PART 25 — the full cross-stack chain, one mutation at a time.
+    #[test]
+    fn the_cross_stack_chain_stays_equal_to_a_clean_rebuild() {
+        let repo = Repo::new("cross-stack");
+        repo.write(
+            "web/api.ts",
+            "export const BASE = '/api';\n\
+             export async function listOrders() {\n\
+             \x20 return fetch(`${BASE}/orders`, { method: 'GET' });\n\
+             }\n",
+        )
+        .write(
+            "app/routes.py",
+            "from fastapi import APIRouter\n\
+             from .models import Order\n\
+             router = APIRouter()\n\
+             @router.get('/api/orders')\n\
+             def list_orders():\n\
+             \x20   return Order(x=1)\n",
+        )
+        .write("app/models.py", MODELS);
+
+        let mut state = IncrementalState::new();
+        let first = repo.run(&mut state);
+        assert!(
+            canonical(&first.graph)
+                .edges
+                .iter()
+                .any(|e| e.contains("HttpCall")),
+            "precondition: the chain must cross the HTTP boundary"
+        );
+
+        // One mutation at a time, each compared against a clean rebuild.
+        repo.write(
+            "web/api.ts",
+            "export const BASE = '/v2';\n\
+             export async function listOrders() {\n\
+             \x20 return fetch(`${BASE}/orders`, { method: 'GET' });\n\
+             }\n",
+        );
+        repo.assert_matches_clean(&mut state, "frontend endpoint changed");
+
+        repo.write(
+            "app/routes.py",
+            "from fastapi import APIRouter\n\
+             from .models import Order\n\
+             router = APIRouter(prefix='/v2')\n\
+             @router.get('/orders')\n\
+             def list_orders():\n\
+             \x20   return Order(x=1)\n",
+        );
+        repo.assert_matches_clean(&mut state, "router prefix changed");
+
+        repo.write(
+            "app/models.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\
+             class Base(DeclarativeBase):\n\
+             \x20   pass\n\
+             class Order(Base):\n\
+             \x20   __tablename__ = 'v2_orders'\n",
+        );
+        repo.assert_matches_clean(&mut state, "ORM table changed");
+    }
+
+    /// PART 29 — a run that fails must not leave a reusable entry behind, and
+    /// must not publish a half-updated one. A file that becomes unreadable
+    /// makes its own analysis fail; the next successful run must recompute
+    /// from the real state rather than serve what was cached before.
+    #[test]
+    fn a_file_that_becomes_unparseable_does_not_serve_its_old_entry() {
+        let repo = Repo::new("failure");
+        chain(&repo);
+        let mut state = IncrementalState::new();
+        let before = repo.run(&mut state);
+        assert!(has_access(&before.graph), "precondition: an access exists");
+
+        // Invalid UTF-8: readable bytes, undecodable content.
+        std::fs::write(repo.root.join("app/models.py"), [0xff, 0xfe, 0x00, 0x9c])
+            .expect("write invalid utf-8");
+        let broken = repo.run(&mut state);
+        assert!(
+            !canonical(&broken.graph)
+                .nodes
+                .iter()
+                .any(|n| n.contains("|orders|")),
+            "the old entry must not be served for the new state"
+        );
+        repo.assert_matches_clean(&mut state, "dependency became unparseable");
     }
 }

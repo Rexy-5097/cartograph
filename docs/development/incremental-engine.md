@@ -646,3 +646,72 @@ as on fixtures.
 **string-literal** targets, so a computed target is not recorded and those
 `@/…` imports stay unresolved. That is existing M09 behaviour, not something
 this slice changed, and it is why that repository reports zero aliases.
+---
+
+## 14. The first cache: per-file Stage C
+
+One unit is cached — a file's ORM access contribution. Not `OrmAnalysis`, not
+`ModuleIndex`, not the graph, because nothing else has a dependency set that
+has been traced and tested.
+
+### The entry, and the rule
+
+```
+Entry { file_content, model_set, reads: Vec<(path, content_id)>,
+        path_set: Option<u64>, alias_set: Option<u64>,
+        accesses, dependencies }
+```
+
+Reusable only when **every** term holds:
+
+1. the entry was recorded with **complete** dependency tracking
+2. the file's own content identity matches
+3. the model-set fingerprint matches
+4. every recorded read still **exists** and has the same content identity
+5. the path-set fingerprint matches, *if that resolution consulted it*
+6. the alias fingerprint matches, *if that resolution consulted it*
+
+Any failure is a miss. **There is no partial reuse**: a result derived from a
+dependency that moved is not partly correct, it is wrong.
+
+Identities are **supplied by the caller**, not computed here — the parse cache
+already hashes every file's bytes, and a second notion of file identity is a
+second thing to keep in step. A path whose identity the caller cannot supply is
+treated as missing, which makes a deleted dependency a miss by construction
+rather than by a special case.
+
+An entry is built completely before it is published, and an **incomplete**
+context is not stored at all (`refused_to_store`). Choosing to recompute is
+always available; choosing to reuse without justification is not.
+
+### What the counters prove
+
+Every cache assertion is written against `hits` / `misses` /
+`refused_to_store`, never against elapsed time — timing cannot distinguish
+reuse from a fast recomputation.
+
+| Mutation | Stage C |
+|---|---|
+| nothing changed | all hits, 0 misses |
+| the accessing file edited | exactly 1 miss |
+| a **transitive** dependency edited | the dependent entry misses too |
+| an unrelated file edited | exactly 1 miss; the rest reused |
+| path collision created / removed | entries that consulted the path set miss |
+| model ambiguity created / removed | entries miss; the access returns on removal |
+| two independent chains | changing one leaves the other reusable |
+
+**A table rename does not invalidate Stage C** — access resolution never reads
+the table — **but the graph's table edge still changes.** That separation is
+the sharpest test in the suite: over-invalidating there would be safe but
+wasteful, and under-invalidating the *graph* would be a stale-edge defect.
+
+### Measured (observation, not an acceptance criterion)
+
+zulip `0ce8f627`, in process, graphs verified equal by canonical equality:
+cold 25,544 ms → warm **221 ms**; Stage C cold 1,067 misses, warm **1,067 hits,
+0 misses, 0 refused**. Absolute wall-times on this machine vary several-fold
+with OS page-cache state, so the counters are the result and the milliseconds
+are context.
+
+**No persistence.** The cache is process-local; the CLI exits after each run
+and cannot yet benefit. That remains a separate concern, deliberately.
