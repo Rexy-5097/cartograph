@@ -27,5 +27,11 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+[dev-dependencies]
+# Canonical graph equality for the M10 differential tests: `incremental ==
+# clean` needs a defined relation, and comparing raw graphs would compare
+# graph-local node ids (ADR-0011).
+cartograph-testkit.workspace = true
+
 [lints]
 workspace = true

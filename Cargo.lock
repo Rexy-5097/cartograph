@@ -94,6 +94,7 @@ dependencies = [
  "cartograph-graph",
  "cartograph-parser",
  "cartograph-resolver",
+ "cartograph-testkit",
  "clap",
  "serde",
  "serde_json",
@@ -155,6 +156,7 @@ name = "cartograph-testkit"
 version = "0.1.0"
 dependencies = [
  "cartograph-core",
+ "cartograph-graph",
  "time",
 ]
 

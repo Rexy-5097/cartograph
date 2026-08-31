@@ -27,6 +27,8 @@ use std::collections::HashMap;
 
 use cartograph_parser::model::{FileAnalysis, SourceLanguage, Symbol, SymbolKind};
 
+use crate::dependencies::{AliasSetFingerprint, PathSetFingerprint, ResolutionContext};
+
 /// Where a name's declaration is, or why that is not known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
@@ -151,6 +153,58 @@ impl<'a> ModuleIndex<'a> {
         }
     }
 
+    /// The repository paths Python module resolution can match, sorted.
+    ///
+    /// Only paths ending in `.py`: candidates are `<base>.py` and
+    /// `<base>/__init__.py`, matched by equality or a `/`-anchored suffix, so
+    /// a `.pyi`, `.ts` or `.tsx` path can never satisfy one. Narrowing to
+    /// what can actually match keeps a TypeScript file from invalidating
+    /// Python results.
+    #[must_use]
+    pub fn canonical_python_path_set(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self
+            .by_path
+            .keys()
+            // Case-sensitive on purpose: `resolve_python_module` compares
+            // paths exactly, so a case-insensitive filter here would claim a
+            // dependency the resolver could never have.
+            .filter(|p| {
+                std::path::Path::new(p)
+                    .extension()
+                    .is_some_and(|e| e == "py")
+            })
+            .map(|p| (*p).to_owned())
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    /// Identity of that path set.
+    #[must_use]
+    pub fn python_path_set_fingerprint(&self) -> PathSetFingerprint {
+        PathSetFingerprint::of(&self.canonical_python_path_set())
+    }
+
+    /// The build-alias list in the order `apply_alias` walks it.
+    ///
+    /// Order is preserved, not sorted again: the first matching entry wins, so
+    /// two lists with the same members in a different order can resolve the
+    /// same specifier differently and must not share an identity. All three
+    /// components are included because `apply_alias` reads all three.
+    #[must_use]
+    pub fn canonical_alias_set(&self) -> Vec<String> {
+        self.aliases
+            .iter()
+            .map(|(alias, target, dir)| format!("{alias}|{target}|{dir}"))
+            .collect()
+    }
+
+    /// Identity of the ordered alias list.
+    #[must_use]
+    pub fn alias_set_fingerprint(&self) -> AliasSetFingerprint {
+        AliasSetFingerprint::of(&self.canonical_alias_set())
+    }
+
     /// Rewrites a bare specifier through a declared build alias.
     ///
     /// Returns the repository-relative path the specifier stands for, before
@@ -197,15 +251,38 @@ impl<'a> ModuleIndex<'a> {
     /// Resolves a Python name used in `from` to its declaration.
     #[must_use]
     pub fn resolve_python(&self, from: &FileAnalysis, name: &str) -> Resolution {
+        self.resolve_python_tracked(from, name, &mut ResolutionContext::new())
+    }
+
+    /// [`resolve_python`](Self::resolve_python), recording what it read.
+    ///
+    /// The untracked form delegates here, so there is exactly one
+    /// implementation of Python resolution and the recorded dependencies
+    /// cannot drift away from the behaviour they describe.
+    pub fn resolve_python_tracked(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
+        // The asking file's own symbols decide whether the name is local, so
+        // its contents are a dependency of every answer.
+        deps.record_file(&from.path);
         if let Some(symbol) = declaration_in(from, name) {
             return Resolution::Local {
                 line: symbol.span.start_line,
             };
         }
-        self.follow_python(from, name, 0)
+        self.follow_python(from, name, 0, deps)
     }
 
-    fn follow_python(&self, from: &FileAnalysis, name: &str, hop: usize) -> Resolution {
+    fn follow_python(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        hop: usize,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
         if hop >= MAX_REEXPORT_HOPS {
             return Resolution::Unresolved {
                 module: from.path.clone(),
@@ -213,6 +290,8 @@ impl<'a> ModuleIndex<'a> {
             };
         }
 
+        // This hop reads `from`'s import statements.
+        deps.record_file(&from.path);
         let Some(import) = python_import_binding(from, name) else {
             return Resolution::NotBound;
         };
@@ -223,12 +302,17 @@ impl<'a> ModuleIndex<'a> {
             .find(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
             .map_or(name, |n| n.imported.as_str());
 
+        // Matching a dotted specifier scans the repository's file paths and
+        // answers only when exactly one matches, so the answer depends on
+        // which files exist — not on any file's contents.
+        deps.record_path_set();
         let Some(target) = self.resolve_python_module(&import.specifier, &from.path) else {
             return Resolution::Unresolved {
                 module: import.specifier.clone(),
                 reason: "is not a module this project contains".to_owned(),
             };
         };
+        deps.record_file(&target);
         let Some(module) = self.file(&target) else {
             return Resolution::Unresolved {
                 module: import.specifier.clone(),
@@ -247,7 +331,7 @@ impl<'a> ModuleIndex<'a> {
         // in the route so the evidence shows the whole path a reader would
         // have to walk by hand, not just its last step.
         let hop_taken = format!("`from {} import {exported}`", import.specifier);
-        match self.follow_python(module, exported, hop + 1) {
+        match self.follow_python(module, exported, hop + 1, deps) {
             Resolution::Local { line } => Resolution::Declared {
                 file: module.path.clone(),
                 line,
@@ -276,15 +360,34 @@ impl<'a> ModuleIndex<'a> {
     /// reported as [`Resolution::Unresolved`] rather than guessed at.
     #[must_use]
     pub fn resolve_typescript(&self, from: &FileAnalysis, name: &str) -> Resolution {
+        self.resolve_typescript_tracked(from, name, &mut ResolutionContext::new())
+    }
+
+    /// [`resolve_typescript`](Self::resolve_typescript), recording what it read.
+    ///
+    /// The untracked form delegates here, so one implementation serves both.
+    pub fn resolve_typescript_tracked(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
+        deps.record_file(&from.path);
         if let Some(symbol) = declaration_in(from, name) {
             return Resolution::Local {
                 line: symbol.span.start_line,
             };
         }
-        self.follow_typescript(from, name, 0)
+        self.follow_typescript(from, name, 0, deps)
     }
 
-    fn follow_typescript(&self, from: &FileAnalysis, name: &str, hop: usize) -> Resolution {
+    fn follow_typescript(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        hop: usize,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
         if hop >= MAX_REEXPORT_HOPS {
             return Resolution::Unresolved {
                 module: from.path.clone(),
@@ -292,6 +395,8 @@ impl<'a> ModuleIndex<'a> {
             };
         }
 
+        // This hop reads `from`'s import statements.
+        deps.record_file(&from.path);
         for import in &from.imports {
             let exported = if import
                 .named
@@ -317,20 +422,29 @@ impl<'a> ModuleIndex<'a> {
             // vite.config.ts declares `resolve: { alias: { openapi: … } }`.
             let specifier = if import.specifier.starts_with('.') {
                 import.specifier.clone()
-            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
-                aliased
             } else {
-                return Resolution::Unresolved {
-                    module: import.specifier.clone(),
-                    reason: "is a package, and no build configuration aliases it".to_owned(),
-                };
+                // A bare specifier is matched against the project's globally
+                // ordered alias list, so the answer depends on every file that
+                // declares a build alias, and on their order.
+                deps.record_alias_set();
+                if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                    aliased
+                } else {
+                    return Resolution::Unresolved {
+                        module: import.specifier.clone(),
+                        reason: "is a package, and no build configuration aliases it".to_owned(),
+                    };
+                }
             };
+            // Extension and index resolution probe which files exist.
+            deps.record_path_set();
             let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
                 return Resolution::Unresolved {
                     module: import.specifier.clone(),
                     reason: "does not resolve to a file this project contains".to_owned(),
                 };
             };
+            deps.record_file(&target);
             let Some(module) = self.file(&target) else {
                 return Resolution::Unresolved {
                     module: import.specifier.clone(),
@@ -345,7 +459,7 @@ impl<'a> ModuleIndex<'a> {
                 };
             }
             let hop_taken = format!("`from \"{}\"`", import.specifier);
-            return match self.follow_typescript(module, exported, hop + 1) {
+            return match self.follow_typescript(module, exported, hop + 1, deps) {
                 Resolution::Local { line } => Resolution::Declared {
                     file: module.path.clone(),
                     line,
@@ -363,7 +477,7 @@ impl<'a> ModuleIndex<'a> {
         // No named binding. A barrel file forwards everything it re-exports,
         // so each wildcard is tried and the answer must be unique: two barrels
         // exporting the same name says nothing about which was meant.
-        self.follow_typescript_wildcards(from, name, hop)
+        self.follow_typescript_wildcards(from, name, hop, deps)
     }
 
     fn follow_typescript_wildcards(
@@ -371,7 +485,9 @@ impl<'a> ModuleIndex<'a> {
         from: &FileAnalysis,
         name: &str,
         hop: usize,
+        deps: &mut ResolutionContext,
     ) -> Resolution {
+        deps.record_file(&from.path);
         let mut found: Vec<Resolution> = Vec::new();
         for import in &from.imports {
             if import.namespace_name.as_deref() != Some("*") {
@@ -379,14 +495,19 @@ impl<'a> ModuleIndex<'a> {
             }
             let specifier = if import.specifier.starts_with('.') {
                 import.specifier.clone()
-            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
-                aliased
             } else {
-                continue;
+                deps.record_alias_set();
+                if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                    aliased
+                } else {
+                    continue;
+                }
             };
+            deps.record_path_set();
             let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
                 continue;
             };
+            deps.record_file(&target);
             let Some(module) = self.file(&target) else {
                 continue;
             };
@@ -399,7 +520,7 @@ impl<'a> ModuleIndex<'a> {
                 continue;
             }
             if hop + 1 < MAX_REEXPORT_HOPS {
-                match self.follow_typescript(module, name, hop + 1) {
+                match self.follow_typescript(module, name, hop + 1, deps) {
                     r @ Resolution::Declared { .. } => found.push(r),
                     Resolution::Local { line } => found.push(Resolution::Declared {
                         file: module.path.clone(),

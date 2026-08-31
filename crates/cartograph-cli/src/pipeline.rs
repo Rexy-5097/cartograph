@@ -32,6 +32,7 @@ use serde::Serialize;
 
 use crate::discovery;
 use crate::error::{CliError, ErrorCode};
+use crate::incremental::IncrementalState;
 
 /// Progress is reported once every this many files.
 ///
@@ -272,6 +273,27 @@ pub struct Options {
 /// [`ErrorCode::NoSupportedSources`] when it holds nothing to analyse, and
 /// [`ErrorCode::AnalysisFailed`] when extraction itself breaks.
 pub fn run(path: &Path, options: Options) -> Result<Analysis, CliError> {
+    // A clean run is an incremental run against an empty cache. Deliberately
+    // the same code path: two implementations of "analyse a repository" is how
+    // `incremental == clean` would quietly stop being true (M10).
+    run_with_cache(path, options, &mut IncrementalState::new())
+}
+
+/// Runs the pipeline, reusing per-file facts that are still valid.
+///
+/// Identical to [`run`] except that unchanged files are not reparsed. Every
+/// derived fact — imports, routes, matches, ORM relationships, edges — is
+/// still recomputed from the full analyses set, so the result cannot differ
+/// from a clean run; see `docs/development/incremental-engine.md`.
+///
+/// # Errors
+///
+/// The same conditions as [`run`].
+pub fn run_with_cache(
+    path: &Path,
+    options: Options,
+    state: &mut IncrementalState,
+) -> Result<Analysis, CliError> {
     let (root, files) = discovery::discover(path)?;
     let repository = Repository::describe(path, &root);
 
@@ -304,28 +326,43 @@ pub fn run(path: &Path, options: Options) -> Result<Analysis, CliError> {
 
     // Every file is analysed before any URL is resolved: dynamic resolution
     // needs the whole project's exported constants to follow an import.
-    let mut analyses = Vec::with_capacity(files.len());
-    for (index, rel) in files.iter().enumerate() {
-        if progress && index > 0 && index % PROGRESS_EVERY == 0 {
-            eprintln!("  analysing… {index}/{} files", files.len());
-        }
-        // A per-file problem is a diagnostic on the FileAnalysis, not a reason
-        // to abandon the repository; only an unexpected analyser fault reaches
-        // this arm.
-        let parsed = analyzer.analyze_file(&root, rel).map_err(|error| {
+    //
+    // A per-file problem is a diagnostic on the FileAnalysis, not a reason to
+    // abandon the repository; only an unexpected analyser fault errors here.
+    let total = files.len();
+    let analyses = state
+        .facts
+        .analyze(&mut analyzer, &root, &files, |index| {
+            if progress && index > 0 && index % PROGRESS_EVERY == 0 {
+                eprintln!("  analysing… {index}/{total} files");
+            }
+        })
+        .map_err(|error| {
             CliError::new(
                 ErrorCode::AnalysisFailed,
-                format!("analysis failed while reading `{rel}`"),
+                "analysis failed while reading a file",
             )
             .with_hint(format!("underlying cause: {error}"))
         })?;
-        analyses.push(parsed);
-    }
     if progress {
-        eprintln!("  analysing… {}/{} files", files.len(), files.len());
+        eprintln!("  analysing… {total}/{total} files");
     }
 
-    let (graph, results, orm, mut totals) = resolve(&analyses)?;
+    // M10 instrumentation. Counts only — never a file's contents, and never a
+    // path beyond the repository-relative ones already in the fact model. Not
+    // a CLI contract: this is behind `-v` for correctness and performance work
+    // on the cache, and nothing parses it.
+    let parse_stats = state.facts.stats();
+    tracing::debug!(
+        files_seen = parse_stats.seen,
+        files_reused = parse_stats.reused,
+        files_parsed = parse_stats.parsed,
+        entries_evicted = parse_stats.evicted,
+        cached_entries = state.facts.len(),
+        "parse cache"
+    );
+
+    let (graph, results, orm, mut totals) = resolve(&analyses, Some(state))?;
     let (languages, diagnostics) = tally_files(&analyses, &mut totals);
     finish_totals(&mut totals, &graph, &analyses);
 
@@ -344,6 +381,7 @@ pub fn run(path: &Path, options: Options) -> Result<Analysis, CliError> {
 /// Resolution and graph construction — the part that decides nothing itself.
 fn resolve(
     analyses: &[FileAnalysis],
+    state: Option<&mut IncrementalState>,
 ) -> Result<(ArchitectureGraph, Vec<MatchResult>, OrmAnalysis, Totals), CliError> {
     let mut totals = Totals::default();
     let exported = collect_exported_constants(analyses);
@@ -426,7 +464,31 @@ fn resolve(
     totals.client_call_edges = add_client_call_edges(&mut graph, analyses, &modules, None)
         .map_err(|e| graph_failure(&e))?;
 
-    let orm = OrmAnalysis::build(analyses);
+    // Stage C is the only resolution stage with a proven dependency identity,
+    // so it is the only one that reads a cache. Everything else in this
+    // function is still recomputed in full.
+    let orm = match state {
+        Some(state) => {
+            let identities = state.facts.identities();
+            // A failed Stage C update publishes nothing, and the whole run
+            // fails with it. Returning the previous generation here would
+            // present an analysis of the *old* repository state as the answer
+            // for the new one — the precise failure this path exists to
+            // prevent.
+            OrmAnalysis::build_cached(analyses, &mut state.accesses, &identities).map_err(
+                |error| {
+                    CliError::new(
+                        ErrorCode::AnalysisFailed,
+                        "the incremental update failed and was abandoned",
+                    )
+                    .with_hint(format!(
+                        "underlying cause: {error}; the previous analysis was left                          untouched and no result is reported for the current state"
+                    ))
+                },
+            )?
+        }
+        None => OrmAnalysis::build(analyses),
+    };
     totals.orm_models = orm.models.len();
     totals.orm_tables = orm
         .models

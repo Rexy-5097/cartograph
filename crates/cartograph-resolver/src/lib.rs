@@ -52,8 +52,10 @@
 //! language model participates in any of it, ever: see RULE 007 and
 //! `docs/adr/ADR-0007-no-llm-graph-construction.md`.
 
+pub mod access_cache;
 pub mod canonical;
 pub mod client_trace;
+pub mod dependencies;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
@@ -64,11 +66,17 @@ pub mod orm;
 pub mod routers;
 pub mod symbolic;
 
+pub use access_cache::{
+    AccessCache, AccessCacheError, AccessCacheStats, GlobalFingerprints, RecomputeHook,
+};
 pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,
 };
 pub use client_trace::{ClientFunction, add_client_call_edges, client_functions};
+pub use dependencies::{
+    AliasSetFingerprint, PathSetFingerprint, PerFileDependencyIdentity, ResolutionContext,
+};
 pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,
@@ -82,7 +90,9 @@ pub use matching::{
 };
 pub use normalize::{normalize_client_call, normalize_method, normalize_route_declaration};
 pub use orm::{
-    AccessKind, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel, TableName, add_orm_edges,
+    AccessKind, ModelSetFingerprint, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel,
+    PerFileAccessAnalysis, TableName, add_orm_edges, canonical_model_set, discover_accesses,
+    discover_accesses_tracked, discover_models,
 };
 pub use routers::{PrefixResolution, RouterIndex, with_composed_prefix};
 pub use symbolic::SymbolicValue;

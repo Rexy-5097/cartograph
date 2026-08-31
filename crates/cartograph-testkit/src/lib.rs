@@ -17,6 +17,11 @@
 //! against a realistic shape in the meantime, and so the shape itself is
 //! reviewed early.
 
+/// Canonical graph equality, for the M10 differential tests.
+pub mod canonical;
+
+pub use canonical::{CanonicalGraph, assert_graphs_equal, canonical, differences, node_identity};
+
 use cartograph_core::{
     CommitId, Confidence, Edge, EdgeId, EdgeKind, Evidence, Node, NodeId, NodeKind, Provenance,
     SourceLocation,

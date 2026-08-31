@@ -141,9 +141,16 @@ impl ArchitectureGraph {
     /// different lines — a decorator and a `def`, a declaration and a call
     /// site — and treating those as different nodes is the bug this prevents.
     ///
-    /// This is deduplication *within* one graph. Stable content-addressed
-    /// identity across graphs remains M10's problem; see
+    /// This is deduplication *within* one graph; see
     /// `docs/adr/ADR-0011-node-identity-within-a-graph.md`.
+    ///
+    /// Stable content-addressed identity *across* graphs was ADR-0011's
+    /// deferral to M10, and M10 deferred it again — its cache never keys on a
+    /// handle. ADR-0014 records that and names M13 (structural diff) as the
+    /// milestone that cannot proceed without it. Note that this triple is
+    /// line-independent, so it is the closer of the two identity notions in
+    /// the tree; it still cannot express a moved file or a renamed artefact as
+    /// the same node, which is the design content of that future slice.
     ///
     /// # Errors
     ///

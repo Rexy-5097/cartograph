@@ -21,11 +21,15 @@
 //! `app_modelname` cannot be derived without the app label, so Django models
 //! without `db_table` resolve to [`TableName::Unresolved`] rather than a guess.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, Hash, Hasher};
 
 use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance, SourceLocation};
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
 
+use crate::access_cache::{AccessCache, AccessCacheError, GlobalFingerprints};
+use crate::dependencies::ResolutionContext;
 use crate::imports::{ModuleIndex, Resolution};
 use cartograph_parser::model::{
     Callee, FileAnalysis, SourceLanguage, Span, StringFact, Symbol, SymbolKind,
@@ -175,6 +179,79 @@ const DJANGO_WRITE_METHODS: [&str; 4] = ["create", "update", "delete", "bulk_cre
 /// `SQLAlchemy` session methods taking a model as their first argument.
 const SQLALCHEMY_SESSION_METHODS: [&str; 5] = ["query", "get", "add", "merge", "delete"];
 
+/// One file's ORM access contribution, with what producing it depended on.
+///
+/// The unit a future Stage C cache would key. The accesses are exactly what
+/// the flattened `OrmAnalysis::accesses` contains for this file — the same
+/// values, grouped rather than recomputed — and `dependencies` describes every
+/// repository read that produced them.
+#[derive(Debug, Clone)]
+pub struct PerFileAccessAnalysis {
+    /// Repository-relative path of the file these accesses came from.
+    pub file: String,
+    /// The accesses found in it, in source order.
+    pub accesses: Vec<OrmAccessSite>,
+    /// What resolving them read. Never reusable while `is_complete` is false.
+    pub dependencies: ResolutionContext,
+}
+
+/// Identity of the merged model set **as Stage C sees it**.
+///
+/// Deliberately narrow. Tracing `discover_accesses` proves that access
+/// resolution consults exactly two things about a model: whether its name is a
+/// key of the merged map (`classify_access`), and which file declares it
+/// (`resolves_to_the_model`, comparing `declared.file`). It never reads
+/// `flavor`, `base`, `table` or the model's span.
+///
+/// So the fingerprint covers `(name, declaring file)` and nothing else.
+/// Including the table would be an oversized dependency: renaming a table
+/// changes the model-to-table edge, which `add_table_edges` builds, but cannot
+/// change which accesses resolve — and folding it in would spuriously
+/// invalidate every access entry on an unrelated rename.
+///
+/// Ambiguity needs no field of its own: an ambiguous name is *removed* from
+/// the merged map, so it simply stops appearing here.
+///
+/// An internal invalidation identity, not a security primitive — `SipHash` via
+/// `DefaultHasher`, no collision-resistance claim.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct ModelSetFingerprint(u64);
+
+impl ModelSetFingerprint {
+    /// Fingerprints the merged model map.
+    #[must_use]
+    pub fn of<S: BuildHasher>(models: &HashMap<String, OrmModel, S>) -> Self {
+        let canonical = canonical_model_set(models);
+        let mut hasher = DefaultHasher::new();
+        // The count first, so no set can hash as a prefix of a larger one.
+        canonical.len().hash(&mut hasher);
+        for entry in &canonical {
+            entry.hash(&mut hasher);
+        }
+        Self(hasher.finish())
+    }
+
+    /// The raw value, for logging and tests.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// The merged model set in canonical form: `name@file`, sorted.
+///
+/// Sorted rather than map-ordered, so two runs over the same repository agree
+/// regardless of hash iteration order. Repository-relative paths only.
+#[must_use]
+pub fn canonical_model_set<S: BuildHasher>(models: &HashMap<String, OrmModel, S>) -> Vec<String> {
+    let mut out: Vec<String> = models
+        .values()
+        .map(|m| format!("{}@{}", m.name, m.file))
+        .collect();
+    out.sort();
+    out
+}
+
 /// Everything M06 found in one project.
 #[derive(Debug, Default, Clone)]
 pub struct OrmAnalysis {
@@ -187,12 +264,55 @@ pub struct OrmAnalysis {
     pub ambiguous: Vec<String>,
     /// Access sites whose model resolved.
     pub accesses: Vec<OrmAccessSite>,
+    /// The same accesses, grouped by file with their dependency context.
+    ///
+    /// Files that produced no access are present with an empty list: editing
+    /// one is exactly what could introduce an access, so it still has a
+    /// dependency set worth recording.
+    pub per_file: Vec<PerFileAccessAnalysis>,
+    /// Identity of the merged model set the accesses were resolved against.
+    pub model_fingerprint: ModelSetFingerprint,
 }
 
 impl OrmAnalysis {
     /// Discovers models and accesses across a project's analysed files.
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: the no-cache path has no failure source, and the
+    /// `expect` below documents that rather than hiding it behind a `Result`
+    /// every existing caller would have to unwrap.
     #[must_use]
     pub fn build(files: &[FileAnalysis]) -> Self {
+        Self::build_inner::<std::collections::hash_map::RandomState>(files, None)
+            .expect("a build without a cache has no failure path")
+    }
+
+    /// [`build`](Self::build), reusing per-file Stage C results that are still
+    /// valid.
+    ///
+    /// `identities` maps repository-relative paths to content identities — the
+    /// parse cache's hashes. Deliberately the same code path as the clean
+    /// build: two implementations of Stage C is how `incremental == clean`
+    /// would quietly stop being true.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a Stage C recomputation failure. When one occurs the cache
+    /// publishes nothing: the previous generation stays intact, and no
+    /// analysis is returned for the new repository state.
+    pub fn build_cached<S: std::hash::BuildHasher>(
+        files: &[FileAnalysis],
+        cache: &mut AccessCache,
+        identities: &HashMap<String, u64, S>,
+    ) -> Result<Self, AccessCacheError> {
+        Self::build_inner(files, Some((cache, identities)))
+    }
+
+    fn build_inner<S: std::hash::BuildHasher>(
+        files: &[FileAnalysis],
+        cache: Option<(&mut AccessCache, &HashMap<String, u64, S>)>,
+    ) -> Result<Self, AccessCacheError> {
         let mut analysis = Self::default();
         let mut seen: HashMap<String, usize> = HashMap::new();
 
@@ -223,12 +343,44 @@ impl OrmAnalysis {
         }
         analysis.ambiguous.sort();
 
-        for file in &python {
-            analysis
-                .accesses
-                .extend(discover_accesses(file, &analysis.models, &index));
+        analysis.model_fingerprint = ModelSetFingerprint::of(&analysis.models);
+
+        // Grouped per file so each contribution carries its own dependency
+        // context; `accesses` stays the flattened list in the same order, so
+        // every existing consumer sees exactly what it saw before.
+        let contributions: Vec<(Vec<OrmAccessSite>, ResolutionContext)> = match cache {
+            Some((cache, identities)) => {
+                let global = GlobalFingerprints {
+                    model_set: analysis.model_fingerprint.get(),
+                    path_set: index.python_path_set_fingerprint().get(),
+                    alias_set: index.alias_set_fingerprint().get(),
+                };
+                cache.analyze(&python, &analysis.models, &index, identities, global)?
+            }
+            None => python
+                .iter()
+                .map(|file| {
+                    let mut dependencies = ResolutionContext::new();
+                    let accesses = discover_accesses_tracked(
+                        file,
+                        &analysis.models,
+                        &index,
+                        &mut dependencies,
+                    );
+                    (accesses, dependencies)
+                })
+                .collect(),
+        };
+
+        for (file, (accesses, dependencies)) in python.iter().zip(contributions) {
+            analysis.accesses.extend(accesses.iter().cloned());
+            analysis.per_file.push(PerFileAccessAnalysis {
+                file: file.path.clone(),
+                accesses,
+                dependencies,
+            });
         }
-        analysis
+        Ok(analysis)
     }
 }
 
@@ -421,6 +573,25 @@ pub fn discover_accesses<S: std::hash::BuildHasher>(
     models: &HashMap<String, OrmModel, S>,
     index: &ModuleIndex<'_>,
 ) -> Vec<OrmAccessSite> {
+    discover_accesses_tracked(file, models, index, &mut ResolutionContext::new())
+}
+
+/// [`discover_accesses`], recording every repository read it performed.
+///
+/// The untracked form delegates here, so the accesses a run produces and the
+/// dependencies it reports come from one traversal and cannot disagree.
+///
+/// `deps` accumulates across every access site in the file, so the result is
+/// the dependency set of the file's *whole* Stage C contribution — which is
+/// the unit a future cache would key. Reading the file's own facts is recorded
+/// unconditionally: its calls decide which names are even candidates.
+pub fn discover_accesses_tracked<S: std::hash::BuildHasher>(
+    file: &FileAnalysis,
+    models: &HashMap<String, OrmModel, S>,
+    index: &ModuleIndex<'_>,
+    deps: &mut ResolutionContext,
+) -> Vec<OrmAccessSite> {
+    deps.record_file(&file.path);
     let mut sites = Vec::new();
 
     for call in &file.calls {
@@ -436,7 +607,7 @@ pub fn discover_accesses<S: std::hash::BuildHasher>(
         // architecture diagrams call `User("DAG Author")` having imported User
         // from the `diagrams` package; matching on the name alone attributed
         // 218 of those to the Flask-AppBuilder User model.
-        if !resolves_to_the_model(file, &model, models, index) {
+        if !resolves_to_the_model(file, &model, models, index, deps) {
             continue;
         }
         sites.push(OrmAccessSite {
@@ -501,11 +672,15 @@ fn resolves_to_the_model<S: std::hash::BuildHasher>(
     model: &str,
     models: &HashMap<String, OrmModel, S>,
     index: &ModuleIndex<'_>,
+    deps: &mut ResolutionContext,
 ) -> bool {
     let Some(declared) = models.get(model) else {
         return false;
     };
-    match index.resolve_python(file, model) {
+    // The declaring file's identity participates in the answer, so it is a
+    // dependency even when resolution stops before reaching it.
+    deps.record_file(&declared.file);
+    match index.resolve_python_tracked(file, model, deps) {
         // Declared here. Only this model if this is the file that declares it;
         // otherwise the local declaration is a different symbol of the same
         // name, and attributing the access would be exactly the M07 defect.

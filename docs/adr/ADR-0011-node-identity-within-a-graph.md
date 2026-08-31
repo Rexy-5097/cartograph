@@ -2,6 +2,13 @@
 
 **Status:** Accepted · 2026-08-19 · Refines [ADR-0003](ADR-0003-cartograph-owns-the-graph.md)
 
+> **Partly overtaken by [ADR-0014](ADR-0014-m10-scope-reconciliation.md).** The
+> decision below — identity *within* one graph — stands unchanged. What this
+> ADR says about the *deferral* to M10 no longer holds: M10 built its
+> incremental engine without content-addressed identity and deferred it again.
+> ADR-0014 records that, names M13 as the milestone that requires it, and
+> states the acceptance gate. This ADR is not rewritten.
+
 ## Context
 
 Until M06 every graph was populated by one analysis, so `add_node` creating a
