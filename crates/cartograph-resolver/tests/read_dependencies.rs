@@ -1479,3 +1479,448 @@ fn the_dependency_identity_is_deterministic() {
     };
     assert_eq!(build(), build());
 }
+
+// ── real-repository alias validation ────────────────────────────────────
+
+/// Loads a repository's TypeScript sources as `(path, source)` pairs.
+///
+/// Sources are kept in memory so mutations can be applied without touching
+/// the checkout: the pinned corpus must stay pristine.
+fn load_typescript(root: &std::path::Path) -> Vec<(String, String)> {
+    fn walk_ts(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+        const SKIP: [&str; 6] = [
+            "node_modules",
+            ".git",
+            "dist",
+            "build",
+            "coverage",
+            "target",
+        ];
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                if name.starts_with('.') || SKIP.contains(&name) {
+                    continue;
+                }
+                walk_ts(root, &path, out);
+            } else if matches!(
+                std::path::Path::new(name)
+                    .extension()
+                    .and_then(|e| e.to_str()),
+                Some("ts" | "tsx")
+            ) {
+                if let Ok(rel) = path.strip_prefix(root) {
+                    out.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+    }
+
+    let mut paths = Vec::new();
+    walk_ts(root, root, &mut paths);
+    paths.sort();
+    paths
+        .into_iter()
+        .filter_map(|rel| {
+            std::fs::read_to_string(root.join(&rel))
+                .ok()
+                .map(|src| (rel, src))
+        })
+        .collect()
+}
+
+fn analyze_owned(files: &[(String, String)]) -> Vec<FileAnalysis> {
+    let mut a = Analyzer::new().expect("grammars load");
+    files
+        .iter()
+        .filter_map(|(p, s)| a.analyze_source(p, s).ok())
+        .collect()
+}
+
+/// The first file importing through the `openapi` alias, and a name it binds.
+fn aliased_importer(analyses: &[FileAnalysis]) -> (&FileAnalysis, String) {
+    let importer = analyses
+        .iter()
+        .find(|f| {
+            f.imports
+                .iter()
+                .any(|i| i.specifier.starts_with("openapi/"))
+        })
+        .expect("precondition: some file must import through the `openapi` alias");
+    let name = importer
+        .imports
+        .iter()
+        .find(|i| i.specifier.starts_with("openapi/"))
+        .and_then(|i| i.named.first())
+        .map(|n| n.local.as_deref().unwrap_or(n.imported.as_str()).to_owned())
+        .expect("that import must bind a name");
+    (importer, name)
+}
+
+/// A purely relative importer must not inherit the alias dependency.
+fn assert_relative_import_has_no_alias_dependency(
+    index: &ModuleIndex<'_>,
+    analyses: &[FileAnalysis],
+) {
+    let relative_importer = analyses
+        .iter()
+        .find(|f| {
+            f.imports.iter().any(|i| i.specifier.starts_with("./"))
+                && !f.imports.iter().any(|i| !i.specifier.starts_with('.'))
+        })
+        .or_else(|| {
+            analyses.iter().find(|f| {
+                f.imports.iter().all(|i| i.specifier.starts_with('.')) && !f.imports.is_empty()
+            })
+        });
+    if let Some(rel) = relative_importer {
+        let rel_name = rel
+            .imports
+            .iter()
+            .find(|i| i.specifier.starts_with('.'))
+            .and_then(|i| i.named.first())
+            .map(|n| n.local.as_deref().unwrap_or(n.imported.as_str()).to_owned());
+        if let Some(rel_name) = rel_name {
+            let mut rel_deps = ResolutionContext::new();
+            index.resolve_typescript_tracked(rel, &rel_name, &mut rel_deps);
+            println!(
+                "relative resolution : {} :: {rel_name} alias_set={}",
+                rel.path,
+                rel_deps.consults_alias_set()
+            );
+            assert!(
+                !rel_deps.consults_alias_set(),
+                "a purely relative importer must not depend on the alias list"
+            );
+        }
+    }
+}
+
+/// What one alias mutation produced: the canonical list, its identity, and the
+/// resolution of the aliased import under it.
+type MutationOutcome = (Vec<String>, AliasSetFingerprint, Resolution);
+
+/// Adding an alias moves the identity; an edit declaring none does not.
+fn assert_alias_addition_and_unrelated_edit(
+    files: &[(String, String)],
+    config_index: usize,
+    original_source: &str,
+    baseline_len: usize,
+    fingerprint: AliasSetFingerprint,
+    mutate: &dyn Fn(Option<&str>) -> MutationOutcome,
+) {
+    // 3. Adding an alias.
+    let added = original_source.replace(
+        r#"alias: { openapi: "/openapi-gen", src: "/src" }"#,
+        r#"alias: { openapi: "/openapi-gen", src: "/src", extra: "/extra" }"#,
+    );
+    let (added_canonical, added_fp, _) = mutate(Some(&added));
+    assert!(
+        added_canonical.len() > baseline_len,
+        "precondition: the alias must actually be added: {added_canonical:?}"
+    );
+    assert_ne!(
+        fingerprint, added_fp,
+        "adding an alias must move the fingerprint"
+    );
+
+    // 4. An unrelated TypeScript edit must leave the alias identity alone.
+    let mut unrelated = files.to_vec();
+    let victim = unrelated
+        .iter()
+        .position(|(p, _)| {
+            p != &files[config_index].0
+                && std::path::Path::new(p)
+                    .extension()
+                    .is_some_and(|e| e == "tsx")
+        })
+        .expect("some other file exists");
+    unrelated[victim]
+        .1
+        .push_str("\nexport const CARTOGRAPH_M10_PROBE = 1;\n");
+    let unrelated_index_analyses = analyze_owned(&unrelated);
+    let unrelated_index = ModuleIndex::build(&unrelated_index_analyses);
+    println!(
+        "mutation: unrelated edit -> fp {:016x}",
+        unrelated_index.alias_set_fingerprint().get()
+    );
+    assert_eq!(
+        fingerprint,
+        unrelated_index.alias_set_fingerprint(),
+        "an edit that declares no alias must not move the alias identity"
+    );
+}
+
+/// Resolves every aliased import in the repository and reports the population.
+///
+/// Separated from the test body so the reader sees the scan and the assertions
+/// apart, and so the test function stays a readable length.
+fn report_aliased_population(index: &ModuleIndex<'_>, analyses: &[FileAnalysis]) -> usize {
+    // The exemplar reported by the caller is whichever aliased import came first, which may be
+    // a type-only import whose name the extractor does not record as a symbol.
+    // Scan every aliased import so the report describes the population rather
+    // than one arbitrary member, and surface a fully resolved one if it exists.
+    let mut declared = 0usize;
+    let mut not_bound = 0usize;
+    let mut unresolved = 0usize;
+    let mut other = 0usize;
+    let mut alias_aware = 0usize;
+    let mut example_declared: Option<String> = None;
+    for file in analyses {
+        for import in &file.imports {
+            if !(import.specifier.starts_with("openapi/") || import.specifier.starts_with("src/")) {
+                continue;
+            }
+            for named in &import.named {
+                let n = named.local.as_deref().unwrap_or(named.imported.as_str());
+                let mut d = ResolutionContext::new();
+                let r = index.resolve_typescript_tracked(file, n, &mut d);
+                if d.consults_alias_set() {
+                    alias_aware += 1;
+                }
+                match &r {
+                    Resolution::Declared { file: at, .. } => {
+                        declared += 1;
+                        if example_declared.is_none() {
+                            example_declared = Some(format!(
+                                "{} :: {n} -> Declared({at})  reads {:?}",
+                                file.path,
+                                d.files().collect::<Vec<_>>()
+                            ));
+                        }
+                    }
+                    Resolution::NotBound => not_bound += 1,
+                    Resolution::Unresolved { .. } => unresolved += 1,
+                    _ => other += 1,
+                }
+            }
+        }
+    }
+    println!(
+        "aliased imports     : declared={declared} not_bound={not_bound} unresolved={unresolved} other={other}"
+    );
+    println!("alias-aware results : {alias_aware}");
+    if let Some(example) = &example_declared {
+        println!("fully resolved      : {example}");
+    }
+    alias_aware
+}
+
+/// Validates the ordered alias fingerprint against a real pinned repository
+/// that genuinely declares and uses Vite aliases.
+///
+/// Apache Airflow at `9b43d6abc0fc` declares, in
+/// `airflow-core/src/airflow/ui/vite.config.ts`:
+///
+/// ```text
+/// resolve: { alias: { openapi: "/openapi-gen", src: "/src" } }
+/// ```
+///
+/// Both targets are string literals, so the parser records them; both
+/// directories exist; and the UI imports through both. Fixtures alone could
+/// not establish that the fingerprint describes real resolution.
+///
+/// Opt-in and ignored by default: it needs a checkout this repository does not
+/// vendor. Mutations are applied to in-memory copies of the sources, never to
+/// the checkout.
+#[test]
+#[ignore = "needs CARTOGRAPH_ALIAS_REPO; validates against a real pinned checkout"]
+fn alias_dependencies_on_a_real_repository() {
+    let Ok(repo) = std::env::var("CARTOGRAPH_ALIAS_REPO") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(repo);
+    let files = load_typescript(&root);
+    assert!(
+        files.len() > 100,
+        "precondition: expected a real frontend, found {} files",
+        files.len()
+    );
+
+    let analyses = analyze_owned(&files);
+    let index = ModuleIndex::build(&analyses);
+    let canonical = index.canonical_alias_set();
+    let fingerprint = index.alias_set_fingerprint();
+
+    println!("typescript files    : {}", analyses.len());
+    println!("alias declarations  : {}", canonical.len());
+    for a in &canonical {
+        println!("      {a}");
+    }
+    println!("alias fingerprint   : {:016x}", fingerprint.get());
+
+    // ── PART 3/4: the aliases are real and ordered as the resolver walks ──
+    assert!(
+        canonical.len() >= 2,
+        "precondition: this repository must declare at least two aliases, got {canonical:?}"
+    );
+    assert!(
+        canonical.iter().any(|a| a.starts_with("openapi|")),
+        "the `openapi` alias must be recorded: {canonical:?}"
+    );
+    assert!(
+        canonical.iter().any(|a| a.starts_with("src|")),
+        "the `src` alias must be recorded: {canonical:?}"
+    );
+    // Sorted by directory depth, then alias length: `openapi` precedes `src`.
+    let openapi_at = canonical.iter().position(|a| a.starts_with("openapi|"));
+    let src_at = canonical.iter().position(|a| a.starts_with("src|"));
+    assert!(
+        openapi_at < src_at,
+        "longer alias must sort first, which is what makes ordering semantic: {canonical:?}"
+    );
+
+    // ── PART 3: an alias actually participates in a resolution ────────────
+    let (importer, name) = aliased_importer(&analyses);
+
+    let mut deps = ResolutionContext::new();
+    let resolution = index.resolve_typescript_tracked(importer, &name, &mut deps);
+    println!("aliased resolution  : {} :: {name}", importer.path);
+    println!("      -> {resolution:?}");
+    println!("      reads {:?}", deps.files().collect::<Vec<_>>());
+    println!(
+        "      path_set={} alias_set={} complete={}",
+        deps.consults_path_set(),
+        deps.consults_alias_set(),
+        deps.is_complete()
+    );
+    assert!(
+        deps.consults_alias_set(),
+        "a bare aliased specifier must record the alias dependency"
+    );
+
+    let alias_aware = report_aliased_population(&index, &analyses);
+    assert!(
+        alias_aware > 100,
+        "the alias mechanism must be exercised broadly, not once: {alias_aware}"
+    );
+    assert!(
+        deps.reads(&importer.path),
+        "the importing file's own contents are a dependency: {:?}",
+        deps.files().collect::<Vec<_>>()
+    );
+
+    assert_relative_import_has_no_alias_dependency(&index, &analyses);
+}
+
+/// Alias mutations against the same real pinned repository.
+///
+/// Split from the declaration/resolution checks so each stays readable.
+/// Mutations are applied to in-memory copies of the sources; the checkout is
+/// never modified.
+#[test]
+#[ignore = "needs CARTOGRAPH_ALIAS_REPO; validates against a real pinned checkout"]
+fn alias_mutations_on_a_real_repository() {
+    let Ok(repo) = std::env::var("CARTOGRAPH_ALIAS_REPO") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(repo);
+    let files = load_typescript(&root);
+    let analyses = analyze_owned(&files);
+    let index = ModuleIndex::build(&analyses);
+    let canonical = index.canonical_alias_set();
+    let fingerprint = index.alias_set_fingerprint();
+    assert_eq!(
+        canonical.len(),
+        2,
+        "precondition: two aliases expected, got {canonical:?}"
+    );
+
+    let (importer, name) = aliased_importer(&analyses);
+    let mut base_deps = ResolutionContext::new();
+    let resolution = index.resolve_typescript_tracked(importer, &name, &mut base_deps);
+
+    // ── PART 6/10: mutations ──────────────────────────────────────────────
+    let config_index = files
+        .iter()
+        .position(|(p, _)| p.ends_with("vite.config.ts"))
+        .expect("precondition: the vite config must be among the loaded files");
+
+    let mutate = |replace_config: Option<&str>| -> MutationOutcome {
+        let mut copy = files.clone();
+        match replace_config {
+            Some(new_source) => copy[config_index].1 = new_source.to_owned(),
+            None => {
+                copy.remove(config_index);
+            }
+        }
+        let analyses = analyze_owned(&copy);
+        let index = ModuleIndex::build(&analyses);
+        let from = index
+            .file(&importer.path)
+            .expect("the importer survives every mutation");
+        let mut d = ResolutionContext::new();
+        let r = index.resolve_typescript_tracked(from, &name, &mut d);
+        (
+            index.canonical_alias_set(),
+            index.alias_set_fingerprint(),
+            r,
+        )
+    };
+
+    let original_source = files[config_index].1.clone();
+    let baseline_resolution = format!("{resolution:?}");
+
+    // 1. Removing the config removes both aliases.
+    let (removed_canonical, removed_fp, removed_resolution) = mutate(None);
+    println!(
+        "mutation: config removed -> {} aliases, fp {:016x}",
+        removed_canonical.len(),
+        removed_fp.get()
+    );
+    assert!(removed_canonical.is_empty(), "{removed_canonical:?}");
+    assert_ne!(
+        fingerprint, removed_fp,
+        "removing aliases must move the fingerprint"
+    );
+    assert_ne!(
+        baseline_resolution,
+        format!("{removed_resolution:?}"),
+        "and the aliased import must stop resolving the same way"
+    );
+
+    // 2. Retargeting the alias: the target participates in resolution.
+    let retargeted = original_source.replace(
+        r#"alias: { openapi: "/openapi-gen", src: "/src" }"#,
+        r#"alias: { openapi: "/elsewhere-gen", src: "/src" }"#,
+    );
+    assert_ne!(
+        retargeted, original_source,
+        "precondition: the retarget substitution must actually apply"
+    );
+    let (retargeted_canonical, retargeted_fp, retargeted_resolution) = mutate(Some(&retargeted));
+    println!(
+        "mutation: retargeted     -> fp {:016x}  {retargeted_canonical:?}",
+        retargeted_fp.get()
+    );
+    assert_ne!(
+        fingerprint, retargeted_fp,
+        "the target is part of the identity"
+    );
+    assert_ne!(
+        baseline_resolution,
+        format!("{retargeted_resolution:?}"),
+        "retargeting to a directory that does not exist must change the result"
+    );
+
+    assert_alias_addition_and_unrelated_edit(
+        &files,
+        config_index,
+        &original_source,
+        canonical.len(),
+        fingerprint,
+        &mutate,
+    );
+}

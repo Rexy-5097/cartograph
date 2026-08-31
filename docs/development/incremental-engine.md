@@ -593,9 +593,56 @@ zulip `0ce8f627`: 1,066 `.py` paths, path-set fingerprint `7f4d8421…`; **0
 alias entries**. full-stack-fastapi `162344da`: 47 paths, `2b315781…`; 0 alias
 entries.
 
-**Neither pinned repository here declares a build alias**, so the alias
-fingerprint is validated by fixture only. That is a gap, not a result: a
-corpus repository that uses `vite.config.ts` aliases (Airflow does) should
-exercise it before the cache is built.
+Neither of those declares a build alias. **Apache Airflow at `9b43d6abc0fc`
+does**, and now closes that gap — see below.
 
 **Still no cache.** This slice produces identities; nothing looks anything up.
+
+---
+
+## 13. Alias validation on a real repository
+
+Apache Airflow `9b43d6abc0fc`, `airflow-core/src/airflow/ui/vite.config.ts`:
+
+```ts
+resolve: { alias: { openapi: "/openapi-gen", src: "/src" } },
+```
+
+Both targets are **string literals**, so the parser records them; both
+directories exist; the UI imports through both. Sparse checkout of the UI
+subtree, 904 TypeScript files. Mutations are applied to in-memory copies — the
+checkout is never modified.
+
+Recorded alias state, in the order `apply_alias` walks it:
+
+```
+openapi|/openapi-gen|airflow-core/src/airflow/ui
+src|/src|airflow-core/src/airflow/ui        fingerprint bb92a48d8bc7b3f2
+```
+
+`openapi` precedes `src` because the list sorts by directory depth then alias
+length — which is what makes ordering semantic rather than incidental.
+
+**2,404 alias-aware resolutions**: 1,815 `Declared`, 579 `NotBound`, 10
+`Unresolved`. The mechanism is exercised broadly, not once. A fully resolved
+example reads 27 files — `ui/index.ts` is a barrel, so `export *` forces every
+re-exported module into the read set. Large but correct: any of them could
+supply the name.
+
+| Mutation | Alias fingerprint | Resolution |
+|---|---|---|
+| config removed | `bd60acb6…` (empty) — **changed** | changed |
+| `openapi` retargeted to `/elsewhere-gen` | `704fdb78…` — **changed** | changed |
+| alias added | **changed** | — |
+| unrelated `.tsx` edit | `bb92a48d…` — **unchanged** | — |
+
+A purely relative importer records no alias dependency, on the real repository
+as on fixtures.
+
+### A limitation this exposed
+
+`full-stack-fastapi` *does* declare `resolve.alias`, but as
+`"@": path.resolve(import.meta.dirname, "./src")`. The extractor takes only
+**string-literal** targets, so a computed target is not recorded and those
+`@/…` imports stay unresolved. That is existing M09 behaviour, not something
+this slice changed, and it is why that repository reports zero aliases.
