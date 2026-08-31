@@ -14,7 +14,7 @@
 //!
 //! # Paths are not echoed
 //!
-//! A message naming `C:\Users\someone\clients\acme-secret` leaks two things:
+//! A message naming `C:\workspace\clients\acme-secret` leaks two things:
 //! the user's identity and the name of a project they may not have announced.
 //! M09 found exactly this defect in the CLI and fixed it with
 //! `discovery::is_rooted`; the same rule applies here, and
