@@ -27,7 +27,7 @@ use std::collections::HashMap;
 
 use cartograph_parser::model::{FileAnalysis, SourceLanguage, Symbol, SymbolKind};
 
-use crate::dependencies::ResolutionContext;
+use crate::dependencies::{AliasSetFingerprint, PathSetFingerprint, ResolutionContext};
 
 /// Where a name's declaration is, or why that is not known.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,6 +151,58 @@ impl<'a> ModuleIndex<'a> {
             by_path: files.iter().map(|f| (f.path.as_str(), f)).collect(),
             aliases,
         }
+    }
+
+    /// The repository paths Python module resolution can match, sorted.
+    ///
+    /// Only paths ending in `.py`: candidates are `<base>.py` and
+    /// `<base>/__init__.py`, matched by equality or a `/`-anchored suffix, so
+    /// a `.pyi`, `.ts` or `.tsx` path can never satisfy one. Narrowing to
+    /// what can actually match keeps a TypeScript file from invalidating
+    /// Python results.
+    #[must_use]
+    pub fn canonical_python_path_set(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self
+            .by_path
+            .keys()
+            // Case-sensitive on purpose: `resolve_python_module` compares
+            // paths exactly, so a case-insensitive filter here would claim a
+            // dependency the resolver could never have.
+            .filter(|p| {
+                std::path::Path::new(p)
+                    .extension()
+                    .is_some_and(|e| e == "py")
+            })
+            .map(|p| (*p).to_owned())
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    /// Identity of that path set.
+    #[must_use]
+    pub fn python_path_set_fingerprint(&self) -> PathSetFingerprint {
+        PathSetFingerprint::of(&self.canonical_python_path_set())
+    }
+
+    /// The build-alias list in the order `apply_alias` walks it.
+    ///
+    /// Order is preserved, not sorted again: the first matching entry wins, so
+    /// two lists with the same members in a different order can resolve the
+    /// same specifier differently and must not share an identity. All three
+    /// components are included because `apply_alias` reads all three.
+    #[must_use]
+    pub fn canonical_alias_set(&self) -> Vec<String> {
+        self.aliases
+            .iter()
+            .map(|(alias, target, dir)| format!("{alias}|{target}|{dir}"))
+            .collect()
+    }
+
+    /// Identity of the ordered alias list.
+    #[must_use]
+    pub fn alias_set_fingerprint(&self) -> AliasSetFingerprint {
+        AliasSetFingerprint::of(&self.canonical_alias_set())
     }
 
     /// Rewrites a bare specifier through a declared build alias.

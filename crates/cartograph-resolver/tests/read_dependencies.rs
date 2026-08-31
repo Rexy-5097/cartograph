@@ -1051,6 +1051,22 @@ fn per_file_bundles_on_a_real_repository() {
         orm.ambiguous.len()
     );
     println!("model fingerprint   : {:016x}", orm.model_fingerprint.get());
+    let index = ModuleIndex::build(&analyses);
+    let py_paths = index.canonical_python_path_set();
+    let aliases = index.canonical_alias_set();
+    println!(
+        "python path set     : {} paths, fingerprint {:016x}",
+        py_paths.len(),
+        index.python_path_set_fingerprint().get()
+    );
+    println!(
+        "alias set           : {} entries, fingerprint {:016x}",
+        aliases.len(),
+        index.alias_set_fingerprint().get()
+    );
+    for a in aliases.iter().take(4) {
+        println!("      alias {a}");
+    }
     println!("consulted path set  : {path_set}");
     println!("consulted alias set : {alias_set}");
     println!("incomplete bundles  : {incomplete}");
@@ -1088,4 +1104,378 @@ fn per_file_bundles_on_a_real_repository() {
         alias_set, 0,
         "Python ORM bundles must not consult build aliases"
     );
+}
+
+// ── Python path-set fingerprint ─────────────────────────────────────────
+
+use cartograph_resolver::{AliasSetFingerprint, PathSetFingerprint, PerFileDependencyIdentity};
+
+fn path_set(files: &[(&str, &str)]) -> (Vec<String>, PathSetFingerprint) {
+    let analyses = analyze(files);
+    let index = ModuleIndex::build(&analyses);
+    (
+        index.canonical_python_path_set(),
+        index.python_path_set_fingerprint(),
+    )
+}
+
+fn alias_set(files: &[(&str, &str)]) -> (Vec<String>, AliasSetFingerprint) {
+    let analyses = analyze(files);
+    let index = ModuleIndex::build(&analyses);
+    (index.canonical_alias_set(), index.alias_set_fingerprint())
+}
+
+const PY_A: &str = "class A:\n    pass\n";
+const PY_B: &str = "class B:\n    pass\n";
+
+/// The canonical set is exactly the `.py` paths, sorted and
+/// repository-relative.
+#[test]
+fn the_canonical_python_path_set_is_the_dot_py_paths() {
+    let (canonical, _) = path_set(&[("b/second.py", PY_B), ("a/first.py", PY_A)]);
+    assert_eq!(canonical, vec!["a/first.py", "b/second.py"]);
+    for p in &canonical {
+        assert!(!p.contains(':'), "no absolute path: {p}");
+        assert!(!p.starts_with('/'), "no rooted path: {p}");
+    }
+}
+
+#[test]
+fn adding_or_removing_a_python_path_moves_the_fingerprint() {
+    let (_, one) = path_set(&[("a.py", PY_A)]);
+    let (_, two) = path_set(&[("a.py", PY_A), ("b.py", PY_B)]);
+    assert_ne!(one, two, "adding a path must move it");
+
+    let (_, back) = path_set(&[("a.py", PY_A)]);
+    assert_eq!(one, back, "removing it must restore it exactly");
+}
+
+#[test]
+fn renaming_a_python_path_moves_the_fingerprint() {
+    let (_, before) = path_set(&[("app/models.py", PY_A)]);
+    let (_, after) = path_set(&[("app/schema.py", PY_A)]);
+    assert_ne!(before, after);
+}
+
+#[test]
+fn enumeration_order_does_not_move_the_path_set_fingerprint() {
+    let (_, forward) = path_set(&[("a.py", PY_A), ("b.py", PY_B)]);
+    let (_, reverse) = path_set(&[("b.py", PY_B), ("a.py", PY_A)]);
+    assert_eq!(forward, reverse, "the canonical set is sorted");
+}
+
+#[test]
+fn the_empty_python_path_set_is_stable_and_distinct() {
+    let (canonical, empty) = path_set(&[("web/x.ts", "export const X = 1;\n")]);
+    assert!(canonical.is_empty(), "canonical: {canonical:?}");
+    let (_, also_empty) = path_set(&[("web/y.ts", "export const Y = 2;\n")]);
+    assert_eq!(empty, also_empty);
+    let (_, non_empty) = path_set(&[("a.py", PY_A)]);
+    assert_ne!(empty, non_empty);
+}
+
+/// A TypeScript file cannot satisfy a Python module candidate, so it must not
+/// enter the Python path set. Asserted together with the resolver behaviour it
+/// describes, so the fingerprint cannot drift away from what it stands for.
+#[test]
+fn typescript_files_are_absent_from_the_python_path_set() {
+    let base: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+    ];
+    let (canonical_before, before) = path_set(base);
+    let (resolution_before, _) = resolve_tracked(base, "app/h.py", "Order");
+    assert!(
+        matches!(&resolution_before, Resolution::Declared { file, .. } if file == "app/m.py"),
+        "precondition: it must resolve, got {resolution_before:?}"
+    );
+
+    let with_ts: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+        ("app/m.ts", "export const Order = 1;\n"),
+        ("web/other.tsx", "export const Q = 2;\n"),
+    ];
+    let (canonical_after, after) = path_set(with_ts);
+    let (resolution_after, _) = resolve_tracked(with_ts, "app/h.py", "Order");
+
+    assert_eq!(
+        canonical_before, canonical_after,
+        "TS must not enter the set"
+    );
+    assert_eq!(before, after, "TS must not move the fingerprint");
+    assert_eq!(
+        format!("{resolution_before:?}"),
+        format!("{resolution_after:?}"),
+        "and the resolver must agree that TS changed nothing"
+    );
+}
+
+/// `.pyi` cannot satisfy a candidate either — candidates end in `.py`, and
+/// `"x.pyi".ends_with("/x.py")` is false.
+#[test]
+fn pyi_stubs_are_absent_from_the_python_path_set() {
+    let (canonical, without) = path_set(&[("app/m.py", PY_A)]);
+    let (canonical_with, with_stub) = path_set(&[("app/m.py", PY_A), ("app/m.pyi", PY_A)]);
+    assert_eq!(canonical, canonical_with, "canonical: {canonical_with:?}");
+    assert_eq!(without, with_stub);
+}
+
+/// The colliding-candidate case, tied to the resolver: adding a `.py` path
+/// that collides moves the fingerprint *and* changes the resolution.
+#[test]
+fn a_colliding_python_path_moves_the_fingerprint_and_the_resolution() {
+    let before_files: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+    ];
+    let (_, before) = path_set(before_files);
+    let (r_before, _) = resolve_tracked(before_files, "app/h.py", "Order");
+    assert!(
+        matches!(r_before, Resolution::Declared { .. }),
+        "precondition: exactly one candidate must match first"
+    );
+
+    let after_files: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+        ("vendor/app/m.py", "VERSION = 1\n"),
+    ];
+    let (_, after) = path_set(after_files);
+    let (r_after, _) = resolve_tracked(after_files, "app/h.py", "Order");
+
+    assert_ne!(
+        before, after,
+        "the colliding path must move the fingerprint"
+    );
+    assert!(
+        matches!(r_after, Resolution::Unresolved { .. }),
+        "and the resolution must actually change, got {r_after:?}"
+    );
+}
+
+// ── TypeScript ordered alias fingerprint ────────────────────────────────
+
+const VITE_ONE: &str = "export default { resolve: { alias: { '@app': '/src/app' } } };\n";
+const VITE_TWO: &str =
+    "export default { resolve: { alias: { '@app': '/src/app', '@lib': '/src/lib' } } };\n";
+const VITE_RETARGET: &str = "export default { resolve: { alias: { '@app': '/src/other' } } };\n";
+
+#[test]
+fn no_aliases_gives_a_stable_empty_alias_fingerprint() {
+    let (canonical, empty) = alias_set(&[("web/a.ts", "export const X = 1;\n")]);
+    assert!(canonical.is_empty(), "canonical: {canonical:?}");
+    let (_, also_empty) = alias_set(&[("web/b.ts", "export const Y = 2;\n")]);
+    assert_eq!(empty, also_empty);
+}
+
+#[test]
+fn adding_and_removing_an_alias_moves_the_alias_fingerprint() {
+    let (canonical_without, without_config) = alias_set(&[("web/a.ts", "export const X = 1;\n")]);
+    let (canonical_with, with_config) = alias_set(&[
+        ("web/a.ts", "export const X = 1;\n"),
+        ("web/vite.config.ts", VITE_ONE),
+    ]);
+    assert!(
+        canonical_without.len() < canonical_with.len(),
+        "precondition: the config must actually declare an alias, got {canonical_with:?}"
+    );
+    assert_ne!(without_config, with_config);
+
+    let (_, removed_again) = alias_set(&[("web/a.ts", "export const X = 1;\n")]);
+    assert_eq!(
+        without_config, removed_again,
+        "removing the config must restore the identity"
+    );
+}
+
+#[test]
+fn adding_a_second_alias_moves_the_alias_fingerprint() {
+    let (canonical_one, one) = alias_set(&[("web/vite.config.ts", VITE_ONE)]);
+    let (canonical_two, two) = alias_set(&[("web/vite.config.ts", VITE_TWO)]);
+    assert!(
+        canonical_two.len() > canonical_one.len(),
+        "precondition: the second config must declare more aliases: {canonical_two:?}"
+    );
+    assert_ne!(one, two);
+}
+
+#[test]
+fn retargeting_an_alias_moves_the_alias_fingerprint() {
+    let (canonical_a, a) = alias_set(&[("web/vite.config.ts", VITE_ONE)]);
+    let (canonical_b, b) = alias_set(&[("web/vite.config.ts", VITE_RETARGET)]);
+    assert_ne!(
+        canonical_a, canonical_b,
+        "precondition: the target must actually differ"
+    );
+    assert_ne!(a, b, "the target participates in resolution");
+}
+
+/// Order is semantic — `apply_alias` returns the first match — so two lists
+/// with the same members in a different order must not share an identity.
+#[test]
+fn alias_order_is_part_of_the_alias_fingerprint() {
+    let ordered = vec![
+        "@app|/src/app|web".to_owned(),
+        "@lib|/src/lib|web".to_owned(),
+    ];
+    let reversed = vec![
+        "@lib|/src/lib|web".to_owned(),
+        "@app|/src/app|web".to_owned(),
+    ];
+    assert_ne!(
+        AliasSetFingerprint::of(&ordered),
+        AliasSetFingerprint::of(&reversed),
+        "a membership-only identity would be unsound here"
+    );
+    assert_eq!(
+        AliasSetFingerprint::of(&ordered),
+        AliasSetFingerprint::of(&ordered.clone())
+    );
+}
+
+/// An ordinary TypeScript edit that declares no alias must leave the alias
+/// identity alone.
+#[test]
+fn an_unrelated_typescript_edit_does_not_move_the_alias_fingerprint() {
+    let (_, before) = alias_set(&[
+        ("web/vite.config.ts", VITE_ONE),
+        ("web/a.ts", "export const X = 1;\n"),
+    ]);
+    let (_, after) = alias_set(&[
+        ("web/vite.config.ts", VITE_ONE),
+        ("web/a.ts", "export const X = 999;\nexport const Z = 2;\n"),
+    ]);
+    assert_eq!(before, after);
+}
+
+// ── language separation ─────────────────────────────────────────────────
+
+/// A Python result must never carry an alias identity, and a relative
+/// TypeScript import must never carry one either.
+#[test]
+fn the_dependency_identity_attaches_only_the_state_actually_consulted() {
+    let py: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+        ("web/vite.config.ts", VITE_ONE),
+    ];
+    let analyses = analyze(py);
+    let index = ModuleIndex::build(&analyses);
+    let from = index.file("app/h.py").expect("analysed");
+    let mut deps = ResolutionContext::new();
+    index.resolve_python_tracked(from, "Order", &mut deps);
+
+    let identity = PerFileDependencyIdentity::new(
+        "app/h.py",
+        0xdead_beef,
+        0x1234,
+        &deps,
+        index.python_path_set_fingerprint(),
+        index.alias_set_fingerprint(),
+    );
+    assert!(
+        identity.path_set.is_some(),
+        "Python resolution consulted repository membership"
+    );
+    assert!(
+        identity.alias_set.is_none(),
+        "Python must not inherit TypeScript alias identity"
+    );
+    assert!(identity.complete && identity.is_reusable());
+    assert!(identity.reads.contains(&"app/m.py".to_owned()));
+    assert!(!identity.reads.contains(&"web/vite.config.ts".to_owned()));
+
+    // A relative TypeScript import: path set yes, alias set no.
+    let ts: &[(&str, &str)] = &[
+        (
+            "web/a.ts",
+            "import { X } from './b';\nexport const u = () => X;\n",
+        ),
+        ("web/b.ts", "export const X = 1;\n"),
+        ("web/vite.config.ts", VITE_ONE),
+    ];
+    let analyses = analyze(ts);
+    let index = ModuleIndex::build(&analyses);
+    let from = index.file("web/a.ts").expect("analysed");
+    let mut deps = ResolutionContext::new();
+    index.resolve_typescript_tracked(from, "X", &mut deps);
+    let identity = PerFileDependencyIdentity::new(
+        "web/a.ts",
+        1,
+        2,
+        &deps,
+        index.python_path_set_fingerprint(),
+        index.alias_set_fingerprint(),
+    );
+    assert!(
+        identity.alias_set.is_none(),
+        "a relative import must not inherit global alias identity"
+    );
+}
+
+/// An incomplete identity is never reusable, whatever else matches.
+#[test]
+fn an_incomplete_identity_is_never_reusable() {
+    let mut deps = ResolutionContext::new();
+    deps.record_file("a.py");
+    deps.record_path_set();
+    deps.mark_incomplete();
+
+    let identity = PerFileDependencyIdentity::new(
+        "a.py",
+        7,
+        9,
+        &deps,
+        PathSetFingerprint::default(),
+        AliasSetFingerprint::default(),
+    );
+    assert!(!identity.complete);
+    assert!(
+        !identity.is_reusable(),
+        "incomplete tracking must disqualify reuse"
+    );
+}
+
+/// The identity is deterministic for the same semantic state.
+#[test]
+fn the_dependency_identity_is_deterministic() {
+    let files: &[(&str, &str)] = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+    ];
+    let build = || {
+        let analyses = analyze(files);
+        let index = ModuleIndex::build(&analyses);
+        let from = index.file("app/h.py").expect("analysed");
+        let mut deps = ResolutionContext::new();
+        index.resolve_python_tracked(from, "Order", &mut deps);
+        PerFileDependencyIdentity::new(
+            "app/h.py",
+            42,
+            43,
+            &deps,
+            index.python_path_set_fingerprint(),
+            index.alias_set_fingerprint(),
+        )
+    };
+    assert_eq!(build(), build());
 }

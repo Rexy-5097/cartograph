@@ -530,3 +530,72 @@ degenerate case, and it degrades cleanly rather than erroring.
 
 **No cache is implemented.** This slice produces the unit, its dependencies and
 the fingerprint; nothing looks anything up.
+
+---
+
+## 12. The remaining dependency fingerprints
+
+### Python path set — narrower than "all Python files"
+
+`resolve_python_module` builds candidates `<base>.py` and `<base>/__init__.py`,
+then accepts a repository path when it **equals** a candidate or ends with
+`/<candidate>`. So only paths ending in `.py` can ever match. `.pyi` stubs are
+in the index and are Python, but `"x.pyi".ends_with("/x.py")` is false, so a
+stub can never be a module target; `.ts` and `.tsx` likewise.
+
+The canonical form is therefore the sorted list of `.py` paths — not every
+Python file, and not every file. The filter is **case-sensitive on purpose**,
+matching the resolver's own comparison: a case-insensitive filter would claim a
+dependency the resolver could never have.
+
+### TypeScript alias set — ordered, and all three components
+
+`apply_alias` walks the list and returns the **first** entry whose `dir` scopes
+the importing file and whose `alias` prefixes the specifier, rewriting through
+`target`. All three participate, and the list is sorted globally by directory
+depth, then alias length, then alias. So the canonical form preserves order:
+`[A, B]` and `[B, A]` must not share an identity, and a membership-only
+fingerprint would be unsound.
+
+### Both
+
+`DefaultHasher`, entry count hashed first so no list hashes as a prefix of a
+longer one. Internal deterministic fingerprints for invalidation — **not**
+cryptographic hashes, and no collision resistance is claimed. An empty list
+hashes to the same value whichever kind it is; that is harmless because the
+newtypes are only ever compared against their own kind.
+
+### `PerFileDependencyIdentity` — specification, not machinery
+
+```
+PerFileDependencyIdentity {
+    file, file_content, model_set,
+    reads:     Vec<String>,                    // deterministic order
+    path_set:  Option<PathSetFingerprint>,     // Some only if consulted
+    alias_set: Option<AliasSetFingerprint>,    // Some only if consulted
+    complete:  bool,
+}
+```
+
+The optional fingerprints attach **only** when the recorded context says that
+kind of state was consulted, so a Python result never carries an alias identity
+and a relative TypeScript import never carries one either. `reads` holds paths
+rather than content hashes: the resolver does not own file contents, and the
+parse cache already holds their identities.
+
+`is_reusable()` returns `complete` alone. Completeness decides *eligibility*;
+matching the terms decides *validity*. **An incomplete identity is never
+reusable, however well its other terms match.**
+
+### Measured
+
+zulip `0ce8f627`: 1,066 `.py` paths, path-set fingerprint `7f4d8421…`; **0
+alias entries**. full-stack-fastapi `162344da`: 47 paths, `2b315781…`; 0 alias
+entries.
+
+**Neither pinned repository here declares a build alias**, so the alias
+fingerprint is validated by fixture only. That is a gap, not a result: a
+corpus repository that uses `vite.config.ts` aliases (Airflow does) should
+exercise it before the cache is built.
+
+**Still no cache.** This slice produces identities; nothing looks anything up.

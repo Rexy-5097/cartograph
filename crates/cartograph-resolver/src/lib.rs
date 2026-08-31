@@ -70,7 +70,9 @@ pub use canonical::{
     ObservationKind, RouteProvenance, Segment,
 };
 pub use client_trace::{ClientFunction, add_client_call_edges, client_functions};
-pub use dependencies::ResolutionContext;
+pub use dependencies::{
+    AliasSetFingerprint, PathSetFingerprint, PerFileDependencyIdentity, ResolutionContext,
+};
 pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,

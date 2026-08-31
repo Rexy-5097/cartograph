@@ -27,6 +27,139 @@
 //! model already uses — and paths are all that is retained.
 
 use std::collections::BTreeSet;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+/// Hashes a canonical, already-ordered list.
+///
+/// The count goes first so no list can hash as a prefix of a longer one.
+/// `DefaultHasher` (`SipHash`) — an internal deterministic fingerprint for cache
+/// invalidation, **not** a cryptographic hash. No collision resistance is
+/// claimed, and none is needed: the inputs are the user's own file paths and a
+/// collision costs a stale reuse decision, which the completeness rule and the
+/// differential suite exist to catch.
+fn fingerprint_of(entries: &[String]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    entries.len().hash(&mut hasher);
+    for entry in entries {
+        entry.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Identity of the repository paths Python module resolution can match.
+///
+/// `resolve_python_module` builds candidates of the form `<base>.py` and
+/// `<base>/__init__.py`, then accepts a repository path when it equals a
+/// candidate or ends with `/<candidate>`. So only paths ending in `.py` can
+/// ever match: `.pyi`, `.ts` and `.tsx` are in the index but are unreachable
+/// as module targets, and including them would invalidate Python results for
+/// changes that cannot affect them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct PathSetFingerprint(u64);
+
+impl PathSetFingerprint {
+    /// Fingerprints an already-canonical path list.
+    #[must_use]
+    pub fn of(canonical: &[String]) -> Self {
+        Self(fingerprint_of(canonical))
+    }
+
+    /// The raw value, for logging and tests.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Identity of the **ordered** build-alias list.
+///
+/// `apply_alias` walks the list and returns the first entry whose directory
+/// scopes the importing file and whose alias prefixes the specifier, using all
+/// three of `(alias, target, dir)`. The list is sorted globally by directory
+/// depth, then alias length, then alias — so order is semantic and a
+/// membership-only identity would be unsound.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct AliasSetFingerprint(u64);
+
+impl AliasSetFingerprint {
+    /// Fingerprints an already-ordered alias list.
+    #[must_use]
+    pub fn of(ordered: &[String]) -> Self {
+        Self(fingerprint_of(ordered))
+    }
+
+    /// The raw value, for logging and tests.
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// The complete dependency identity of one file's Stage C result.
+///
+/// **A specification and representation only — nothing looks anything up.** It
+/// names every term a future cache would have to agree on before reusing a
+/// result, so the terms can be reviewed before any reuse exists.
+///
+/// `reads` carries paths rather than content hashes: the resolver does not own
+/// file contents, and the parse cache already holds their identities. A lookup
+/// would pair each path with the identity the parse cache reports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerFileDependencyIdentity {
+    /// The file whose Stage C result this identifies.
+    pub file: String,
+    /// Identity of that file's own contents, from the parse cache.
+    pub file_content: u64,
+    /// Identity of the merged model set the accesses resolved against.
+    pub model_set: u64,
+    /// Every file whose contents were read, deterministically ordered.
+    pub reads: Vec<String>,
+    /// Present only when resolution consulted repository membership.
+    pub path_set: Option<PathSetFingerprint>,
+    /// Present only when resolution consulted the build aliases.
+    pub alias_set: Option<AliasSetFingerprint>,
+    /// Whether every dependency was tracked.
+    pub complete: bool,
+}
+
+impl PerFileDependencyIdentity {
+    /// Builds the identity from a recorded context.
+    ///
+    /// The optional fingerprints are attached **only** when the context says
+    /// that kind of state was consulted, so a Python result never carries an
+    /// alias identity and a relative TypeScript import never carries one
+    /// either.
+    #[must_use]
+    pub fn new(
+        file: &str,
+        file_content: u64,
+        model_set: u64,
+        deps: &ResolutionContext,
+        path_set: PathSetFingerprint,
+        alias_set: AliasSetFingerprint,
+    ) -> Self {
+        Self {
+            file: file.to_owned(),
+            file_content,
+            model_set,
+            reads: deps.files().map(ToOwned::to_owned).collect(),
+            path_set: deps.consults_path_set().then_some(path_set),
+            alias_set: deps.consults_alias_set().then_some(alias_set),
+            complete: deps.is_complete(),
+        }
+    }
+
+    /// Whether a future cache may reuse the result this identifies.
+    ///
+    /// Completeness alone decides eligibility; matching the terms decides
+    /// validity. An incomplete identity is never reusable, however well its
+    /// other terms match.
+    #[must_use]
+    pub const fn is_reusable(&self) -> bool {
+        self.complete
+    }
+}
 
 /// The repository state one resolution consulted.
 ///
