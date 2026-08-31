@@ -445,3 +445,259 @@ fn read_sets_on_a_real_repository() {
         analyses.len()
     );
 }
+
+// ── TypeScript resolution ───────────────────────────────────────────────
+
+fn resolve_ts_tracked(
+    files: &[(&str, &str)],
+    from: &str,
+    name: &str,
+) -> (Resolution, ResolutionContext) {
+    let analyses = analyze(files);
+    let index = ModuleIndex::build(&analyses);
+    let file = index.file(from).expect("the using file was analysed");
+    let mut deps = ResolutionContext::new();
+    let resolution = index.resolve_typescript_tracked(file, name, &mut deps);
+    (resolution, deps)
+}
+
+/// TypeScript A -> B -> C, mirroring the Python chain test.
+#[test]
+fn a_typescript_re_export_chain_records_every_hop_and_nothing_else() {
+    let files = &[
+        (
+            "web/a.ts",
+            "import { Order } from './b';\nexport const use = () => Order;\n",
+        ),
+        ("web/b.ts", "export { Order } from './c';\n"),
+        ("web/c.ts", "export const Order = 1;\n"),
+        ("web/d.ts", "export const Unrelated = 2;\n"),
+    ];
+    let (resolution, deps) = resolve_ts_tracked(files, "web/a.ts", "Order");
+    assert!(
+        matches!(&resolution, Resolution::Declared { file, .. } if file == "web/c.ts"),
+        "precondition: the chain must resolve to c.ts, got {resolution:?}"
+    );
+    for hop in ["web/a.ts", "web/b.ts", "web/c.ts"] {
+        assert!(deps.reads(hop), "read set: {:?}", read_set(&deps));
+    }
+    assert!(!deps.reads("web/d.ts"), "read set: {:?}", read_set(&deps));
+    assert!(
+        deps.consults_path_set(),
+        "extension probing reads which files exist"
+    );
+}
+
+/// A relative TypeScript import needs no alias, so the alias-set flag must
+/// stay clear — otherwise every TypeScript result would depend on every build
+/// configuration in the repository.
+#[test]
+fn a_relative_typescript_import_does_not_consult_the_alias_set() {
+    let files = &[
+        (
+            "web/a.ts",
+            "import { X } from './b';\nexport const u = () => X;\n",
+        ),
+        ("web/b.ts", "export const X = 1;\n"),
+    ];
+    let (_, deps) = resolve_ts_tracked(files, "web/a.ts", "X");
+    assert!(!deps.consults_alias_set());
+    assert!(deps.consults_path_set());
+}
+
+/// A bare specifier is matched against the globally ordered alias list, so the
+/// answer depends on every file that declares a build alias.
+#[test]
+fn a_bare_typescript_specifier_consults_the_alias_set() {
+    let files = &[(
+        "web/a.ts",
+        "import { X } from 'somepkg';\nexport const u = () => X;\n",
+    )];
+    let (_, deps) = resolve_ts_tracked(files, "web/a.ts", "X");
+    assert!(
+        deps.consults_alias_set(),
+        "a package specifier is resolved through the alias list"
+    );
+}
+
+/// Python resolution never consults the alias set — `resolve_python_module`
+/// does not call `apply_alias`. Pinned so the two languages cannot quietly
+/// share an invalidation scope they do not share.
+#[test]
+fn python_resolution_never_consults_the_alias_set() {
+    let files = &[
+        (
+            "app/h.py",
+            "from .m import Order\ndef f():\n    return Order()\n",
+        ),
+        ("app/m.py", "class Order:\n    pass\n"),
+        (
+            "web/vite.config.ts",
+            "export default { resolve: { alias: { openapi: './x' } } };\n",
+        ),
+    ];
+    let (_, deps) = resolve_tracked(files, "app/h.py", "Order");
+    assert!(
+        !deps.consults_alias_set(),
+        "Python resolution must not depend on build aliases"
+    );
+    assert!(
+        !deps.reads("web/vite.config.ts"),
+        "read set: {:?}",
+        read_set(&deps)
+    );
+}
+
+// ── whole-file Stage C dependency sets ──────────────────────────────────
+
+const MODELS_PY: &str = "from sqlalchemy.orm import DeclarativeBase\nclass Base(DeclarativeBase):\n    pass\nclass Order(Base):\n    __tablename__ = 'orders'\n";
+const HANDLERS_PY: &str = "from .models import Order\ndef make():\n    return Order(x=1)\n";
+
+/// The unit a future cache would key: one file's entire ORM access
+/// contribution, with the dependency set of everything it consulted.
+#[test]
+fn a_stage_c_result_carries_the_dependencies_of_every_access_it_found() {
+    let files = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+        ("app/unrelated.py", "VALUE = 1\n"),
+        ("web/thing.ts", "export const X = 1;\n"),
+    ];
+    let analyses = analyze(files);
+    let orm = cartograph_resolver::OrmAnalysis::build(&analyses);
+    assert!(
+        orm.models.contains_key("Order"),
+        "precondition: the fixture must declare a resolvable model"
+    );
+    let index = ModuleIndex::build(&analyses);
+    let handlers = index.file("app/handlers.py").expect("analysed");
+
+    let mut deps = ResolutionContext::new();
+    let sites =
+        cartograph_resolver::discover_accesses_tracked(handlers, &orm.models, &index, &mut deps);
+
+    assert!(
+        !sites.is_empty(),
+        "precondition: the fixture must produce an ORM access"
+    );
+    assert!(
+        deps.reads("app/handlers.py"),
+        "read set: {:?}",
+        read_set(&deps)
+    );
+    assert!(
+        deps.reads("app/models.py"),
+        "read set: {:?}",
+        read_set(&deps)
+    );
+    assert!(deps.consults_path_set());
+    assert!(deps.is_complete());
+    assert!(
+        !deps.reads("app/unrelated.py"),
+        "read set: {:?}",
+        read_set(&deps)
+    );
+    assert!(
+        !deps.reads("web/thing.ts"),
+        "read set: {:?}",
+        read_set(&deps)
+    );
+}
+
+/// A file with no ORM accesses still reports its own contents as a
+/// dependency: editing it is exactly what could introduce one.
+#[test]
+fn a_file_with_no_accesses_still_depends_on_its_own_contents() {
+    let files = &[
+        ("app/quiet.py", "VALUE = 1\n"),
+        ("app/models.py", MODELS_PY),
+    ];
+    let analyses = analyze(files);
+    let orm = cartograph_resolver::OrmAnalysis::build(&analyses);
+    let index = ModuleIndex::build(&analyses);
+    let quiet = index.file("app/quiet.py").expect("analysed");
+
+    let mut deps = ResolutionContext::new();
+    let sites =
+        cartograph_resolver::discover_accesses_tracked(quiet, &orm.models, &index, &mut deps);
+    assert!(sites.is_empty());
+    assert_eq!(read_set(&deps), vec!["app/quiet.py"]);
+    assert!(deps.is_complete());
+}
+
+/// The tracked and untracked ORM entry points must agree exactly.
+#[test]
+fn tracking_does_not_change_the_discovered_accesses() {
+    let files = &[
+        ("app/handlers.py", HANDLERS_PY),
+        ("app/models.py", MODELS_PY),
+    ];
+    let analyses = analyze(files);
+    let orm = cartograph_resolver::OrmAnalysis::build(&analyses);
+    let index = ModuleIndex::build(&analyses);
+    let handlers = index.file("app/handlers.py").expect("analysed");
+
+    let untracked = cartograph_resolver::discover_accesses(handlers, &orm.models, &index);
+    let mut deps = ResolutionContext::new();
+    let tracked =
+        cartograph_resolver::discover_accesses_tracked(handlers, &orm.models, &index, &mut deps);
+    assert_eq!(format!("{untracked:?}"), format!("{tracked:?}"));
+}
+
+/// Golden read set: deterministic, sorted, repository-relative, no absolute
+/// paths. The shape a future cache key would be derived from.
+#[test]
+fn the_golden_read_set_for_a_re_export_chain_is_stable() {
+    let files = &[
+        (
+            "pkg/a.py",
+            "from .b import Order\ndef f():\n    return Order()\n",
+        ),
+        ("pkg/b.py", "from .c import Order\n"),
+        ("pkg/c.py", "class Order:\n    pass\n"),
+        ("pkg/unused.py", "X = 1\n"),
+    ];
+    let (_, deps) = resolve_tracked(files, "pkg/a.py", "Order");
+    assert_eq!(
+        read_set(&deps),
+        vec!["pkg/a.py", "pkg/b.py", "pkg/c.py"],
+        "golden read set changed"
+    );
+    assert!(deps.consults_path_set());
+    assert!(!deps.consults_alias_set());
+    assert!(deps.is_complete());
+    for path in read_set(&deps) {
+        assert!(!path.contains(':'), "no absolute path may appear: {path}");
+        assert!(!path.starts_with('/'), "no rooted path may appear: {path}");
+    }
+}
+
+/// Completeness propagates through `absorb` across several nesting levels and
+/// never recovers — the property a cache will rely on to refuse a result whose
+/// dependencies were not fully observed.
+#[test]
+fn incompleteness_propagates_through_nested_absorption() {
+    let mut innermost = ResolutionContext::new();
+    innermost.record_file("deep.py");
+    innermost.mark_incomplete();
+
+    let mut middle = ResolutionContext::new();
+    middle.record_file("mid.py");
+    middle.absorb(&innermost);
+    assert!(!middle.is_complete(), "one level");
+
+    let mut outer = ResolutionContext::new();
+    outer.record_file("outer.py");
+    outer.absorb(&middle);
+    assert!(!outer.is_complete(), "two levels");
+
+    // Absorbing further complete contexts must not launder it back.
+    let mut clean = ResolutionContext::new();
+    clean.record_file("clean.py");
+    outer.absorb(&clean);
+    assert!(!outer.is_complete(), "completeness must never be restored");
+    assert_eq!(
+        read_set(&outer),
+        vec!["clean.py", "deep.py", "mid.py", "outer.py"]
+    );
+}

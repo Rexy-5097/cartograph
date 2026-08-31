@@ -26,6 +26,7 @@ use std::collections::{HashMap, HashSet};
 use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance, SourceLocation};
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
 
+use crate::dependencies::ResolutionContext;
 use crate::imports::{ModuleIndex, Resolution};
 use cartograph_parser::model::{
     Callee, FileAnalysis, SourceLanguage, Span, StringFact, Symbol, SymbolKind,
@@ -421,6 +422,25 @@ pub fn discover_accesses<S: std::hash::BuildHasher>(
     models: &HashMap<String, OrmModel, S>,
     index: &ModuleIndex<'_>,
 ) -> Vec<OrmAccessSite> {
+    discover_accesses_tracked(file, models, index, &mut ResolutionContext::new())
+}
+
+/// [`discover_accesses`], recording every repository read it performed.
+///
+/// The untracked form delegates here, so the accesses a run produces and the
+/// dependencies it reports come from one traversal and cannot disagree.
+///
+/// `deps` accumulates across every access site in the file, so the result is
+/// the dependency set of the file's *whole* Stage C contribution — which is
+/// the unit a future cache would key. Reading the file's own facts is recorded
+/// unconditionally: its calls decide which names are even candidates.
+pub fn discover_accesses_tracked<S: std::hash::BuildHasher>(
+    file: &FileAnalysis,
+    models: &HashMap<String, OrmModel, S>,
+    index: &ModuleIndex<'_>,
+    deps: &mut ResolutionContext,
+) -> Vec<OrmAccessSite> {
+    deps.record_file(&file.path);
     let mut sites = Vec::new();
 
     for call in &file.calls {
@@ -436,7 +456,7 @@ pub fn discover_accesses<S: std::hash::BuildHasher>(
         // architecture diagrams call `User("DAG Author")` having imported User
         // from the `diagrams` package; matching on the name alone attributed
         // 218 of those to the Flask-AppBuilder User model.
-        if !resolves_to_the_model(file, &model, models, index) {
+        if !resolves_to_the_model(file, &model, models, index, deps) {
             continue;
         }
         sites.push(OrmAccessSite {
@@ -501,11 +521,15 @@ fn resolves_to_the_model<S: std::hash::BuildHasher>(
     model: &str,
     models: &HashMap<String, OrmModel, S>,
     index: &ModuleIndex<'_>,
+    deps: &mut ResolutionContext,
 ) -> bool {
     let Some(declared) = models.get(model) else {
         return false;
     };
-    match index.resolve_python(file, model) {
+    // The declaring file's identity participates in the answer, so it is a
+    // dependency even when resolution stops before reaching it.
+    deps.record_file(&declared.file);
+    match index.resolve_python_tracked(file, model, deps) {
         // Declared here. Only this model if this is the file that declares it;
         // otherwise the local declaration is a different symbol of the same
         // name, and attributing the access would be exactly the M07 defect.

@@ -85,6 +85,7 @@ pub use matching::{
 pub use normalize::{normalize_client_call, normalize_method, normalize_route_declaration};
 pub use orm::{
     AccessKind, OrmAccessSite, OrmAnalysis, OrmFlavor, OrmModel, TableName, add_orm_edges,
+    discover_accesses, discover_accesses_tracked, discover_models,
 };
 pub use routers::{PrefixResolution, RouterIndex, with_composed_prefix};
 pub use symbolic::SymbolicValue;

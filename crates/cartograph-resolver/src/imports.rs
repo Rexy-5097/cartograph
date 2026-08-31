@@ -308,15 +308,34 @@ impl<'a> ModuleIndex<'a> {
     /// reported as [`Resolution::Unresolved`] rather than guessed at.
     #[must_use]
     pub fn resolve_typescript(&self, from: &FileAnalysis, name: &str) -> Resolution {
+        self.resolve_typescript_tracked(from, name, &mut ResolutionContext::new())
+    }
+
+    /// [`resolve_typescript`](Self::resolve_typescript), recording what it read.
+    ///
+    /// The untracked form delegates here, so one implementation serves both.
+    pub fn resolve_typescript_tracked(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
+        deps.record_file(&from.path);
         if let Some(symbol) = declaration_in(from, name) {
             return Resolution::Local {
                 line: symbol.span.start_line,
             };
         }
-        self.follow_typescript(from, name, 0)
+        self.follow_typescript(from, name, 0, deps)
     }
 
-    fn follow_typescript(&self, from: &FileAnalysis, name: &str, hop: usize) -> Resolution {
+    fn follow_typescript(
+        &self,
+        from: &FileAnalysis,
+        name: &str,
+        hop: usize,
+        deps: &mut ResolutionContext,
+    ) -> Resolution {
         if hop >= MAX_REEXPORT_HOPS {
             return Resolution::Unresolved {
                 module: from.path.clone(),
@@ -324,6 +343,8 @@ impl<'a> ModuleIndex<'a> {
             };
         }
 
+        // This hop reads `from`'s import statements.
+        deps.record_file(&from.path);
         for import in &from.imports {
             let exported = if import
                 .named
@@ -349,20 +370,29 @@ impl<'a> ModuleIndex<'a> {
             // vite.config.ts declares `resolve: { alias: { openapi: … } }`.
             let specifier = if import.specifier.starts_with('.') {
                 import.specifier.clone()
-            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
-                aliased
             } else {
-                return Resolution::Unresolved {
-                    module: import.specifier.clone(),
-                    reason: "is a package, and no build configuration aliases it".to_owned(),
-                };
+                // A bare specifier is matched against the project's globally
+                // ordered alias list, so the answer depends on every file that
+                // declares a build alias, and on their order.
+                deps.record_alias_set();
+                if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                    aliased
+                } else {
+                    return Resolution::Unresolved {
+                        module: import.specifier.clone(),
+                        reason: "is a package, and no build configuration aliases it".to_owned(),
+                    };
+                }
             };
+            // Extension and index resolution probe which files exist.
+            deps.record_path_set();
             let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
                 return Resolution::Unresolved {
                     module: import.specifier.clone(),
                     reason: "does not resolve to a file this project contains".to_owned(),
                 };
             };
+            deps.record_file(&target);
             let Some(module) = self.file(&target) else {
                 return Resolution::Unresolved {
                     module: import.specifier.clone(),
@@ -377,7 +407,7 @@ impl<'a> ModuleIndex<'a> {
                 };
             }
             let hop_taken = format!("`from \"{}\"`", import.specifier);
-            return match self.follow_typescript(module, exported, hop + 1) {
+            return match self.follow_typescript(module, exported, hop + 1, deps) {
                 Resolution::Local { line } => Resolution::Declared {
                     file: module.path.clone(),
                     line,
@@ -395,7 +425,7 @@ impl<'a> ModuleIndex<'a> {
         // No named binding. A barrel file forwards everything it re-exports,
         // so each wildcard is tried and the answer must be unique: two barrels
         // exporting the same name says nothing about which was meant.
-        self.follow_typescript_wildcards(from, name, hop)
+        self.follow_typescript_wildcards(from, name, hop, deps)
     }
 
     fn follow_typescript_wildcards(
@@ -403,7 +433,9 @@ impl<'a> ModuleIndex<'a> {
         from: &FileAnalysis,
         name: &str,
         hop: usize,
+        deps: &mut ResolutionContext,
     ) -> Resolution {
+        deps.record_file(&from.path);
         let mut found: Vec<Resolution> = Vec::new();
         for import in &from.imports {
             if import.namespace_name.as_deref() != Some("*") {
@@ -411,14 +443,19 @@ impl<'a> ModuleIndex<'a> {
             }
             let specifier = if import.specifier.starts_with('.') {
                 import.specifier.clone()
-            } else if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
-                aliased
             } else {
-                continue;
+                deps.record_alias_set();
+                if let Some(aliased) = self.apply_alias(&import.specifier, &from.path) {
+                    aliased
+                } else {
+                    continue;
+                }
             };
+            deps.record_path_set();
             let Some(target) = self.resolve_relative_module(&specifier, &from.path) else {
                 continue;
             };
+            deps.record_file(&target);
             let Some(module) = self.file(&target) else {
                 continue;
             };
@@ -431,7 +468,7 @@ impl<'a> ModuleIndex<'a> {
                 continue;
             }
             if hop + 1 < MAX_REEXPORT_HOPS {
-                match self.follow_typescript(module, name, hop + 1) {
+                match self.follow_typescript(module, name, hop + 1, deps) {
                     r @ Resolution::Declared { .. } => found.push(r),
                     Resolution::Local { line } => found.push(Resolution::Declared {
                         file: module.path.clone(),

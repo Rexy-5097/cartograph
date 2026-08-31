@@ -37,6 +37,7 @@ use std::collections::BTreeSet;
 pub struct ResolutionContext {
     files: BTreeSet<String>,
     path_set_consulted: bool,
+    alias_set_consulted: bool,
     complete: bool,
 }
 
@@ -47,6 +48,7 @@ impl Default for ResolutionContext {
         Self {
             files: BTreeSet::new(),
             path_set_consulted: false,
+            alias_set_consulted: false,
             complete: true,
         }
     }
@@ -74,6 +76,20 @@ impl ResolutionContext {
     /// recorded file's contents changed.
     pub fn record_path_set(&mut self) {
         self.path_set_consulted = true;
+    }
+
+    /// Records that the answer depended on the project's **build aliases**.
+    ///
+    /// A third kind of dependency, distinct from both of the others. The alias
+    /// list is assembled from every file's `module_aliases` and sorted
+    /// globally by directory depth then alias length, so adding a build
+    /// configuration anywhere can change which alias wins for an unrelated
+    /// file. Membership is not enough; the ordering is semantic.
+    ///
+    /// Only TypeScript resolution consults it — `resolve_python_module` never
+    /// calls `apply_alias` — so a Python-only result must not carry this flag.
+    pub fn record_alias_set(&mut self) {
+        self.alias_set_consulted = true;
     }
 
     /// Records that the dependency set is **not** known to be complete.
@@ -108,6 +124,12 @@ impl ResolutionContext {
         self.path_set_consulted
     }
 
+    /// Whether the answer depended on the project's build aliases.
+    #[must_use]
+    pub fn consults_alias_set(&self) -> bool {
+        self.alias_set_consulted
+    }
+
     /// Whether every dependency was tracked.
     ///
     /// A future cache may only reuse a result whose context reports `true`.
@@ -124,6 +146,7 @@ impl ResolutionContext {
     pub fn absorb(&mut self, other: &Self) {
         self.files.extend(other.files.iter().cloned());
         self.path_set_consulted |= other.path_set_consulted;
+        self.alias_set_consulted |= other.alias_set_consulted;
         self.complete &= other.complete;
     }
 }
