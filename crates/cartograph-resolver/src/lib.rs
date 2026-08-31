@@ -66,7 +66,9 @@ pub mod orm;
 pub mod routers;
 pub mod symbolic;
 
-pub use access_cache::{AccessCache, AccessCacheStats, GlobalFingerprints};
+pub use access_cache::{
+    AccessCache, AccessCacheError, AccessCacheStats, GlobalFingerprints, RecomputeHook,
+};
 pub use canonical::{
     CanonicalPath, CanonicalRoute, Methods, NormalizationNote, NormalizationStatus,
     ObservationKind, RouteProvenance, Segment,

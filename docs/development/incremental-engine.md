@@ -807,3 +807,75 @@ Airflow's checkout is the UI subtree, which holds only 13 Python files, so it
 exercises alias and graph correctness rather than Stage C cache invalidation.
 Zulip has no build aliases. Neither repository exercises both at full scale in
 one tree.
+
+---
+
+## 16. Failure atomicity
+
+Two invariants, and they are different claims:
+
+**A. No partial generation.** If recomputation fails partway, the previous
+generation remains the cache's only state — not most of it, all of it.
+
+**B. No stale generation presented as current.** A failed update for state S2
+must not answer with the analysis of S1. Keeping the old generation internally
+is correct; *returning* it as the answer for the new state is the defect.
+
+### There was no failure path to test
+
+Until this slice `AccessCache::analyze` returned a `Vec` and could not fail, so
+atomicity could only be argued from the shape of an assignment. `analyze` now
+returns `Result`, and the error propagates through `OrmAnalysis::build_cached`
+to a `CliError`, so the run fails rather than answering.
+
+### Injection
+
+A `RecomputeHook` consulted immediately before each recomputation, **`None` in
+every production build**. Not a feature flag and not an environment read:
+QG-008 forbids the resolver's sources from reading the environment, and a flag
+would put the failure path in a different build than the one under test.
+
+### The boundary
+
+```
+old generation intact
+  → per-file results built into a LOCAL `fresh` map
+  → hook may fail here: return Err, `fresh` is dropped, `self.entries` untouched
+  → self.entries = fresh        ← the single publication point
+  → graph built from the returned contributions
+```
+
+`AccessCacheStats::published` says whether an attempt became state, so no
+combination of hit and miss counts can imply success after an abandoned update;
+`failed_updates` records the abandonment.
+
+### Tested
+
+| Case | Result |
+|---|---|
+| failure before the first entry | nothing published, generation unchanged |
+| failure after 1, 2, 3, 4 entries | nothing published in every case |
+| failed update queried | run errors; old generation **not** returned |
+| retry after clearing the failure | succeeds, equals a clean rebuild |
+| failure then revert | baseline restored **exactly** |
+| failure then a *different* mutation | no residue of the failed attempt |
+| two dependency groups, failure in one | no partial global state |
+| counters after failure | `published=false`, `hits=0`, `misses=0`, `failed_updates=1` |
+
+**On Zulip `0ce8f627`:** a competing model invalidates the whole generation
+(the model fingerprint is a term in every key), and the failure is injected
+**500 entries into a 1,068-entry recomputation**. The generation stays at 1,067
+entries with `published=false`; the retry equals a clean rebuild; removing the
+rival restores the baseline exactly at 1,308 nodes / 1,469 edges.
+
+Building that test found a real mistake first: it originally edited one model
+file, which invalidates only about twenty entries, so a failure at 500 never
+fired and the run succeeded. The assertion caught it rather than passing
+vacuously.
+
+### Limitation
+
+Failure is injected at one boundary — before a recomputation. Failures *inside*
+`discover_accesses` or inside graph construction are not injected, because no
+current path there returns an error. The publication boundary is what this
+slice proves.

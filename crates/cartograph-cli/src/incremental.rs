@@ -2177,6 +2177,93 @@ mod real_repository {
         report("two dependent mutations", &out, base_graph);
     }
 
+    /// PART 17 — failure atomicity on a real repository.
+    ///
+    /// Fixtures have four entries; Zulip has over a thousand, and the
+    /// publication boundary has to hold at that size too. Injects a failure
+    /// partway through a real recomputation, then proves nothing was published
+    /// and a retry equals a clean rebuild.
+    #[test]
+    #[ignore = "needs CARTOGRAPH_MUTATION_ZULIP; real-repository failure atomicity"]
+    fn zulip_failure_atomicity() {
+        let Ok(src) = std::env::var("CARTOGRAPH_MUTATION_ZULIP") else {
+            return;
+        };
+        let repo = Mutable::materialise(std::path::Path::new(&src), "zulip-fail");
+        let mut state = IncrementalState::new();
+        let baseline = repo.incremental(&mut state);
+        let base_graph = canonical(&baseline.graph);
+        let entries_before = state.accesses.len();
+        assert!(entries_before > 1000, "precondition: a real generation");
+        assert!(state.accesses.stats().published);
+
+        // A mutation that invalidates the whole generation: a competing model
+        // moves the model-set fingerprint, which is a term in every key. An
+        // earlier version edited one model file, which invalidates only about
+        // twenty entries, so a failure at 500 never fired — the test caught
+        // that itself rather than passing vacuously.
+        let rival = "cartograph_probe_rival.py";
+        repo.write(
+            rival,
+            "from django.db import models
+class Message(models.Model):
+    class Meta:
+        db_table = 'probe_messages'
+",
+        );
+        state
+            .accesses
+            .inject_failure(Box::new(|file: &str, done: usize| {
+                if done == 500 {
+                    Err(cartograph_resolver::AccessCacheError {
+                        file: file.to_owned(),
+                        reason: "injected failure".to_owned(),
+                    })
+                } else {
+                    Ok(())
+                }
+            }));
+        let failed = pipeline::run_with_cache(&repo.root, Options { quiet: true }, &mut state);
+        assert!(failed.is_err(), "the run must fail rather than answer");
+        assert_eq!(
+            state.accesses.len(),
+            entries_before,
+            "the previous generation must be untouched"
+        );
+        assert!(!state.accesses.stats().published);
+        println!(
+            "  {:<44} entries={entries_before} published=false",
+            "injected failure 500 entries in"
+        );
+
+        // Retry succeeds and equals a clean rebuild.
+        state.accesses.clear_failure();
+        let retried = repo.incremental(&mut state);
+        assert!(state.accesses.stats().published);
+        assert_eq!(
+            canonical(&retried.graph),
+            canonical(&repo.clean().graph),
+            "the retry must equal a clean rebuild"
+        );
+        println!(
+            "  {:<44} hits={} misses={}",
+            "retry after failure",
+            state.accesses.stats().hits,
+            state.accesses.stats().misses
+        );
+
+        // Removing the rival restores the baseline exactly.
+        repo.delete(rival);
+        let restored = canonical(&repo.incremental(&mut state).graph);
+        assert_eq!(base_graph, restored, "the revert must restore the baseline");
+        println!(
+            "  {:<44} nodes={} edges={}",
+            "revert after failure",
+            restored.nodes.len(),
+            restored.edges.len()
+        );
+    }
+
     /// PART 6/15 — the Airflow alias mutation catalogue.
     #[test]
     #[ignore = "needs CARTOGRAPH_MUTATION_AIRFLOW; real-repository differential suite"]
@@ -2283,5 +2370,397 @@ mod real_repository {
             }
         });
         report("edit alias target file", &out, &base_graph);
+    }
+}
+
+/// Failure atomicity: a failed incremental update must publish nothing.
+///
+/// Two invariants, and they are different claims:
+///
+/// **A. No partial generation.** If recomputation fails partway, the previous
+/// generation remains the cache's only state. Not "most of it" — all of it,
+/// unchanged.
+///
+/// **B. No stale generation presented as current.** A failed update for
+/// repository state S2 must not answer with the analysis of S1. Preserving the
+/// old generation internally is correct; returning it as the answer for the
+/// new state is the defect this exists to prevent.
+///
+/// Before this slice there was no failure path at all — `analyze` returned a
+/// `Vec` and could not fail — so atomicity could only be argued from the shape
+/// of an assignment. It is now tested.
+#[cfg(test)]
+mod atomicity {
+    use super::*;
+    use crate::error::{CliError, ErrorCode};
+    use crate::pipeline::{self, Options};
+    use cartograph_resolver::AccessCacheError;
+    use cartograph_testkit::canonical::{CanonicalGraph, canonical};
+
+    struct Repo {
+        root: std::path::PathBuf,
+    }
+
+    impl Repo {
+        fn new(name: &str) -> Self {
+            use std::sync::atomic::{AtomicUsize, Ordering};
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir()
+                .join("cartograph-m10-atomicity")
+                .join(format!("{name}-{}-{unique}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).expect("fixture root");
+            Self { root }
+        }
+
+        fn write(&self, rel: &str, contents: &str) -> &Self {
+            let path = self.root.join(rel);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("parent");
+            }
+            std::fs::write(path, contents).expect("write");
+            self
+        }
+
+        fn run(&self, state: &mut IncrementalState) -> Result<pipeline::Analysis, CliError> {
+            pipeline::run_with_cache(&self.root, Options { quiet: true }, state)
+        }
+
+        fn ok(&self, state: &mut IncrementalState) -> pipeline::Analysis {
+            self.run(state).expect("analysis succeeds")
+        }
+
+        fn clean(&self) -> pipeline::Analysis {
+            pipeline::run(&self.root, Options { quiet: true }).expect("clean analysis")
+        }
+    }
+
+    impl Drop for Repo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    const BASE: &str = "from sqlalchemy.orm import DeclarativeBase\n\
+                        class Base(DeclarativeBase):\n\
+                        \x20   pass\n";
+
+    /// Four Stage C entries (A, B, C, D), each accessing a model, so a failure
+    /// can be injected partway through a multi-entry generation.
+    fn four_entries(repo: &Repo) {
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'orders'\n"),
+        );
+        for name in ["a", "b", "c", "d"] {
+            repo.write(
+                &format!("app/{name}.py"),
+                "from .models import Order\n\
+                 def make():\n\
+                 \x20   return Order(x=1)\n",
+            );
+        }
+    }
+
+    /// Fails on the Nth recomputation of a run (0 = before any).
+    fn fail_after(n: usize) -> cartograph_resolver::RecomputeHook {
+        Box::new(move |file: &str, done: usize| {
+            if done == n {
+                Err(AccessCacheError {
+                    file: file.to_owned(),
+                    reason: "injected failure".to_owned(),
+                })
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    /// The cache's observable state, for before/after comparison.
+    fn generation(state: &IncrementalState) -> (usize, bool) {
+        (state.accesses.len(), state.accesses.stats().published)
+    }
+
+    /// Establishes a baseline generation and returns its graph.
+    fn baseline(repo: &Repo, state: &mut IncrementalState) -> CanonicalGraph {
+        let analysis = repo.ok(state);
+        assert!(
+            canonical(&analysis.graph)
+                .edges
+                .iter()
+                .any(|e| e.contains("OrmAccess")),
+            "precondition: the fixture must produce ORM accesses"
+        );
+        assert!(state.accesses.stats().published);
+        canonical(&analysis.graph)
+    }
+
+    /// PART 6 — failure before any entry is recomputed.
+    #[test]
+    fn a_failure_before_the_first_entry_publishes_nothing() {
+        let repo = Repo::new("before-first");
+        four_entries(&repo);
+        let mut state = IncrementalState::new();
+        let base_graph = baseline(&repo, &mut state);
+        let before = generation(&state);
+        assert!(before.0 > 0, "precondition: a generation must exist");
+
+        // Mutate, then fail immediately.
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'mutated'\n"),
+        );
+        state.accesses.inject_failure(fail_after(0));
+        let result = repo.run(&mut state);
+
+        assert!(result.is_err(), "the run must fail, not answer");
+        assert_eq!(
+            generation(&state).0,
+            before.0,
+            "the previous generation must be untouched"
+        );
+        assert!(
+            !state.accesses.stats().published,
+            "no generation may be reported as published"
+        );
+        assert_eq!(state.accesses.stats().failed_updates, 1);
+
+        // PART 10 — clearing the failure and retrying must succeed and equal
+        // a clean rebuild of the mutated state.
+        state.accesses.clear_failure();
+        let retried = repo.ok(&mut state);
+        assert!(state.accesses.stats().published);
+        assert_eq!(
+            canonical(&retried.graph),
+            canonical(&repo.clean().graph),
+            "the retry must equal a clean rebuild"
+        );
+        assert_ne!(
+            base_graph,
+            canonical(&retried.graph),
+            "and it must reflect the mutation, not the baseline"
+        );
+    }
+
+    /// PART 7/8 — failure after one, several, and every-but-one entry.
+    #[test]
+    fn a_failure_partway_never_publishes_a_partial_generation() {
+        for stop_after in [1usize, 2, 3, 4] {
+            let repo = Repo::new(&format!("partway-{stop_after}"));
+            four_entries(&repo);
+            let mut state = IncrementalState::new();
+            baseline(&repo, &mut state);
+            let entries_before = state.accesses.len();
+
+            repo.write(
+                "app/models.py",
+                &format!("{BASE}class Order(Base):\n    __tablename__ = 'mutated'\n"),
+            );
+            state.accesses.inject_failure(fail_after(stop_after));
+            let result = repo.run(&mut state);
+
+            assert!(
+                result.is_err(),
+                "stop_after={stop_after}: the run must fail rather than publish"
+            );
+            assert_eq!(
+                state.accesses.len(),
+                entries_before,
+                "stop_after={stop_after}: the generation changed size"
+            );
+            assert!(
+                !state.accesses.stats().published,
+                "stop_after={stop_after}: a partial generation was reported as published"
+            );
+
+            state.accesses.clear_failure();
+            let retried = repo.ok(&mut state);
+            assert_eq!(
+                canonical(&retried.graph),
+                canonical(&repo.clean().graph),
+                "stop_after={stop_after}: the retry must equal a clean rebuild"
+            );
+        }
+    }
+
+    /// PART 9 — mandatory. A failed update must not answer with the previous
+    /// state's analysis.
+    #[test]
+    fn a_failed_update_never_answers_with_the_previous_generation() {
+        let repo = Repo::new("stale");
+        four_entries(&repo);
+        let mut state = IncrementalState::new();
+        let generation_one = baseline(&repo, &mut state);
+
+        // Generation 2: a mutation that genuinely changes the graph.
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'generation_two'\n"),
+        );
+        state.accesses.inject_failure(fail_after(1));
+        let result = repo.run(&mut state);
+
+        let Err(error) = result else {
+            panic!("the update must fail rather than answer")
+        };
+        assert_eq!(error.code, ErrorCode::AnalysisFailed);
+        assert!(
+            error.to_string().contains("incremental update failed"),
+            "the failure must be reported plainly: {error}"
+        );
+
+        // The old generation survives *internally* — that is correct — but it
+        // was not returned, and the caller received no analysis at all.
+        assert!(
+            !state.accesses.is_empty(),
+            "the known-good generation survives"
+        );
+        assert!(!state.accesses.stats().published);
+
+        // And a successful retry answers for generation two, not one.
+        state.accesses.clear_failure();
+        let retried = canonical(&repo.ok(&mut state).graph);
+        assert_ne!(
+            generation_one, retried,
+            "the retry must describe the mutated state"
+        );
+        assert!(
+            retried.nodes.iter().any(|n| n.contains("generation_two")),
+            "the new table must be present: {:?}",
+            retried.nodes
+        );
+    }
+
+    /// PART 11 — failure, then revert. The baseline must return exactly.
+    #[test]
+    fn a_failure_then_a_revert_restores_the_baseline_exactly() {
+        let repo = Repo::new("revert");
+        four_entries(&repo);
+        let mut state = IncrementalState::new();
+        let base_graph = baseline(&repo, &mut state);
+        let original = std::fs::read_to_string(repo.root.join("app/models.py")).unwrap();
+
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'temporary'\n"),
+        );
+        state.accesses.inject_failure(fail_after(2));
+        assert!(repo.run(&mut state).is_err());
+
+        // Revert and clear: the baseline must come back exactly.
+        state.accesses.clear_failure();
+        repo.write("app/models.py", &original);
+        let restored = canonical(&repo.ok(&mut state).graph);
+        assert_eq!(base_graph, restored, "the revert must restore the baseline");
+        assert_eq!(
+            restored,
+            canonical(&repo.clean().graph),
+            "and equal a clean rebuild"
+        );
+    }
+
+    /// PART 12 — failure on mutation A must not contaminate mutation B.
+    #[test]
+    fn a_failure_does_not_contaminate_a_later_different_mutation() {
+        let repo = Repo::new("different");
+        four_entries(&repo);
+        let mut state = IncrementalState::new();
+        baseline(&repo, &mut state);
+
+        // Mutation A, failed.
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'mutation_a'\n"),
+        );
+        state.accesses.inject_failure(fail_after(1));
+        assert!(repo.run(&mut state).is_err());
+
+        // Mutation B, succeeding. The result must describe B alone.
+        state.accesses.clear_failure();
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'mutation_b'\n"),
+        );
+        let after = canonical(&repo.ok(&mut state).graph);
+        assert_eq!(
+            after,
+            canonical(&repo.clean().graph),
+            "the second mutation must equal a clean rebuild"
+        );
+        assert!(
+            after.nodes.iter().any(|n| n.contains("mutation_b"))
+                && !after.nodes.iter().any(|n| n.contains("mutation_a")),
+            "no residue of the failed attempt may survive: {:?}",
+            after.nodes
+        );
+    }
+
+    /// PART 16 — two independent dependency groups, failure during one.
+    #[test]
+    fn a_failure_during_one_group_leaves_no_partial_global_state() {
+        let repo = Repo::new("groups");
+        four_entries(&repo);
+        repo.write(
+            "other/models.py",
+            &format!("{BASE}class Receipt(Base):\n    __tablename__ = 'receipts'\n"),
+        )
+        .write(
+            "other/x.py",
+            "from .models import Receipt\ndef make():\n    return Receipt(x=1)\n",
+        );
+        let mut state = IncrementalState::new();
+        let base_graph = baseline(&repo, &mut state);
+
+        // Mutate both groups, fail partway.
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'orders_v2'\n"),
+        )
+        .write(
+            "other/models.py",
+            &format!("{BASE}class Receipt(Base):\n    __tablename__ = 'receipts_v2'\n"),
+        );
+        state.accesses.inject_failure(fail_after(2));
+        assert!(repo.run(&mut state).is_err());
+        assert!(!state.accesses.stats().published);
+
+        state.accesses.clear_failure();
+        let retried = canonical(&repo.ok(&mut state).graph);
+        assert_eq!(
+            retried,
+            canonical(&repo.clean().graph),
+            "the retry must equal a clean rebuild of both groups"
+        );
+        assert_ne!(base_graph, retried);
+    }
+
+    /// PART 18 — the counters cannot imply success when the update failed.
+    #[test]
+    fn the_counters_never_imply_success_after_a_failure() {
+        let repo = Repo::new("counters");
+        four_entries(&repo);
+        let mut state = IncrementalState::new();
+        baseline(&repo, &mut state);
+        assert!(state.accesses.stats().published);
+
+        repo.write(
+            "app/models.py",
+            &format!("{BASE}class Order(Base):\n    __tablename__ = 'x'\n"),
+        );
+        state.accesses.inject_failure(fail_after(1));
+        assert!(repo.run(&mut state).is_err());
+
+        let counters = state.accesses.stats();
+        assert!(
+            !counters.published,
+            "published must be false after a failure"
+        );
+        assert_eq!(counters.failed_updates, 1);
+        assert_eq!(
+            counters.hits, 0,
+            "an abandoned attempt must not report hits that never became state"
+        );
+        assert_eq!(counters.misses, 0);
     }
 }

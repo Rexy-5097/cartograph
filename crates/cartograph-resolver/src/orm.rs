@@ -28,7 +28,7 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance, SourceLocation};
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
 
-use crate::access_cache::{AccessCache, GlobalFingerprints};
+use crate::access_cache::{AccessCache, AccessCacheError, GlobalFingerprints};
 use crate::dependencies::ResolutionContext;
 use crate::imports::{ModuleIndex, Resolution};
 use cartograph_parser::model::{
@@ -276,9 +276,16 @@ pub struct OrmAnalysis {
 
 impl OrmAnalysis {
     /// Discovers models and accesses across a project's analysed files.
+    ///
+    /// # Panics
+    ///
+    /// Never in practice: the no-cache path has no failure source, and the
+    /// `expect` below documents that rather than hiding it behind a `Result`
+    /// every existing caller would have to unwrap.
     #[must_use]
     pub fn build(files: &[FileAnalysis]) -> Self {
         Self::build_inner::<std::collections::hash_map::RandomState>(files, None)
+            .expect("a build without a cache has no failure path")
     }
 
     /// [`build`](Self::build), reusing per-file Stage C results that are still
@@ -288,19 +295,24 @@ impl OrmAnalysis {
     /// parse cache's hashes. Deliberately the same code path as the clean
     /// build: two implementations of Stage C is how `incremental == clean`
     /// would quietly stop being true.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Propagates a Stage C recomputation failure. When one occurs the cache
+    /// publishes nothing: the previous generation stays intact, and no
+    /// analysis is returned for the new repository state.
     pub fn build_cached<S: std::hash::BuildHasher>(
         files: &[FileAnalysis],
         cache: &mut AccessCache,
         identities: &HashMap<String, u64, S>,
-    ) -> Self {
+    ) -> Result<Self, AccessCacheError> {
         Self::build_inner(files, Some((cache, identities)))
     }
 
     fn build_inner<S: std::hash::BuildHasher>(
         files: &[FileAnalysis],
         cache: Option<(&mut AccessCache, &HashMap<String, u64, S>)>,
-    ) -> Self {
+    ) -> Result<Self, AccessCacheError> {
         let mut analysis = Self::default();
         let mut seen: HashMap<String, usize> = HashMap::new();
 
@@ -343,7 +355,7 @@ impl OrmAnalysis {
                     path_set: index.python_path_set_fingerprint().get(),
                     alias_set: index.alias_set_fingerprint().get(),
                 };
-                cache.analyze(&python, &analysis.models, &index, identities, global)
+                cache.analyze(&python, &analysis.models, &index, identities, global)?
             }
             None => python
                 .iter()
@@ -368,7 +380,7 @@ impl OrmAnalysis {
                 dependencies,
             });
         }
-        analysis
+        Ok(analysis)
     }
 }
 

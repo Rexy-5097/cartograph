@@ -470,7 +470,22 @@ fn resolve(
     let orm = match state {
         Some(state) => {
             let identities = state.facts.identities();
-            OrmAnalysis::build_cached(analyses, &mut state.accesses, &identities)
+            // A failed Stage C update publishes nothing, and the whole run
+            // fails with it. Returning the previous generation here would
+            // present an analysis of the *old* repository state as the answer
+            // for the new one — the precise failure this path exists to
+            // prevent.
+            OrmAnalysis::build_cached(analyses, &mut state.accesses, &identities).map_err(
+                |error| {
+                    CliError::new(
+                        ErrorCode::AnalysisFailed,
+                        "the incremental update failed and was abandoned",
+                    )
+                    .with_hint(format!(
+                        "underlying cause: {error}; the previous analysis was left                          untouched and no result is reported for the current state"
+                    ))
+                },
+            )?
         }
         None => OrmAnalysis::build(analyses),
     };

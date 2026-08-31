@@ -36,6 +36,43 @@ use crate::dependencies::ResolutionContext;
 use crate::imports::ModuleIndex;
 use crate::orm::{OrmAccessSite, OrmModel, discover_accesses_tracked};
 
+/// A Stage C recomputation failed.
+///
+/// There is no naturally occurring source of this today — every resolver path
+/// answers rather than errors. It exists so the publication boundary has a
+/// failure path that can be exercised, because "the old generation survives a
+/// failure" is a claim about code that must be tested, not inferred from the
+/// shape of an assignment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccessCacheError {
+    /// Repository-relative path being recomputed when the failure occurred.
+    pub file: String,
+    /// Structural reason. Never source text.
+    pub reason: String,
+}
+
+impl std::fmt::Display for AccessCacheError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "stage C recomputation failed for `{}`: {}",
+            self.file, self.reason
+        )
+    }
+}
+
+impl std::error::Error for AccessCacheError {}
+
+/// A hook consulted before each recomputation.
+///
+/// **Inert unless installed.** A production `AccessCache` has none, so the
+/// production build has no failure behaviour whatsoever; only a test that
+/// calls [`AccessCache::inject_failure`] can make one fail. Deliberately not a
+/// feature flag or an environment read: QG-008 forbids the resolver's sources
+/// from reading the environment, and a flag would put the failure path in a
+/// different build than the one under test.
+pub type RecomputeHook = Box<dyn Fn(&str, usize) -> Result<(), AccessCacheError> + Send + Sync>;
+
 /// What the cache did, so tests can assert on work avoided rather than time.
 ///
 /// Timing cannot distinguish reuse from a fast recomputation, so every cache
@@ -56,6 +93,14 @@ pub struct AccessCacheStats {
     /// tracking was incomplete. A non-zero value means the engine chose to
     /// recompute rather than risk a reuse it could not justify.
     pub refused_to_store: usize,
+    /// Updates abandoned because a recomputation failed.
+    pub failed_updates: usize,
+    /// Whether the most recent update **published a generation**.
+    ///
+    /// The counters above describe an *attempt*. This says whether that
+    /// attempt became the cache's state, so no combination of hit and miss
+    /// counts can imply success when the update was abandoned.
+    pub published: bool,
 }
 
 /// One cached Stage C result and the identity it is valid under.
@@ -84,13 +129,39 @@ pub struct GlobalFingerprints {
 }
 
 /// Per-file Stage C results, reusable while their dependencies hold.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct AccessCache {
     entries: HashMap<String, Entry>,
     stats: AccessCacheStats,
+    /// `None` in every production build. See [`RecomputeHook`].
+    hook: Option<RecomputeHook>,
+}
+
+impl std::fmt::Debug for AccessCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccessCache")
+            .field("entries", &self.entries.len())
+            .field("stats", &self.stats)
+            .field("failure_hook_installed", &self.hook.is_some())
+            .finish()
+    }
 }
 
 impl AccessCache {
+    /// Installs a failure hook. **Tests only.**
+    ///
+    /// Called with the file being recomputed and how many recomputations have
+    /// already completed this run, so a test can fail before the first, after
+    /// one, or after any number.
+    pub fn inject_failure(&mut self, hook: RecomputeHook) {
+        self.hook = Some(hook);
+    }
+
+    /// Removes any installed failure hook.
+    pub fn clear_failure(&mut self) {
+        self.hook = None;
+    }
+
     /// An empty cache. Every lookup through it misses.
     #[must_use]
     pub fn new() -> Self {
@@ -155,6 +226,12 @@ impl AccessCache {
     ///
     /// Returns the accesses per file, in the order `files` gives them, so the
     /// flattened list a caller builds is identical to a clean run's.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AccessCacheError`] when a recomputation fails. Nothing is
+    /// published in that case: the previous generation is left exactly as it
+    /// was, and the partially built generation is dropped.
     pub fn analyze<S: BuildHasher, M: BuildHasher>(
         &mut self,
         files: &[&FileAnalysis],
@@ -162,7 +239,7 @@ impl AccessCache {
         index: &ModuleIndex<'_>,
         identities: &HashMap<String, u64, S>,
         global: GlobalFingerprints,
-    ) -> Vec<(Vec<OrmAccessSite>, ResolutionContext)> {
+    ) -> Result<Vec<(Vec<OrmAccessSite>, ResolutionContext)>, AccessCacheError> {
         let mut stats = AccessCacheStats::default();
         let mut fresh: HashMap<String, Entry> = HashMap::with_capacity(files.len());
         let mut out = Vec::with_capacity(files.len());
@@ -180,6 +257,21 @@ impl AccessCache {
                 out.push((entry.accesses.clone(), entry.dependencies.clone()));
                 fresh.insert(path.to_owned(), entry.clone());
                 continue;
+            }
+
+            // The failure boundary. Consulted *before* the work, and an error
+            // returns immediately — so `self.entries` is never assigned and
+            // the previous generation stays exactly as it was. `fresh` is a
+            // local that is simply dropped.
+            if let Some(hook) = self.hook.as_ref() {
+                if let Err(error) = hook(path, stats.recomputed_files) {
+                    self.stats = AccessCacheStats {
+                        failed_updates: 1,
+                        published: false,
+                        ..AccessCacheStats::default()
+                    };
+                    return Err(error);
+                }
             }
 
             stats.misses += 1;
@@ -234,9 +326,12 @@ impl AccessCache {
             .keys()
             .filter(|k| !fresh.contains_key(*k))
             .count();
+        // Publication. One assignment, after every entry is built, so no
+        // half-updated generation is ever observable.
+        stats.published = true;
         self.entries = fresh;
         self.stats = stats;
-        out
+        Ok(out)
     }
 }
 
