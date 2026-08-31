@@ -93,6 +93,7 @@ dependencies = [
  "cartograph-core",
  "cartograph-graph",
  "cartograph-parser",
+ "cartograph-pipeline",
  "cartograph-resolver",
  "cartograph-testkit",
  "clap",
@@ -110,6 +111,16 @@ dependencies = [
  "serde_json",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "cartograph-desktop"
+version = "0.1.0"
+dependencies = [
+ "cartograph-graph",
+ "cartograph-pipeline",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -138,6 +149,20 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-python",
  "tree-sitter-typescript",
+]
+
+[[package]]
+name = "cartograph-pipeline"
+version = "0.1.0"
+dependencies = [
+ "cartograph-core",
+ "cartograph-graph",
+ "cartograph-parser",
+ "cartograph-resolver",
+ "cartograph-testkit",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

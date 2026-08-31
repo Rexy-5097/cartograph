@@ -1,0 +1,34 @@
+[package]
+name = "cartograph-map"
+description = "MAP — the Cartograph desktop application."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "Apache-2.0"
+repository = "https://github.com/Rexy-5097/cartograph"
+authors = ["Cartograph contributors"]
+
+# Deliberately NOT a member of the root cargo workspace. `tauri` links a system
+# webview (WebKitGTK on Linux), which every M00-M10 CI job has managed without.
+# Keeping this crate out means `cargo check --workspace` keeps working on a
+# machine with no GUI libraries, and the desktop gets its own job that installs
+# what it needs. See ADR-0016.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The repository lifecycle: validation, orchestration, the error contract.
+# Everything testable lives there rather than here.
+cartograph-desktop = { path = "../../crates/cartograph-desktop" }
+tauri = { version = "2", features = [] }
+# The native folder picker. A desktop application that cannot open a folder
+# dialog would have to ask the user to paste a path.
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Tauri's own convention: the CLI passes this for a production build.
+custom-protocol = ["tauri/custom-protocol"]

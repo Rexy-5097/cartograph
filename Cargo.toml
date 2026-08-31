@@ -3,11 +3,19 @@ resolver = "3"
 members = [
     "crates/cartograph-core",
     "crates/cartograph-graph",
+    "crates/cartograph-pipeline",
+    "crates/cartograph-desktop",
     "crates/cartograph-parser",
     "crates/cartograph-resolver",
     "crates/cartograph-cli",
     "crates/cartograph-testkit",
 ]
+
+# The Tauri shell is deliberately outside this workspace: it links a system
+# webview, and every M00-M10 gate has run without GUI libraries present.
+# Excluding it keeps `cargo check --workspace` buildable everywhere and gives
+# the desktop its own CI job. See ADR-0016.
+exclude = ["desktop/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -57,6 +65,8 @@ tree-sitter-python = "0.25"
 
 cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
+cartograph-pipeline = { path = "crates/cartograph-pipeline" }
+cartograph-desktop = { path = "crates/cartograph-desktop" }
 cartograph-parser = { path = "crates/cartograph-parser", version = "0.1.0" }
 cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.1.0" }
 cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.1.0" }

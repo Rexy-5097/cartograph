@@ -7,6 +7,54 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M11 Slice 2, the desktop shell and repository lifecycle
+
+Tauri v2 + React 19 + Vite. **No Sigma.js**: the graph view is the next slice,
+and the window says so rather than showing a placeholder that pretends.
+
+- **`cartograph-pipeline`** — the analysis sequence, extracted verbatim from
+  the `cartograph-cli` **binary** so a second client can call it. ADR-0001 has
+  always said the CLI, desktop and MCP server are peer clients holding no
+  analysis logic; a binary crate cannot be depended on, so that was not quite
+  true until now. Behaviour is unchanged and every M09/M10 suite passes at its
+  recorded count.
+- **`discovery::is_rooted` is now public.** It is the predicate M09's Windows
+  privacy fix introduced, and every client that shows a path back to a user
+  owes the same redaction. A second client answering that question its own way
+  is how the defect would return.
+- **`cartograph-desktop`** — repository validation, session orchestration and
+  the error contract, with **no Tauri dependency**, so the existing workspace
+  gates cover it. `session::analyze` accepts only a `ValidatedRepository`, and
+  the only way to build one is `repository::validate`: an unchecked path cannot
+  reach the analyser.
+- **Structured errors.** `DesktopErrorKind` is a `camelCase` union the frontend
+  branches on; it never parses `message`. Rust tests pin the wire names so a
+  rename fails the build rather than silently un-matching a branch.
+- **`desktop/`** — the Tauri shell and React window: choose a repository, wait,
+  then see counts and clusters or an explained failure. Deliberately **outside
+  the cargo workspace**, because `tauri` links a system webview and no M00–M10
+  gate has ever needed GUI libraries. See
+  [ADR-0016](docs/adr/ADR-0016-desktop-boundary.md).
+- **A `desktop shell` CI job** on Linux and macOS: `npm ci`, type-check, build
+  the frontend, then clippy and check the Tauri crate with warnings denied.
+
+### Known limitations — M11 Slice 2
+
+- **No cancellation.** `pipeline::run` has no interruption point, so "cancel"
+  means the window stops waiting; the analysis runs to completion. A test
+  asserts that abandoning a result leaves the next analysis identical.
+- **Zustand and shadcn/ui are not added.** The state is one discriminated union
+  and `useReducer` holds it; shadcn would bring Tailwind and Radix to render one
+  button. Deferred, not rejected.
+- **The shell is not covered by `cargo test --workspace`** — that is the price
+  of keeping the gates buildable without a webview, and the reason the shell is
+  two commands long.
+- **Windows is not covered by the desktop CI job.** It is the development
+  platform and was validated locally; no cross-platform claim is made beyond
+  what actually ran.
+- `CliError` keeps its name in a crate that is no longer only the CLI's.
+- The application icon is a generated placeholder.
+
 ### Added — M11, deterministic layout in the Rust core
 
 First M11 slice. No UI: Tauri, React, Sigma.js and Zustand are **not** added
