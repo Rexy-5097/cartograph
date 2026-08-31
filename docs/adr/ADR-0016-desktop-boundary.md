@@ -1,7 +1,30 @@
 # ADR-0016 — The desktop boundary: a shared pipeline crate, a testable session, a thin shell outside the workspace
 
-**Status:** Proposed · 2026-09-01 · Implements [ADR-0001](ADR-0001-rust-core-is-the-product.md) ·
-Requires the project owner's acceptance
+**Status:** Accepted · 2026-09-01 · Implements [ADR-0001](ADR-0001-rust-core-is-the-product.md) ·
+Accepted by the project owner with M11 Slice 2
+
+## Decisions recorded on acceptance
+
+The five decisions this ADR is accepted on, stated in one place so a reader
+does not have to infer them from the discussion below:
+
+1. **The analysis pipeline belongs in a shared Rust crate, not inside the CLI
+   binary.** `cartograph-pipeline` owns discovery, parsing, caching and
+   resolution, and every client calls it.
+2. **The Tauri desktop shell is a *client* of that shared pipeline**, on equal
+   footing with the CLI and with the MCP server that follows at M15. It
+   composes nothing of its own.
+3. **The desktop shell may sit outside `cargo test --workspace`** where Tauri's
+   webview requirement makes that necessary, **provided a dedicated desktop CI
+   job validates it.** The exemption is conditional on that job existing and
+   passing, not on the shell being unimportant.
+4. **Zustand is deferred**, because the session is a single state machine that
+   `useReducer` holds without ceremony.
+5. **shadcn/ui is deferred** until the interface actually needs the component
+   and dependency overhead it brings.
+
+Decisions 4 and 5 are deferrals, not rejections: both remain in M11's stated
+stack and neither is foreclosed by anything here.
 
 ## Context
 

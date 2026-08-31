@@ -237,6 +237,11 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Check the shell builds
+      # `cargo build`, not `cargo check`. Checking type-checks and expands the
+      # macros — which is where a bad icon surfaces — but it never links, so it
+      # cannot support the claim that the shell builds. The dependencies are
+      # already compiled by the clippy step above, so this costs the link and
+      # little else.
+      - name: Build the shell
         working-directory: desktop/src-tauri
-        run: cargo check --all-targets
+        run: cargo build
