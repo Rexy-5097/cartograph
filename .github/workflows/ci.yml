@@ -137,7 +137,11 @@ jobs:
           "$BIN" version | grep -q "milestone $MILESTONE"
 
           "$BIN" "$FIXTURES" | grep -q "Nothing above is claimed to be verified"
-          "$BIN" --json "$FIXTURES" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['schema_version']=='1.0'; assert d['summary']['files']>0"
+          # Derived from the constant, not pinned. A literal here is outside
+          # the workspace, so cargo and the gates cannot see it and it fails
+          # in CI one milestone late.
+          SCHEMA=$(grep -oE 'SCHEMA_VERSION: &str = "[^"]+"' crates/cartograph-cli/src/json.rs | grep -oE '"[^"]+"' | tr -d '"')
+          "$BIN" --json "$FIXTURES" | SCHEMA="$SCHEMA" python3 -c "import json,os,sys; d=json.load(sys.stdin); assert d['schema_version']==os.environ['SCHEMA'], d['schema_version']; assert d['summary']['files']>0"
           "$BIN" trace http.ts --path "$FIXTURES" | grep -q "HTTP-CALL"
 
           # Exit codes are a documented contract (docs/development/cli.md).

@@ -28,39 +28,55 @@ fn fixtures() -> PathBuf {
         .join("blast")
 }
 
-/// Writes the fixture repository. Small, deterministic, and shaped like the
-/// cross-stack chain the milestone is about.
+/// Writes the fixture repository, exactly once per test binary.
+///
+/// The `Once` is not an optimisation. Tests run in parallel, and rewriting a
+/// tree while another test's analyser is walking it means a reader can observe
+/// a half-written file — which showed up as `the_text_and_json_forms_report_the_same_count`
+/// failing on Linux while passing on Windows, purely on timing.
 fn ensure_fixture() -> PathBuf {
+    static WRITTEN: std::sync::Once = std::sync::Once::new();
     let root = fixtures();
-    let web = root.join("web");
-    let api = root.join("api");
-    std::fs::create_dir_all(&web).expect("fixture directory");
-    std::fs::create_dir_all(&api).expect("fixture directory");
 
-    std::fs::write(
-        web.join("client.ts"),
-        "export async function loadOrders() {\n  \
-         return fetch('/api/orders');\n}\n",
-    )
-    .expect("write");
-    std::fs::write(
-        api.join("routes.py"),
-        "from flask import Flask\n\
-         from .models import Order\n\n\
-         app = Flask(__name__)\n\n\
-         @app.route('/api/orders')\n\
-         def list_orders():\n    \
-         return Order.objects.all()\n",
-    )
-    .expect("write");
-    std::fs::write(
-        api.join("models.py"),
-        "from django.db import models\n\n\
-         class Order(models.Model):\n    \
-         class Meta:\n        \
-         db_table = 'orders'\n",
-    )
-    .expect("write");
+    WRITTEN.call_once(|| {
+        let web = root.join("web");
+        let api = root.join("api");
+        std::fs::create_dir_all(&web).expect("fixture directory");
+        std::fs::create_dir_all(&api).expect("fixture directory");
+
+        std::fs::write(
+            web.join("client.ts"),
+            "export async function loadOrders() {
+               return fetch('/api/orders');
+}
+",
+        )
+        .expect("write");
+        std::fs::write(
+            api.join("routes.py"),
+            "from flask import Flask
+             from .models import Order
+
+             app = Flask(__name__)
+
+             @app.route('/api/orders')
+             def list_orders():
+                 return Order.objects.all()
+",
+        )
+        .expect("write");
+        std::fs::write(
+            api.join("models.py"),
+            "from django.db import models
+
+             class Order(models.Model):
+                 class Meta:
+                     db_table = 'orders'
+",
+        )
+        .expect("write");
+    });
+
     root
 }
 
