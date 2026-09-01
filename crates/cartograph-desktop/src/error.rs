@@ -59,6 +59,13 @@ pub enum DesktopErrorKind {
     StaleSelection,
     /// The edge is not part of the current analysis.
     UnknownEdge,
+    /// The artefact is not part of the current analysis.
+    ///
+    /// Distinct from [`Self::UnknownEdge`] so a surface can say which kind of
+    /// handle went stale, and distinct from an empty result: "nothing depends
+    /// on this" is an answer, "this is not here" is a disagreement between the
+    /// window and the graph.
+    UnknownNode,
     /// Evidence was requested before anything had been analysed.
     NoAnalysis,
     /// A defect. Reaching this means Cartograph is wrong, not the user.

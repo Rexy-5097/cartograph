@@ -22,6 +22,7 @@
 
 use std::sync::Mutex;
 
+use cartograph_desktop::blast::{self, BlastPayload};
 use cartograph_desktop::error::{DesktopError, DesktopErrorKind};
 use cartograph_desktop::evidence::{AnalysisId, AnalysisSession, EvidenceRecord};
 use cartograph_desktop::repository::{self, ValidatedRepository};
@@ -96,6 +97,31 @@ fn edge_evidence(
     session.evidence(analysis, cartograph_core::EdgeId::from_raw(edge))
 }
 
+/// What depends on one artefact.
+///
+/// Takes the analysis id the window was looking at for the same reason
+/// `edge_evidence` does: `NodeId` restarts at zero per analysis, so an id from
+/// a replaced graph would otherwise resolve to a different artefact and
+/// highlight a confident, wrong impact set.
+///
+/// Runs on the blocking pool: a blast radius over a large graph is CPU-bound,
+/// and holding an async worker for it would stall other commands.
+#[tauri::command(async)]
+fn blast_radius(
+    analysis: AnalysisId,
+    node: u64,
+    current: tauri::State<'_, Current>,
+) -> Result<BlastPayload, DesktopError> {
+    let held = current.0.lock().map_err(|_| poisoned())?;
+    let session = held.as_ref().ok_or_else(|| {
+        DesktopError::new(
+            DesktopErrorKind::NoAnalysis,
+            "No repository has been analysed yet.",
+        )
+    })?;
+    blast::radius(session, analysis, cartograph_core::NodeId::from_raw(node))
+}
+
 /// A poisoned lock means a command panicked while holding it. That is a defect
 /// here, not a user error, and it is reported as one rather than papered over.
 fn poisoned() -> DesktopError {
@@ -122,7 +148,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             validate_repository,
             analyze_repository,
-            edge_evidence
+            edge_evidence,
+            blast_radius
         ])
         .run(tauri::generate_context!())
         .expect("the Tauri runtime failed to start");

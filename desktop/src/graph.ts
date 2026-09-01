@@ -96,8 +96,14 @@ const SIZE_BY_KIND: Partial<Record<NodeKind, number>> = {
   file: 3,
 };
 
-function sizeFor(kind: NodeKind): number {
-  return SIZE_BY_KIND[kind] ?? 2.5;
+/**
+ * A node's drawn size, from its kind.
+ *
+ * Exported so the blast-radius highlight restores the same value rather than
+ * keeping a second table that could drift from this one.
+ */
+export function nodeSize(kind: NodeKind | undefined): number {
+  return (kind === undefined ? undefined : SIZE_BY_KIND[kind]) ?? 2.5;
 }
 
 /**
@@ -119,8 +125,14 @@ const EDGE_COLORS: Record<EdgeKind, string> = {
   references: "#3a3f47",
 };
 
-function edgeColor(kind: EdgeKind): string {
-  return EDGE_COLORS[kind] ?? "#454b55";
+/** An edge's colour, from its kind. Exported for the same reason as [`nodeSize`]. */
+export function edgeColor(kind: string): string {
+  return EDGE_COLORS[kind as EdgeKind] ?? "#454b55";
+}
+
+/** An edge's drawn width, from its kind. The cross-stack kinds are heavier. */
+export function edgeSize(kind: string): number {
+  return kind === "http-call" || kind === "orm-access" ? 1.4 : 0.7;
 }
 
 /** A coordinate Sigma can survive: a real, finite number. */
@@ -184,7 +196,7 @@ export function buildGraph(scene: Scene | null | undefined): BuildResult {
       cluster: node.cluster,
       label: typeof node.label === "string" ? node.label : key,
       kind: node.kind,
-      size: sizeFor(node.kind),
+      size: nodeSize(node.kind),
       color: clusterColor(node.cluster),
     });
   }
@@ -216,7 +228,7 @@ export function buildGraph(scene: Scene | null | undefined): BuildResult {
     const attributes = {
       kind: edge.kind,
       color: edgeColor(edge.kind),
-      size: edge.kind === "http-call" || edge.kind === "orm-access" ? 1.4 : 0.7,
+      size: edgeSize(edge.kind),
     };
     if (key === undefined) {
       graph.addEdge(from, to, attributes);

@@ -37,6 +37,7 @@ export type DesktopErrorKind =
   | "cancelled"
   | "staleSelection"
   | "unknownEdge"
+  | "unknownNode"
   | "noAnalysis"
   | "internal";
 
@@ -157,6 +158,43 @@ export interface EvidenceRecord {
   deterministic: boolean;
   evidence: string;
   location: EvidenceLocation;
+}
+
+/**
+ * One artefact that depends on the blast-radius target.
+ *
+ * Mirrors `cartograph_desktop::blast::ImpactedNode`, and carries the same
+ * field names as `cartograph blast --json`: one contract, two renderings.
+ */
+export interface ImpactedNode {
+  node: number;
+  /** Hops to the target along the reported route. Always at least 1. */
+  depth: number;
+  /**
+   * Confidence of the best-supported route — the minimum along it, maximised
+   * over routes (ADR-0018). **Not a probability**; see `calibrated`.
+   */
+  confidence: number;
+  /** The edge this artefact reaches the target through, on that route. */
+  via: number;
+}
+
+/**
+ * What depends on a selected artefact.
+ *
+ * Computed entirely in Rust. Nothing in this application may recompute it, and
+ * nothing may infer additional impact from it.
+ */
+export interface BlastResult {
+  /** The analysis this belongs to; a response for any other must be discarded. */
+  analysis: AnalysisId;
+  /** The artefact queried. Never appears in `reached`. */
+  target: number;
+  reached: ImpactedNode[];
+  /** Always false: an uncalibrated prior, not a likelihood. */
+  calibrated: boolean;
+  /** Always "representative": one route per artefact, not all of them. */
+  routes: string;
 }
 
 /** A named group of nodes. */

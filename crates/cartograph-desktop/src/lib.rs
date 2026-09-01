@@ -45,6 +45,7 @@
 //! than two that can disagree; keeping the *names* here means both sides use
 //! the same words.
 
+pub mod blast;
 pub mod error;
 pub mod evidence;
 pub mod repository;

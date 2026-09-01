@@ -100,7 +100,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* `safe` matters: centring a column that overflows its scroll container puts
+     the first content above scrollTop 0, where nothing can reach it. That hid
+     the graph's upper edge already, and would hide the search control outright
+     in a short window. `safe` falls back to flex-start exactly when it would
+     otherwise overflow. */
+  justify-content: safe center;
   gap: 1rem;
   padding: 2rem 1.25rem 3rem;
   text-align: center;
@@ -476,4 +481,85 @@ body {
   border-left: 3px solid var(--danger);
   padding-left: 0.7rem;
   color: var(--danger);
+}
+
+/* ── Blast radius summary ───────────────────────────────────────────────
+ *
+ * A status strip rather than a panel: the answer is mostly on the canvas, and
+ * this says how much of it there is and how to get back.
+ */
+.blast-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0 0 1.25rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid #e0803c;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.blast-summary p {
+  margin: 0;
+}
+
+/* Finding an artefact by name. A node can be impossible to click when a larger
+   neighbour covers it, so naming one has to be possible too. */
+.node-search {
+  margin: 0.75rem 0;
+}
+
+.node-search label {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8b93a1;
+  margin-bottom: 0.3rem;
+}
+
+.node-search input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #3a4049;
+  border-radius: 4px;
+  background: #1b1e23;
+  color: #e6e8ec;
+  font: inherit;
+}
+
+.node-search-results {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  border: 1px solid #3a4049;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.node-search-results button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  background: transparent;
+  color: #e6e8ec;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-search-results button:hover,
+.node-search-results button:focus-visible {
+  background: #2a2f36;
+}
+
+.match-kind {
+  color: #8b93a1;
+  font-size: 0.8em;
 }
