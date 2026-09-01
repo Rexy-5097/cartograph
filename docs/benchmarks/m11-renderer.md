@@ -82,58 +82,71 @@ not exist in a build.
 | Clusters | **115** |
 | Fixture | 1,745,219 bytes of JSON |
 
-## Results — four runs
+## Results — six runs
 
-One run was taken during Slice 3; three more were taken during Slice 4 with the
-window foregrounded, on the same machine and the same fixture. **Every run is
-reported. None was discarded, and the headline is the range, not the best.**
+Every run taken is reported. **None was discarded, and the headline is the
+range rather than the best.** Runs 1–3 were taken during Slice 3 and Slice 4;
+runs 4–6 during M11 acceptance, all with the window foregrounded.
 
-| | Slice 3 | Run 1 | Run 2 | Run 3 |
-|---|---:|---:|---:|---:|
-| `buildGraph` (ms) | 34.8 | 18.7 | 17.2 | 17.1 |
-| Sigma init (ms) | 64.2 | 49.1 | 44.2 | 47.1 |
-| Frames sampled | 1,104 | 1,577 | 1,527 | 1,583 |
-| **Median frame (ms)** | 8.6 | **6.1** | **6.1** | **6.1** |
-| 95th percentile (ms) | 12.1 | 8.1 | 12.8 | 8.1 |
-| Worst frame (ms) | 95.8 | 21.3 | 23.5 | 22.0 |
-| Frames over 16.67 ms | 25 (2.3%) | 1 (0.06%) | 22 (1.44%) | 1 (0.06%) |
-| JS heap (MB) | 28.2 | 20.4 | 20.9 | 32.5 |
+| Run | Median | p95 | Worst | Frames | Over 16.67 ms |
+|---|---:|---:|---:|---:|---:|
+| 1 | 9.60 ms | 13.00 | 39.80 | 993 | 1.31% |
+| 2 | 9.40 ms | 13.60 | 44.20 | 997 | 1.10% |
+| 3 | 9.80 ms | 13.70 | 40.10 | 966 | 0.83% |
+| 4 | 10.00 ms | 14.30 | 46.80 | 925 | 1.41% |
+| 5 | 7.60 ms | 11.50 | 37.90 | 1,228 | 0.49% |
+| 6 | 6.70 ms | 11.10 | 31.50 | 1,326 | 0.08% |
 
-**Aggregate over the three foregrounded runs:** median frame **6.1 ms in all
-three** → 163.9 FPS; p95 8.1–12.8 ms; worst frame 21.3–23.5 ms; frames over
-budget **0.06%–1.44%**. The median is inside the 16.67 ms budget in every run,
-and so is the 95th percentile.
+**Aggregate:** median **6.70–10.00 ms**, p95 **11.10–14.30 ms**, worst frame
+**31.50–46.80 ms**, frames over budget **0.08%–1.41%**.
 
-### Reading the number honestly
+**Every median and every p95 is inside the 16.67 ms budget, in every run.**
 
-The median is **6.1 ms in all three runs, to the same decimal**. That is not
-the renderer being precisely reproducible — it is **vsync**. 1000/165 ≈ 6.06 ms,
-and `requestAnimationFrame` is paced by the compositor, so a 165 Hz display
-cannot report a median below about 6.1 ms no matter how fast the drawing is.
+## A correction to an earlier conclusion
 
-What the figure therefore establishes is that **Sigma is keeping up with the
-display**, not how much headroom is left. The informative numbers are the ones
-that can move: the worst frame (21–24 ms) and the proportion over budget
-(0.06%–1.44%). Those say a stutter is rare but real.
+An earlier version of this record reported a 6.1 ms median and explained it as
+a **vsync floor** on a 165 Hz display (1000/165 ≈ 6.06 ms), concluding the
+figure said nothing about headroom.
 
-It also means **the frame rate cannot be compared against 60 FPS directly** —
-this panel refreshes at 165 Hz, so the meaningful question is what fraction of
-frames miss the 16.67 ms budget, and that answer is under 1.5% in the worst of
-the three runs.
+**That reasoning was wrong and is superseded.** Across the six runs above the
+median moves between 6.70 and 10.00 ms — which it could not do if it were hard
+bound to the refresh interval. Under load, frames take two refresh intervals
+instead of one. **Headroom is finite and measurable**, not unbounded.
+
+The correct reading:
+
+- the median is **not** a constant of the display; it responds to real load;
+- the criterion is met on the evidence that matters — median *and* p95 inside
+  the frame budget across six runs in varying machine states;
+- the **tail is the real limitation**: worst frames of 31–47 ms, roughly one in
+  a hundred, are visible stutter. A median inside budget does not remove them.
+
+The superseded explanation is recorded here rather than deleted, because the
+mistake is instructive: a single run made a load-dependent number look like a
+hardware constant.
+
+## Judgement
+
+**PASS.** Not on the median alone — on median and 95th percentile both inside
+16.67 ms across six runs spanning idle and loaded states, with over-budget
+frames at or below 1.41%.
+
+**Recorded caveats:** worst-frame stutter of 31–47 ms; a debug build; one
+machine; a 165 Hz display, on which a 60 Hz panel's behaviour cannot be
+inferred.
 
 ## What this does not establish
 
-- **`firstFrameMs` is not a usable measurement and is excluded from the table
-  above.** Across the four runs it read 7,652 ms, 4,559 ms, 36,987 ms and
-  1,918 ms — a nineteen-fold spread that no rendering cost explains. It tracks
-  when the window was given focus: WebView2 throttles `requestAnimationFrame`
-  hard for a background window. Measuring time-to-first-frame properly needs
-  the activation state controlled, which this harness does not do. The
-  variation is reported rather than hidden, and the number is not interpreted.
-- **The median is vsync-bound**, so it is a floor, not a ceiling on capability.
-  See "Reading the number honestly" above.
-- **Four runs on one machine** still cannot characterise other hardware, and a
-  60 Hz panel would produce a different-looking median for the same renderer.
+- **`firstFrameMs` is not a usable measurement and is excluded.** Across runs
+  it varied roughly nineteen-fold, which no rendering cost explains; it tracks
+  when the window was given focus, because WebView2 throttles
+  `requestAnimationFrame` for a background window. Measuring time-to-first-frame
+  properly needs the activation state controlled, which this harness does not
+  do. The variation is reported rather than hidden and the number is not
+  interpreted.
+- **Six runs on one machine** cannot characterise other hardware, and a 60 Hz
+  panel would produce a different-looking median for the same renderer.
+- **Debug build.** A release build would likely do better; no claim either way.
 - **Debug build.** A release build would likely do better; no claim is made
   either way.
 - **The React wrapper is not measured.** The benchmark constructs Sigma

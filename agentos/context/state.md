@@ -7,27 +7,55 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M10 — incremental analysis engine** (accepted 2026-08-31) |
-| Status | M00–M10 **ACCEPTED**; M11 **implemented on `main`, not accepted** |
+| Last accepted milestone | **M11 — desktop application, MAP** (accepted 2026-09-01) |
+| Status | M00–M11 **ACCEPTED**; M12 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M11 — **unlocked**; M12 locked until M11 is accepted |
-| Last accepted checkpoint | `cartograph-m10` (immutable, commit `8690ebf`) |
+| Next permitted milestone | M12 — **unlocked**; M13 locked until M12 is accepted |
+| Last accepted checkpoint | `cartograph-m11` (immutable, commit `17f114e`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` now reads **M11**, matching
-> `cartograph_cli::version::MILESTONE`. The two are asserted equal by a unit
-> test and must always move together, which is why they moved in a pull
-> request rather than a bookkeeping commit — the constant is product code.
->
-> It read M09 through M10's acceptance because M10 added no CLI surface. M11
-> does: the desktop application is a second client of the same core, and its
-> four slices are merged (PRs #18, #19, #21, #22).
->
-> **This is not acceptance.** `milestones.M11.status` is still `NOT_STARTED`,
-> `last_checkpoint` is still `cartograph-m10`, and `cartograph-m11` does not
-> exist. Those change only at the formal acceptance step.
+> `current_milestone` in the ledger reads **M11** and stays there.
+> `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
+> so the two must move together — in a pull request, because the constant is
+> product code and a bookkeeping commit may not touch it. Setting the field to
+> M12 would be wrong twice over: no M12 code exists, and advancing it alone
+> fails QG-004. M12 is unlocked by `next_allowed_milestone`, exactly as M11 was
+> at M10's acceptance.
 
 ## What exists
+
+- **M11: ACCEPTED** — MAP, the desktop application, delivered as four reviewed
+  slices through an open-source fork (PRs #18, #19, #21, #22, plus #23 for the
+  version prerequisite).
+
+  M11 added a **second client, not a second implementation**. ADR-0001 claimed
+  the CLI, desktop and MCP server are peers of one core; that was not quite
+  true, because the sequence turning a directory into a graph lived inside the
+  CLI *binary*, which nothing can depend on. It now lives in
+  `cartograph-pipeline`, so the claim is true rather than aspirational.
+
+  Layout is computed in Rust and **copied to the renderer without arithmetic** —
+  asserted with bit equality on both sides, because a tolerance would pass a
+  frontend transform. Sigma draws and computes nothing. The evidence record is
+  a **lookup** rather than part of the render payload, so ten thousand nodes do
+  not carry data nothing draws. A selection cannot outlive its graph: `EdgeId`
+  restarts at zero per analysis, so a stale id would otherwise resolve to a
+  *different* relationship, and the Rust side refuses it by generation token.
+
+  **Accepted on two criteria.** MAP answers "what is this system?" — judged
+  PASS by the project owner on Apache Airflow (`9b43d6abc0fc`): 3,104 nodes,
+  3,350 edges, 313 clusters, with 175 HttpCall edges from TypeScript into
+  FastAPI handlers and 60 tables. And 10,000 nodes at 60 FPS — six foregrounded
+  runs, median 6.70–10.00 ms and p95 11.10–14.30 ms, both inside the 16.67 ms
+  budget every time.
+
+  **Not every corpus produces a map that rich.** Zulip gives 1,308 nodes but
+  **zero routes** and one table, because it registers URLs through
+  `rest_path(...)`, which the resolver does not recognise; full-stack-fastapi
+  gives 2 nodes. Both are inherited M07/M08 resolver coverage, not rendering —
+  the same desktop draws all three faithfully. Worst frames of 31–47 ms are
+  real, occasional stutter. The Windows MSI bundle cannot be produced because
+  `tauri.conf.json` declares only a `.png` icon.
 
 - **M10: ACCEPTED** — incremental analysis, delivered as correctness first.
   A parse fact cache keyed by content hash, recorded semantic read-dependency

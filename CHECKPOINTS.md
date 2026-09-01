@@ -453,6 +453,189 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M11 — Desktop application, MAP
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-01 by the project owner |
+| Base | `cartograph-m10` — commit `8690ebf` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#18](https://github.com/Rexy-5097/cartograph/pull/18) · [#19](https://github.com/Rexy-5097/cartograph/pull/19) · [#21](https://github.com/Rexy-5097/cartograph/pull/21) · [#22](https://github.com/Rexy-5097/cartograph/pull/22) · [#23](https://github.com/Rexy-5097/cartograph/pull/23) |
+| **Accepted checkpoint** | **`cartograph-m11`** — merge commit `17f114e`, immutable |
+| Scope records | [ADR-0015](docs/adr/ADR-0015-layout-contract.md) · [ADR-0016](docs/adr/ADR-0016-desktop-boundary.md) · [ADR-0017](docs/adr/ADR-0017-render-scene.md) |
+
+### Delivered in four slices
+
+| Slice | PR | What landed |
+|---|---|---|
+| 1 — layout contract | #18 | Deterministic Rust layout emitting `{id, x, y, cluster}` |
+| 2 — desktop foundation | #19 | `cartograph-pipeline` extracted from the CLI binary; testable session; Tauri v2 shell; repository lifecycle |
+| 3 — renderer | #21 | Graphology + Sigma.js v3; the 10k measurement |
+| 4 — evidence | #22 | Edge click opens the evidence record; `AnalysisId` stale-selection guard |
+| prerequisite | #23 | `version::MILESTONE` and `current_milestone` advanced together |
+
+### The architecture the milestone was really about
+
+M11 added a **second client**, not a second implementation. ADR-0001 claimed the
+CLI, desktop and MCP server are peers of one core; that was not quite true,
+because the *sequence* turning a directory into a graph lived in
+`cartograph-cli`, a binary crate nothing can depend on. Slice 2 moved it to
+`cartograph-pipeline` verbatim, so the claim became true rather than aspirational.
+
+```
+Rust analysis → Rust layout → {id,x,y,cluster} → Scene → Tauri → React → Graphology → Sigma
+                                                                                    (drawing only)
+```
+
+**Layout is computed in Rust and copied without arithmetic.** Both sides assert
+bit equality rather than a tolerance, because a tolerance would pass a frontend
+transform that scaled every position by 1.0000001 — which is precisely the
+defect that would quietly falsify ADR-0001 and uncontain the renderer swap
+ADR-0006 protects.
+
+**Evidence is a lookup, not part of the render payload.** ADR-0017 kept
+confidence, provenance and evidence out of the scene so ten thousand nodes do
+not carry data nothing draws; the record is fetched for the one edge clicked.
+
+**Stale selection is refused at the Rust boundary.** `EdgeId` is graph-local and
+restarts at zero per analysis (ADR-0011), so an id held across a re-analysis
+almost certainly still *exists* in the new graph — as a different relationship.
+A naive lookup would return confident, well-formed, wrong evidence. Every
+analysis is stamped with an `AnalysisId` and a mismatch is refused. The window
+also clears its selection, but a guarantee that depends on a client remembering
+to do something is not a guarantee.
+
+### Acceptance criterion 1 — MAP answers "what is this system?"
+
+**PASS — human owner judgement**, on Apache Airflow at `9b43d6abc0fc`:
+**3,104 nodes · 3,350 edges · 313 clusters**.
+
+The cross-stack claim the product exists to make is visible: **175 `HttpCall`
+edges** from TypeScript in `ui/openapi-gen/` into FastAPI handlers
+(`get_assets`, `create_asset_event`, `materialize_asset`), **60 tables** reached
+through 60 `Queries` edges, and clusters named after the real architecture —
+`api_fastapi/core_api/routes/public` (89), `airflow/models` (73),
+`ui/openapi-gen/queries` (453), `ui/src/queries` (63).
+
+**Not every benchmark repository produces a map this rich, and that is recorded
+rather than smoothed over:**
+
+| Corpus | Commit | Nodes | Edges | Clusters | Result |
+|---|---|---:|---:|---:|---|
+| Apache Airflow | `9b43d6abc0fc` | 3,104 | 3,350 | 313 | **satisfies the criterion** |
+| Zulip | `0ce8f6278cde` | 1,308 | 1,469 | 32 | thin |
+| full-stack-fastapi | `162344da111e` | 2 | 1 | 2 | thin |
+
+**Zulip is thin because of resolver coverage, not rendering.** It has **zero
+route nodes**, one table, and 11 `HttpCall` edges most of which are test
+utilities, because it registers URLs through `rest_path(...)` — a project-local
+helper `benchmarks/corpus.json` already records as unsupported. There are no
+route nodes for the desktop to draw. **full-stack-fastapi** yields 2 nodes for
+the same class of reason: M09's "23 routes" were *observations* that never
+became matched edges.
+
+The same desktop draws all three faithfully. The limitation is inherited M07/M08
+coverage, correctly attributed — which does not make it acceptable, only
+correctly located.
+
+### Acceptance criterion 2 — 10,000 nodes at 60 FPS
+
+**PASS**, measured over **six foregrounded runs** of the real Tauri window on
+the deterministic fixture (**10,000 nodes · 11,444 edges · 115 clusters**),
+generated by the real layout engine and the real `scene::compose`.
+
+| Run | Median | p95 | Worst | Frames | Over 16.67 ms |
+|---|---:|---:|---:|---:|---:|
+| 1 | 9.60 | 13.00 | 39.80 | 993 | 1.31% |
+| 2 | 9.40 | 13.60 | 44.20 | 997 | 1.10% |
+| 3 | 9.80 | 13.70 | 40.10 | 966 | 0.83% |
+| 4 | 10.00 | 14.30 | 46.80 | 925 | 1.41% |
+| 5 | 7.60 | 11.50 | 37.90 | 1,228 | 0.49% |
+| 6 | 6.70 | 11.10 | 31.50 | 1,326 | 0.08% |
+
+**Every median (6.70–10.00 ms) and every p95 (11.10–14.30 ms) sits inside the
+16.67 ms budget**, across runs spanning idle and loaded machine states.
+
+**A correction is recorded here deliberately.** An earlier report explained a
+6.1 ms median as a vsync floor on a 165 Hz display and inferred unbounded
+headroom. That was wrong: the median moved between 6.70 and 10.00 ms across
+these runs, which it could not if it were hard-bound to the refresh interval.
+Headroom is finite. The superseded reasoning is corrected in
+`docs/benchmarks/m11-renderer.md` rather than quietly deleted.
+
+Environment: Intel Core 7 240H · 23.6 GB · Windows 11 26200 · WebView2/Chromium
+151 · Tauri 2.11.5 · Sigma 3.0.3 · Graphology 0.26.0 · **debug build** · 165 Hz.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `17f114e`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check --workspace --all-targets` | PASS |
+| `cargo clippy … -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **690 passed, 0 failed, 14 ignored** |
+| frontend typecheck · test · build | PASS — 43 tests |
+| npm wrapper tests | PASS |
+| `cargo bench --workspace --no-run` | PASS |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100 |
+| CI on `17f114e` | PASS — all 8 checks, including both desktop-shell jobs |
+
+### Verification findings
+
+**M09 and M10 semantics are unchanged.** differential 23 · access_cache 12 ·
+atomicity 7 · read_dependencies 56 · layout_contract 19 · imports 15 · orm 38 ·
+cross_stack 12 · full_stack 5 · matching 38 · routers 12 ·
+dynamic_resolution 15 · evaluator 21 · symbolic 18 · client_trace 10 ·
+canonicalization 59 — every suite at its recorded count.
+
+**No stable cross-run identity was introduced.** `crates/cartograph-core/src/id.rs`
+differs from `cartograph-m09` by documentation only. The `AnalysisId` added in
+Slice 4 is a within-process generation counter, explicitly not persisted and
+meaningless across runs; ADR-0014's gate is untouched.
+
+**Security.** No network, no credentials, no source upload, no source logging,
+no absolute path in any panel or payload (asserted on the serialised record).
+`Command::new` appears only in `build.rs`, capturing the git commit at build
+time, and in tests invoking the CLI binary — never at runtime, and never
+constructed from a repository path.
+
+**Two defects were found by the work rather than by review**, and both are
+recorded because the class matters more than the instance: Vite watched
+`src-tauri/target` and killed `tauri dev` with an unrelated-looking error; and
+the development-only benchmark was being bundled into production builds because
+guarding the JSX is not enough — the guard has to wrap the dynamic import. CI
+now asserts the second.
+
+### Accepted limitations
+
+- **Worst frames of 31–47 ms occur**, roughly one in a hundred, and are visible
+  stutter. Median and p95 are inside budget; the tail is not.
+- The 10k measurement is a **debug build on one machine** with a 165 Hz display.
+  A 60 Hz panel would produce a different-looking median for the same renderer.
+- **Zulip and full-stack-fastapi produce thin maps** for documented resolver
+  coverage reasons, not rendering ones. MAP was judged on Airflow.
+- **The Windows MSI bundle cannot be produced**: `tauri.conf.json` lists only
+  `icons/icon.png`, while the bundler requires a `.ico` — which exists at
+  `src-tauri/icons/icon.ico` but is not declared. The application binary builds
+  and runs; only the installer does not. Deliberately not fixed during the
+  acceptance run.
+- The evidence panel is tested through its **pure presentation helpers and the
+  Rust contract**, not a rendered DOM.
+- The desktop shell sits **outside `cargo test --workspace`** and is covered by
+  a dedicated CI job (ADR-0016). No Windows desktop CI — Windows is validated
+  locally only.
+- **No stable cross-run node identity.** M13 requires it; ADR-0014 states the
+  gate.
+- Evidence is fetched per click; a future multi-select would want batching.
+- M08's measurement limits carry forward unchanged — confidence remains an
+  uncalibrated prior, and the panel says so from the data.
+
+---
+
 ## M10 — Incremental analysis engine
 
 | Field | Value |

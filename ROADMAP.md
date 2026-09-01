@@ -35,8 +35,8 @@ real-repository validation.
 | M08 | Golden fixtures, CrossStack-Bench, calibration | Week 4 | **Accepted** (`cartograph-m08`) |
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | **Accepted** (`cartograph-m09`) |
 | M10 | Incremental engine | Week 8 | **Accepted** (`cartograph-m10`) — Stage C only, see [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) |
-| M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | **Unlocked, not started** |
-| M12 | Blast radius across language boundaries | Week 13 | Not started |
+| M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | **Accepted** (`cartograph-m11`) |
+| M12 | Blast radius across language boundaries | Week 13 | **Unlocked, not started** |
 | M13 | Structural diff, branch against branch | Week 16 | Not started |
 | M14 | GitHub Action posting architecture review on PRs | Week 19 | Not started |
 | M15 | MCP server | Week 21 | Not started |
@@ -63,7 +63,7 @@ v1.0.
 | 0.1 | CLI | M09 |
 | 0.2 | Local graph database | M10 — **deferred**, see [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) |
 | 0.3 | Incremental analysis | M10 — Stage C only; see ADR-0014 |
-| **0.4** | **MAP** — the desktop application | M11 |
+| **0.4** | **MAP** — the desktop application | M11 — **delivered** |
 | 0.5 | Blast radius | M12 |
 | **0.6** | **DIFF** — the retention surface | M13 |
 | 0.7 | GitHub PR integration | M14 |

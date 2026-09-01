@@ -5,23 +5,22 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M11
-status: IN_PROGRESS             # M11 is implemented on main and NOT accepted
+status: ACCEPTED                # M11 accepted 2026-09-01; see milestones.M11
 current_branch: main
-next_allowed_milestone: M11    # UNLOCKED - M10 accepted; M12 locked until M11 is accepted
-# `current_milestone` names the milestone this tree implements, not the one
-# next in play, and `cartograph_cli::version::MILESTONE` is checked against it
-# by a unit test (crates/cartograph-cli/src/version.rs). The two must always
-# move together, which is why they move in a pull request rather than in a
-# bookkeeping commit: the constant is product code, and CHECKPOINTS.md's
-# RULE 020 carve-out does not extend to it.
+next_allowed_milestone: M12    # UNLOCKED - M11 accepted; M13 locked until M12 is accepted
+# `current_milestone` names the milestone this tree implements, and
+# `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test
+# (crates/cartograph-cli/src/version.rs). The two must always move together,
+# in a pull request, because the constant is product code.
 #
-# It read M09 through M10's acceptance because M10 added no CLI surface. M11
-# does: the desktop application is a second client of the same core, and its
-# four slices are merged (PRs #18, #19, #21, #22). So the pair advances here.
+# It reads M11 and stays there through M11's acceptance. Setting it to M12
+# would be wrong twice over: no M12 code exists, so the tree does not
+# implement M12; and the constant still reads "M11", so advancing this field
+# alone fails QG-004. A bookkeeping commit may not touch the constant.
 #
-# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
-# than ACCEPTED precisely because M11 is not accepted. Acceptance flips it,
-# together with milestones.M11.status, and only then.
+# M12 is unlocked by `next_allowed_milestone` and by its own NOT_STARTED
+# entry, exactly as M11 was unlocked at M10's acceptance. The pair advances in
+# the first M12 pull request.
 
 milestones:
   M00:
@@ -267,21 +266,82 @@ milestones:
       - airflow's subtree holds 13 Python files and zulip has no build aliases, so neither exercises both mechanisms at full scale
       - stable cross-run node identity does not exist; M13 requires it (ADR-0014)
   M11:
-    # Implementation is merged; acceptance has not happened. The status field
-    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
-    # to ACCEPTED at the formal acceptance step - not before. The comment
-    # carries what the two-value vocabulary cannot.
-    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
-    implementation: MERGED                # PRs #18, #19, #21, #22
+    status: ACCEPTED
+    accepted: 2026-09-01
+    pull_request: [18, 19, 21, 22, 23]     # four slices plus the version prerequisite
+    provisional_tag: null                  # ADR-0010: none needed
+    accepted_tag: cartograph-m11           # immutable
+    merge_commit: 17f114ee19c467261a89c012f8b77824b71affd2
+    implementation: MERGED
+    scope_adrs: [ADR-0015, ADR-0016, ADR-0017]
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      Both stated criteria are met, and the gates pass.
+
+      MAP answers "what is this system?" - judged PASS by the project owner on
+      Apache Airflow at 9b43d6abc0fc: 3,104 nodes, 3,350 edges, 313 clusters.
+      The cross-stack claim the product exists to make is visible there - 175
+      HttpCall edges from TypeScript in ui/openapi-gen into FastAPI handlers,
+      60 tables reached through 60 Queries edges, and clusters named after the
+      real architecture (api_fastapi/core_api/routes/public, airflow/models,
+      ui/openapi-gen/queries).
+
+      10,000 nodes at 60 FPS - measured over six foregrounded runs of the real
+      Tauri window on the deterministic 10,000-node / 11,444-edge / 115-cluster
+      fixture. Median 6.70-10.00 ms and p95 11.10-14.30 ms, both inside the
+      16.67 ms budget in every run.
+    finding: |
+      The desktop is a second client of the same core, not a second
+      implementation. Layout is computed in Rust and copied to the renderer
+      without arithmetic; Sigma draws and computes nothing. The evidence record
+      is a lookup rather than part of the render payload, so ten thousand nodes
+      do not carry data nothing draws.
+
+      The map is only as rich as the resolver's coverage. Airflow shows the
+      full cross-stack story; zulip and full-stack-fastapi do not, for reasons
+      recorded under accepted_limitations. That is inherited M07/M08 coverage,
+      not a rendering defect - the same desktop draws all three faithfully.
+    metrics:
+      tests: 690
+      frontend_tests: 43
+      benchmark_nodes: 10000
+      benchmark_edges: 11444
+      benchmark_clusters: 115
+      benchmark_runs: 6
+      median_frame_ms: "6.70-10.00"
+      p95_frame_ms: "11.10-14.30"
+      worst_frame_ms: "31.50-46.80"
+      frames_over_budget_pct: "0.08-1.41"
+      airflow_nodes: 3104
+      airflow_edges: 3350
+      airflow_clusters: 313
+      zulip_nodes: 1308
+      zulip_edges: 1469
+      fsfa_nodes: 2
+    map_evidence:
+      airflow:   {commit: 9b43d6abc0fc, nodes: 3104, edges: 3350, clusters: 313, judgement: PASS}
+      zulip:     {commit: 0ce8f6278cde, nodes: 1308, edges: 1469, clusters: 32,  judgement: THIN}
+      fastapi:   {commit: 162344da111e, nodes: 2,    edges: 1,    clusters: 2,   judgement: THIN}
+    accepted_limitations:
+      - worst frames of 31-47 ms occur, roughly 1 in 100, and are visible stutter
+      - the 10k measurement is a debug build on one machine with a 165 Hz display
+      - zulip produces a thin map - 0 routes, 1 table, 11 HttpCall edges, most of them test utilities - because it registers URLs through rest_path(...), which the resolver does not recognise
+      - full-stack-fastapi produces 2 nodes; its M09 "23 routes" were observations that never became matched edges
+      - both thin results are resolver coverage inherited from M07/M08, not desktop rendering
+      - the Windows MSI bundle cannot be produced - tauri.conf.json lists only icons/icon.png while the bundler requires a .ico, which exists but is not declared
+      - the desktop shell is outside `cargo test --workspace` and is covered by a dedicated CI job (ADR-0016)
+      - no stable cross-run node identity; M13 requires it (ADR-0014)
+  M12:
+    status: NOT_STARTED                   # unlocked; no code written, no branch
     pull_request: null
     provisional_tag: null
     accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M10
+  milestone: M11
   class: accepted
-  tag: cartograph-m10
-  merge_commit: 8690ebf0ae4608a7187e7a9503e67b29da0a8b00
+  tag: cartograph-m11
+  merge_commit: 17f114ee19c467261a89c012f8b77824b71affd2
 
 gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001
