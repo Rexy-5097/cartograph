@@ -24,6 +24,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import EvidencePanel from "./EvidencePanel";
 import GraphView from "./GraphView";
 import { describeBlast } from "./blast";
+import { findNodes } from "./search";
 import { clusterColor, clusterSummary, type BuildDiagnostics } from "./graph";
 
 import {
@@ -35,6 +36,15 @@ import {
   isUserCorrectable,
   reduce,
 } from "./session";
+
+/**
+ * How many search results to list at once.
+ *
+ * A bare substring can match hundreds of nodes; a list that long is a wall
+ * rather than a choice. The count of what is hidden is shown, so nobody
+ * concludes a node is absent when it is merely further down.
+ */
+const MAX_MATCHES = 8;
 
 /**
  * A failure that reached us without a `kind`.
@@ -291,9 +301,53 @@ function Result({ payload }: { payload: AnalysisPayload }) {
     setSelectionError(null);
   }, []);
 
+  // Search is a way to reach a node, not a second kind of selection: the only
+  // thing it holds is what the user typed.
+  const [query, setQuery] = useState("");
+  const matches = useMemo(() => findNodes(scene.nodes, query), [scene.nodes, query]);
+
   return (
     <div className="result">
       <p className="repository">{payload.repository}</p>
+
+      <div className="node-search">
+        <label htmlFor="node-search-input">Find an artefact</label>
+        <input
+          id="node-search-input"
+          type="search"
+          value={query}
+          placeholder="Name, e.g. Connection"
+          autoComplete="off"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {query.trim() !== "" && (
+          matches.length === 0 ? (
+            <p className="note" role="status">
+              No artefact here is called that.
+            </p>
+          ) : (
+            <>
+              <ul className="node-search-results">
+                {matches.slice(0, MAX_MATCHES).map((match) => (
+                  <li key={match.id}>
+                    {/* The same handler a click uses. Search decides *which*
+                        node; everything after that is the ordinary path. */}
+                    <button type="button" onClick={() => void blastNode(match.id)}>
+                      <span className="match-label">{match.label}</span>
+                      <span className="match-kind">{match.kind}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {matches.length > MAX_MATCHES && (
+                <p className="note" role="status">
+                  Showing {MAX_MATCHES} of {matches.length}. Type more to narrow it.
+                </p>
+              )}
+            </>
+          )
+        )}
+      </div>
 
       <GraphView
         scene={scene}
