@@ -1,0 +1,599 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Rexy-5097/cartograph/blob/main/docs/architecture/cartograph-output-1.1.schema.json",
+  "title": "Cartograph CLI output, contract 1.0",
+  "description": "The document emitted by `cartograph --json`, `cartograph trace --json`, and the per-stage commands. Every edge carries the case for believing it; an edge serialised as only its endpoints is not a Cartograph edge.  Version 1.1 adds the `blast` command. The change is additive: `result` is now a `oneOf` discriminated by `command`, and the `trace` branch is the 1.0 shape unchanged, so a document that validated under 1.0 still validates here.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "The version of this contract. Minor for additive changes; major for anything a consumer could break on. 1.1 added the `blast` result branch without altering any 1.0 shape.",
+      "type": "string",
+      "const": "1.1"
+    },
+    "command": {
+      "description": "Which command produced the document.",
+      "type": "string",
+      "enum": [
+        "summary",
+        "trace",
+        "parse",
+        "normalize",
+        "match",
+        "blast"
+      ]
+    },
+    "repository": {
+      "description": "What was analysed. Never an absolute filesystem path: a graph states facts about a repository, not about the machine that analysed it.",
+      "type": "object",
+      "required": [
+        "name",
+        "requested"
+      ],
+      "properties": {
+        "name": {
+          "description": "The repository's own directory name.",
+          "type": "string"
+        },
+        "requested": {
+          "description": "The path as typed, when relative. A rooted path \u2014 absolute, or Windows drive-less \u2014 is replaced by the literal `<absolute>`.",
+          "type": "string"
+        }
+      }
+    },
+    "languages": {
+      "description": "Files parsed, per language.",
+      "type": "object",
+      "required": [
+        "typescript",
+        "tsx",
+        "python"
+      ],
+      "properties": {
+        "typescript": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tsx": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "python": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "summary": {
+      "description": "Counts, in the vocabulary the human summary uses: observed, resolved, refused. Never 'verified'.",
+      "type": "object",
+      "required": [
+        "files",
+        "symbols",
+        "routes_observed",
+        "http_observed",
+        "orm_models",
+        "tables_resolved",
+        "nodes",
+        "edges",
+        "cross_language_edges",
+        "http_call_edges",
+        "client_call_edges",
+        "orm_edges",
+        "ambiguous",
+        "no_match",
+        "unsupported",
+        "refused",
+        "diagnostics",
+        "files_failed",
+        "duration_ms"
+      ],
+      "properties": {
+        "files": {
+          "description": "Files opened and parsed.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "symbols": {
+          "description": "Declared symbols across every parsed file.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "routes_observed": {
+          "description": "Route declarations found in source. An observation, not an endpoint.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "http_observed": {
+          "description": "Syntactically HTTP-looking call sites. An observation, not a relationship.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "orm_models": {
+          "description": "Classes recognised as ORM models.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "tables_resolved": {
+          "description": "Models that resolved to a table name.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "nodes": {
+          "description": "Nodes in the produced graph.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "edges": {
+          "description": "Edges in the produced graph.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "cross_language_edges": {
+          "description": "Edges whose endpoints were extracted by different grammars.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "http_call_edges": {
+          "description": "HTTP boundary crossings.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_call_edges": {
+          "description": "Calls into a function that issues a request.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "orm_edges": {
+          "description": "orm-access and queries edges.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "ambiguous": {
+          "description": "Observations with rival candidates. No edge is produced; this is by design.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "no_match": {
+          "description": "Observations with no candidate route.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupported": {
+          "description": "Observations outside the supported subset.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "refused": {
+          "description": "ambiguous + no_match + unsupported.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostics": {
+          "description": "Parse diagnostics across every file.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_failed": {
+          "description": "Files that could not be parsed at all. Non-zero means the graph is missing whatever they contained.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "description": "Wall-clock milliseconds for extraction, resolution and construction.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "nodes": {
+      "description": "Every node in the produced graph, in id order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "description": "Stable within one run. Referenced by edge source and target.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "repository",
+              "package",
+              "directory",
+              "file",
+              "module",
+              "class",
+              "function",
+              "method",
+              "variable",
+              "route",
+              "table",
+              "column",
+              "external-service",
+              "env-var"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "file": {
+            "description": "Repository-relative, forward slashes. Absent when the node has no source location.",
+            "type": "string"
+          },
+          "line": {
+            "description": "One-based.",
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "edges": {
+      "description": "Every edge in the produced graph, in id order. Cartograph never stores `A -> B`: the four attributes below are required by the domain model and an edge without them does not compile, let alone serialise.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target",
+          "kind",
+          "confidence",
+          "provenance",
+          "evidence",
+          "file",
+          "line"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source": {
+            "description": "Node id of the origin.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "target": {
+            "description": "Node id of the destination.",
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "import",
+              "call",
+              "inherits",
+              "implements",
+              "references",
+              "http-call",
+              "orm-access",
+              "queries"
+            ]
+          },
+          "confidence": {
+            "description": "The specification's prior for this evidence class. UNCALIBRATED: not a measured probability. See docs/benchmarks/m08-confidence-policy.md.",
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "provenance": {
+            "description": "Which analysis produced the edge. `model-inference` is a statistical classifier, never a language model (RULE 007).",
+            "type": "string",
+            "enum": [
+              "lsp-symbol-resolution",
+              "route-matcher",
+              "openapi-spec",
+              "static-import-resolution",
+              "constant-propagation",
+              "template-evaluation",
+              "orm-resolution",
+              "model-inference"
+            ]
+          },
+          "evidence": {
+            "description": "A structural description of the observation. Never source text (RULE 015).",
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "description": "Repository-relative path where the claim was observed.",
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "description": "One-based line where the claim was observed.",
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "description": "Parse problems. Recoverable unless summary.files_failed is non-zero.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "file",
+          "severity",
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "description": "Structural metadata only. Never source text.",
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "errors": {
+      "description": "Failures. Present and empty on success, so a consumer checks one field unconditionally. A run that failed before producing a graph emits a document with only schema_version, command and errors.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid-path",
+              "no-supported-sources",
+              "analysis-failed",
+              "symbol-not-found",
+              "ambiguous-symbol",
+              "partial-analysis"
+            ]
+          },
+          "message": {
+            "description": "One sentence, addressed to the person who ran the command.",
+            "type": "string"
+          },
+          "hint": {
+            "description": "The next action, when there is an obvious one.",
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "result": {
+      "description": "The command-specific section, discriminated by `command`. Omitted rather than emitted empty, so a consumer can tell 'this command produces no result' from 'this query found nothing'.",
+      "oneOf": [
+        {
+          "description": "The `trace` result. Byte-identical to the 1.0 shape.",
+          "type": "object",
+          "required": [
+            "symbol",
+            "from",
+            "steps",
+            "reaches_table",
+            "max_depth"
+          ],
+          "properties": {
+            "symbol": {
+              "description": "The symbol as requested.",
+              "type": "string"
+            },
+            "from": {
+              "description": "The node the walk started from.",
+              "type": "object"
+            },
+            "steps": {
+              "description": "The hops, each carrying the edge traversed and the node it led to. Nested through `next`.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "edge",
+                  "to"
+                ],
+                "properties": {
+                  "edge": {
+                    "type": "object"
+                  },
+                  "to": {
+                    "type": "object"
+                  },
+                  "next": {
+                    "type": "array"
+                  },
+                  "stop": {
+                    "type": "string",
+                    "enum": [
+                      "chain-end",
+                      "max-depth",
+                      "cycle"
+                    ]
+                  },
+                  "refusals": {
+                    "type": "array"
+                  }
+                }
+              }
+            },
+            "reaches_table": {
+              "description": "Whether any branch reached a database table \u2014 the full cross-stack chain.",
+              "type": "boolean"
+            },
+            "stop": {
+              "description": "Why the walk stopped, when it stopped immediately.",
+              "type": "string",
+              "enum": [
+                "chain-end",
+                "max-depth",
+                "cycle"
+              ]
+            },
+            "refusals": {
+              "type": "array"
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "description": "The `blast` result: what depends on the target. Reverse reachability over dependency edges, per ADR-0018. Confidence is the minimum along a route, maximised over routes -- it is an uncalibrated prior, never a probability.",
+          "type": "object",
+          "required": [
+            "target",
+            "reached",
+            "calibrated",
+            "routes"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "description": "Graph-local node handle, valid only within this document.",
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Repository-relative. Never absolute."
+                },
+                "line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "description": "The artefact queried. Never appears in `reached`."
+            },
+            "reached": {
+              "description": "Dependents, in a deterministic semantic order. One entry per artefact, however many routes reach it.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "node",
+                  "depth",
+                  "confidence",
+                  "via"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "node": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "kind",
+                      "name"
+                    ],
+                    "properties": {
+                      "id": {
+                        "description": "Graph-local node handle, valid only within this document.",
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Repository-relative. Never absolute."
+                      },
+                      "line": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "depth": {
+                    "description": "Hops to the target along the reported route. At least 1; the target is excluded from its own radius.",
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "confidence": {
+                    "description": "Weakest edge of the best-supported route (ADR-0018). Always a value that appears on some edge in `edges`. NOT a probability.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "via": {
+                    "description": "Id of the edge this artefact reaches the target through, on the reported route. Look it up in `edges` for its provenance, evidence and location.",
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "calibrated": {
+              "description": "Always false. Confidence is an uncalibrated prior selected by evidence class (M08), and must not be thresholded as a likelihood.",
+              "type": "boolean",
+              "const": false
+            },
+            "routes": {
+              "description": "Always \"representative\": ONE route is reported per artefact, the best-supported one. Other routes may exist and are not enumerated.",
+              "type": "string",
+              "const": "representative"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
