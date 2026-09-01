@@ -27,8 +27,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Sigma from "sigma";
 
+import { applyBlastHighlight, clearBlastHighlight } from "./blast";
 import { buildGraph, type BuildDiagnostics } from "./graph";
-import type { Scene } from "./session";
+import type { BlastResult, Scene } from "./session";
 
 interface Props {
   scene: Scene;
@@ -44,6 +45,16 @@ interface Props {
   onSelectEdge?: (edge: number) => void;
   /** Clicking the background clears whatever was selected. */
   onClearSelection?: () => void;
+  /** A node was clicked. The number is the Rust `NodeId`. */
+  onSelectNode?: (node: number) => void;
+  /**
+   * The blast radius to paint, or `null` for none.
+   *
+   * A *derived view* of the same scene, not a different scene: it is applied
+   * as attributes on the graph already loaded, so it never reaches the memo
+   * that would rebuild ten thousand nodes.
+   */
+  blast?: BlastResult | null;
 }
 
 /**
@@ -75,6 +86,8 @@ export default function GraphView({
   onDiagnostics,
   onSelectEdge,
   onClearSelection,
+  onSelectNode,
+  blast = null,
 }: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const sigma = useRef<Sigma | null>(null);
@@ -87,8 +100,8 @@ export default function GraphView({
 
   // Sigma handlers are registered once, against a ref, so a changed callback
   // does not force the renderer to be rebuilt or the listeners re-bound.
-  const handlers = useRef({ onSelectEdge, onClearSelection });
-  handlers.current = { onSelectEdge, onClearSelection };
+  const handlers = useRef({ onSelectEdge, onClearSelection, onSelectNode });
+  handlers.current = { onSelectEdge, onClearSelection, onSelectNode };
 
   useEffect(() => {
     onDiagnostics?.(built.diagnostics);
@@ -120,6 +133,12 @@ export default function GraphView({
         }
       });
       instance.on("clickStage", () => handlers.current.onClearSelection?.());
+      instance.on("clickNode", ({ node }) => {
+        const id = Number.parseInt(node, 10);
+        if (Number.isFinite(id)) {
+          handlers.current.onSelectNode?.(id);
+        }
+      });
     } else {
       // Reuse: swap the data, keep the WebGL context.
       sigma.current.setGraph(built.graph);
@@ -128,6 +147,20 @@ export default function GraphView({
 
     return undefined;
   }, [built]);
+
+  // Paint or clear the blast radius on the graph already loaded.
+  //
+  // Keyed on `built` as well as `blast` so a replaced scene starts unpainted:
+  // a highlight computed for the previous graph must not survive into a new
+  // one, and the ids would silently still resolve if it did.
+  useEffect(() => {
+    if (blast === null) {
+      clearBlastHighlight(built.graph);
+    } else {
+      applyBlastHighlight(built.graph, blast);
+    }
+    sigma.current?.refresh();
+  }, [built, blast]);
 
   // Tear down only when the component actually goes away.
   useEffect(

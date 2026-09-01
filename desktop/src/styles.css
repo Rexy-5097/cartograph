@@ -477,3 +477,25 @@ body {
   padding-left: 0.7rem;
   color: var(--danger);
 }
+
+/* ── Blast radius summary ───────────────────────────────────────────────
+ *
+ * A status strip rather than a panel: the answer is mostly on the canvas, and
+ * this says how much of it there is and how to get back.
+ */
+.blast-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0 0 1.25rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid #e0803c;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.blast-summary p {
+  margin: 0;
+}
