@@ -21,12 +21,14 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import EvidencePanel from "./EvidencePanel";
 import GraphView from "./GraphView";
 import { clusterColor, clusterSummary, type BuildDiagnostics } from "./graph";
 
 import {
   type AnalysisPayload,
   type DesktopError,
+  type EvidenceRecord,
   initialState,
   isUserCorrectable,
   reduce,
@@ -192,13 +194,71 @@ function Failure({ error }: { error: DesktopError }) {
 function Result({ payload }: { payload: AnalysisPayload }) {
   const { summary, scene } = payload;
   const [diagnostics, setDiagnostics] = useState<BuildDiagnostics | null>(null);
+  const [selected, setSelected] = useState<EvidenceRecord | null>(null);
+  const [selectionError, setSelectionError] = useState<DesktopError | null>(null);
   const largest = useMemo(() => clusterSummary(scene).slice(0, 8), [scene]);
+
+  // A selection belongs to one analysis. When the payload is replaced the old
+  // selection must go, or the panel would describe a graph nobody is looking
+  // at. Rust refuses a stale lookup as well — this is the interface half of
+  // that guarantee, not the whole of it.
+  useEffect(() => {
+    setSelected(null);
+    setSelectionError(null);
+  }, [payload.analysis]);
+
+  const selectEdge = useCallback(
+    async (edge: number) => {
+      setSelectionError(null);
+      try {
+        const record = await invoke<EvidenceRecord>("edge_evidence", {
+          analysis: payload.analysis,
+          edge,
+        });
+        setSelected(record);
+      } catch (raw) {
+        // A refused lookup must not leave the previous edge's evidence on
+        // screen next to a new error: that reads as evidence *for* the thing
+        // that just failed.
+        setSelected(null);
+        setSelectionError(asDesktopError(raw));
+      }
+    },
+    [payload.analysis],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelected(null);
+    setSelectionError(null);
+  }, []);
 
   return (
     <div className="result">
       <p className="repository">{payload.repository}</p>
 
-      <GraphView scene={scene} onDiagnostics={setDiagnostics} />
+      <GraphView
+        scene={scene}
+        onDiagnostics={setDiagnostics}
+        onSelectEdge={(edge) => void selectEdge(edge)}
+        onClearSelection={clearSelection}
+      />
+
+      {selected !== null && (
+        <EvidencePanel record={selected} onClose={clearSelection} />
+      )}
+
+      {selectionError !== null && (
+        <p className="note evidence-error" role="alert">
+          {selectionError.message}
+          {selectionError.hint !== undefined && ` ${selectionError.hint}`}
+        </p>
+      )}
+
+      {selected === null && selectionError === null && summary.edges > 0 && (
+        <p className="note evidence-prompt">
+          Select a relationship on the map to see the evidence behind it.
+        </p>
+      )}
 
       {diagnostics !== null &&
         (diagnostics.skippedNodes > 0 || diagnostics.skippedEdges > 0) && (

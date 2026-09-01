@@ -357,3 +357,123 @@ body {
   line-height: 1.5;
   overflow-x: auto;
 }
+
+/* ── Evidence panel ─────────────────────────────────────────────────────
+ *
+ * A region rather than a dialog: the map stays interactive behind it, and
+ * claiming a modal role for a non-modal surface misleads assistive technology.
+ */
+
+.evidence {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.evidence-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.evidence-bar h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.evidence-close {
+  flex: none;
+}
+
+.evidence-claim {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.evidence-relationship {
+  color: var(--muted);
+}
+
+.evidence-fields {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.evidence-fields dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.evidence-fields dd {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.evidence-kind,
+.evidence-caveat {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* The caveat is not decorative: it is the difference between a prior and a
+ * probability, so it is given the emphasis of a warning rather than a hint. */
+.evidence-caveat {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.evidence-location {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.evidence-subheading {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.evidence-text {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 2px solid var(--border);
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+
+.evidence-footnote {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.evidence-prompt {
+  font-style: italic;
+}
+
+.evidence-error {
+  border-left: 3px solid var(--danger);
+  padding-left: 0.7rem;
+  color: var(--danger);
+}

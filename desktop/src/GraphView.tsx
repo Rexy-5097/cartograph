@@ -34,6 +34,16 @@ interface Props {
   scene: Scene;
   /** Told what could not be drawn, so the surrounding page can say so. */
   onDiagnostics?: (diagnostics: BuildDiagnostics) => void;
+  /**
+   * An edge was clicked. The number is the Rust `EdgeId`.
+   *
+   * Selection state deliberately lives above this component: keeping it here
+   * would put it inside the memo that owns the graph, and every selection
+   * would risk rebuilding ten thousand nodes.
+   */
+  onSelectEdge?: (edge: number) => void;
+  /** Clicking the background clears whatever was selected. */
+  onClearSelection?: () => void;
 }
 
 /**
@@ -60,13 +70,25 @@ export const SIGMA_SETTINGS = {
   maxCameraRatio: 40,
 } as const;
 
-export default function GraphView({ scene, onDiagnostics }: Props) {
+export default function GraphView({
+  scene,
+  onDiagnostics,
+  onSelectEdge,
+  onClearSelection,
+}: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const sigma = useRef<Sigma | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  // Rebuilt only when the scene object itself changes.
+  // Rebuilt only when the scene object itself changes. Selecting an edge does
+  // not touch `scene`, so it cannot reach this memo — which is the property
+  // that keeps selection off the 10,000-node rebuild path.
   const built = useMemo(() => buildGraph(scene), [scene]);
+
+  // Sigma handlers are registered once, against a ref, so a changed callback
+  // does not force the renderer to be rebuilt or the listeners re-bound.
+  const handlers = useRef({ onSelectEdge, onClearSelection });
+  handlers.current = { onSelectEdge, onClearSelection };
 
   useEffect(() => {
     onDiagnostics?.(built.diagnostics);
@@ -90,6 +112,14 @@ export default function GraphView({ scene, onDiagnostics }: Props) {
       const instance = sigma.current;
       instance.on("enterNode", ({ node }) => setHovered(node));
       instance.on("leaveNode", () => setHovered(null));
+      instance.on("clickEdge", ({ edge }) => {
+        // Graphology keys edges `e<EdgeId>`; recover the Rust id.
+        const id = Number.parseInt(edge.replace(/^e/, ""), 10);
+        if (Number.isFinite(id)) {
+          handlers.current.onSelectEdge?.(id);
+        }
+      });
+      instance.on("clickStage", () => handlers.current.onClearSelection?.());
     } else {
       // Reuse: swap the data, keep the WebGL context.
       sigma.current.setGraph(built.graph);

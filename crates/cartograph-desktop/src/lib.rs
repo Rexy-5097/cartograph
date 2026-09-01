@@ -46,6 +46,7 @@
 //! the same words.
 
 pub mod error;
+pub mod evidence;
 pub mod repository;
 pub mod scene;
 pub mod session;

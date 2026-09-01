@@ -26,6 +26,7 @@ import {
 } from "./session";
 
 const payload: AnalysisPayload = {
+  analysis: 1,
   repository: "acme",
   summary: { files: 3, failed: 0, nodes: 4, edges: 3, clusters: 2 },
   scene: {
