@@ -1,0 +1,152 @@
+{
+  "nodes": [
+    {
+      "id": 0,
+      "x": 0.015158764692531697,
+      "y": -0.010859775228193147,
+      "cluster": 0,
+      "label": "crates/cartograph-parser/tests/fixtures/http.ts",
+      "kind": "file"
+    },
+    {
+      "id": 3,
+      "x": -0.5521189881118391,
+      "y": 0.4637609082777908,
+      "cluster": 1,
+      "label": "crates/cartograph-parser/tests/fixtures/python/http_calls.py",
+      "kind": "file"
+    },
+    {
+      "id": 1,
+      "x": -0.3751164317504592,
+      "y": 0.28715298165160236,
+      "cluster": 1,
+      "label": "health",
+      "kind": "function"
+    },
+    {
+      "id": 5,
+      "x": -0.728665601045569,
+      "y": 0.28370557813028846,
+      "cluster": 1,
+      "label": "remove_order",
+      "kind": "function"
+    },
+    {
+      "id": 4,
+      "x": -0.3719940533982826,
+      "y": 0.6402164959529927,
+      "cluster": 1,
+      "label": "replace_order",
+      "kind": "function"
+    },
+    {
+      "id": 2,
+      "x": -0.728665601045569,
+      "y": 0.6402164959529927,
+      "cluster": 1,
+      "label": "views.order_detail",
+      "kind": "function"
+    },
+    {
+      "id": 7,
+      "x": -0.11492165951948406,
+      "y": -1.0,
+      "cluster": 2,
+      "label": "create_order",
+      "kind": "function"
+    },
+    {
+      "id": 9,
+      "x": 0.1481909869253686,
+      "y": -0.7368873535551472,
+      "cluster": 2,
+      "label": "get_order",
+      "kind": "function"
+    },
+    {
+      "id": 6,
+      "x": 0.728665601045569,
+      "y": 1.0,
+      "cluster": 3,
+      "label": "create",
+      "kind": "function"
+    },
+    {
+      "id": 8,
+      "x": 0.4655529546007164,
+      "y": 0.7368873535551473,
+      "cluster": 3,
+      "label": "get",
+      "kind": "function"
+    }
+  ],
+  "edges": [
+    {
+      "id": 0,
+      "source": 0,
+      "target": 1,
+      "kind": "http-call"
+    },
+    {
+      "id": 1,
+      "source": 0,
+      "target": 2,
+      "kind": "http-call"
+    },
+    {
+      "id": 2,
+      "source": 3,
+      "target": 4,
+      "kind": "http-call"
+    },
+    {
+      "id": 3,
+      "source": 3,
+      "target": 5,
+      "kind": "http-call"
+    },
+    {
+      "id": 4,
+      "source": 3,
+      "target": 1,
+      "kind": "http-call"
+    },
+    {
+      "id": 5,
+      "source": 3,
+      "target": 2,
+      "kind": "http-call"
+    },
+    {
+      "id": 6,
+      "source": 6,
+      "target": 7,
+      "kind": "http-call"
+    },
+    {
+      "id": 7,
+      "source": 8,
+      "target": 9,
+      "kind": "http-call"
+    }
+  ],
+  "clusters": [
+    {
+      "id": 0,
+      "label": "crates/cartograph-parser/tests/fixtures"
+    },
+    {
+      "id": 1,
+      "label": "crates/cartograph-parser/tests/fixtures/python"
+    },
+    {
+      "id": 2,
+      "label": "crates/cartograph-resolver/tests/fixtures/dynamic-project/api"
+    },
+    {
+      "id": 3,
+      "label": "crates/cartograph-resolver/tests/fixtures/dynamic-project/web/src"
+    }
+  ]
+}

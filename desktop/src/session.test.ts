@@ -28,8 +28,11 @@ import {
 const payload: AnalysisPayload = {
   repository: "acme",
   summary: { files: 3, failed: 0, nodes: 4, edges: 3, clusters: 2 },
-  layout: {
-    nodes: [{ id: 0, x: 0, y: 0, cluster: 0 }],
+  scene: {
+    nodes: [
+      { id: 0, x: 0, y: 0, cluster: 0, label: "create_order", kind: "function" },
+    ],
+    edges: [],
     clusters: [{ id: 0, label: "api" }],
   },
 };

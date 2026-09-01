@@ -279,6 +279,7 @@ dependencies = [
 name = "cartograph-desktop"
 version = "0.1.0"
 dependencies = [
+ "cartograph-core",
  "cartograph-graph",
  "cartograph-pipeline",
  "serde",

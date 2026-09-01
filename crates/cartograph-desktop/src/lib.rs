@@ -47,6 +47,7 @@
 
 pub mod error;
 pub mod repository;
+pub mod scene;
 pub mod session;
 
 use serde::{Deserialize, Serialize};

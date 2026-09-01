@@ -61,3 +61,8 @@ dist/
 .AppleDouble
 .Spotlight-V100
 .Trashes
+
+# Generated benchmark fixture: ~2 MB of derived JSON, regenerated with
+# `cargo test -p cartograph-desktop --test fixture_10k -- --ignored`.
+desktop/public/scene-10k.json
+desktop/bench-result.json

@@ -56,12 +56,61 @@ export function isUserCorrectable(kind: DesktopErrorKind): boolean {
   );
 }
 
-/** One node's drawing instruction. The whole per-node payload (ADR-0015). */
-export interface LayoutNode {
+/**
+ * What an artefact is. Mirrors `cartograph_core::NodeKind`, kebab-cased.
+ *
+ * Used for colour and size only. Nothing here decides what a node *means* —
+ * that was settled in Rust before this arrived.
+ */
+export type NodeKind =
+  | "repository"
+  | "package"
+  | "directory"
+  | "file"
+  | "module"
+  | "class"
+  | "function"
+  | "method"
+  | "variable"
+  | "route"
+  | "table"
+  | "column"
+  | "external-service"
+  | "env-var";
+
+/** What a relationship is. Mirrors `cartograph_core::EdgeKind`, kebab-cased. */
+export type EdgeKind =
+  | "import"
+  | "call"
+  | "inherits"
+  | "implements"
+  | "references"
+  | "http-call"
+  | "orm-access"
+  | "queries";
+
+/**
+ * One node, ready to draw.
+ *
+ * `x`, `y` and `cluster` are computed in Rust (ADR-0001, ADR-0015) and are
+ * **used exactly as received**. No code in this application may recompute
+ * them; `graph.test.ts` asserts that they arrive in Graphology unchanged.
+ */
+export interface SceneNode {
   id: number;
   x: number;
   y: number;
   cluster: number;
+  label: string;
+  kind: NodeKind;
+}
+
+/** One edge, ready to draw. */
+export interface SceneEdge {
+  id: number;
+  source: number;
+  target: number;
+  kind: EdgeKind;
 }
 
 /** A named group of nodes. */
@@ -70,9 +119,15 @@ export interface Cluster {
   label: string;
 }
 
-/** Positions and groups, as computed in Rust. */
-export interface Layout {
-  nodes: LayoutNode[];
+/**
+ * Everything the renderer draws.
+ *
+ * Deliberately carries no confidence, provenance or evidence: that is the
+ * evidence record, and opening it is Slice 4's work.
+ */
+export interface Scene {
+  nodes: SceneNode[];
+  edges: SceneEdge[];
   clusters: Cluster[];
 }
 
@@ -90,7 +145,7 @@ export interface AnalysisPayload {
   /** Safe-to-show repository name. Never an absolute path. */
   repository: string;
   summary: AnalysisSummary;
-  layout: Layout;
+  scene: Scene;
 }
 
 /**
