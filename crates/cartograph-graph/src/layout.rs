@@ -200,7 +200,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 /// which slot it occupies. Two graphs that are canonically equal produce the
 /// same identities here, which is what makes the layout independent of
 /// insertion order.
-fn identity(node: &Node) -> String {
+pub(crate) fn identity(node: &Node) -> String {
     let location = node
         .location()
         .map_or_else(|| "-".to_owned(), |l| format!("{}:{}", l.file(), l.line()));
