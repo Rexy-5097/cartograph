@@ -229,6 +229,19 @@ jobs:
 
       # The reducer is the one piece of frontend logic that can be wrong, and
       # tsc is happy with a state machine that returns the wrong state.
+      # The renderer benchmark is development-only, and the guard that makes it
+      # so is a `import.meta.env.DEV` block wrapping the dynamic import. That is
+      # easy to weaken by accident — guarding only the JSX still emits the
+      # chunk — so the property is asserted rather than trusted.
+      - name: The dev-only benchmark must not reach the bundle
+        working-directory: desktop
+        run: |
+          if ls dist/assets/ | grep -i benchmark; then
+            echo "The benchmark was bundled into a production build."
+            exit 1
+          fi
+          echo "No benchmark chunk in dist/ — as intended."
+
       - name: Test the frontend
         working-directory: desktop
         run: npm test

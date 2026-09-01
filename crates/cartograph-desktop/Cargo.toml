@@ -13,11 +13,14 @@ authors.workspace = true
 # it and holds no analysis of its own.
 cartograph-pipeline.workspace = true
 # `layout` — the drawing contract the window consumes (ADR-0015).
+cartograph-core.workspace = true
 cartograph-graph.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# Fixed clock, so a composed scene is byte-stable across runs.
+cartograph-testkit.workspace = true
 
 [lints]
 workspace = true

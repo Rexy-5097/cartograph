@@ -10,9 +10,19 @@
  * and renders what comes back (ADR-0001, RULE 002).
  */
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+
+import GraphView from "./GraphView";
+import { clusterColor, clusterSummary, type BuildDiagnostics } from "./graph";
 
 import {
   type AnalysisPayload,
@@ -180,18 +190,27 @@ function Failure({ error }: { error: DesktopError }) {
  * placeholder says so — a fake preview would be worse than an honest gap.
  */
 function Result({ payload }: { payload: AnalysisPayload }) {
-  const { summary, layout } = payload;
-  const largest = [...layout.clusters]
-    .map((cluster) => ({
-      label: cluster.label,
-      count: layout.nodes.filter((node) => node.cluster === cluster.id).length,
-    }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 8);
+  const { summary, scene } = payload;
+  const [diagnostics, setDiagnostics] = useState<BuildDiagnostics | null>(null);
+  const largest = useMemo(() => clusterSummary(scene).slice(0, 8), [scene]);
 
   return (
     <div className="result">
       <p className="repository">{payload.repository}</p>
+
+      <GraphView scene={scene} onDiagnostics={setDiagnostics} />
+
+      {diagnostics !== null &&
+        (diagnostics.skippedNodes > 0 || diagnostics.skippedEdges > 0) && (
+          <p className="note" role="status">
+            {diagnostics.skippedNodes > 0 &&
+              `${diagnostics.skippedNodes} node${diagnostics.skippedNodes === 1 ? "" : "s"} `}
+            {diagnostics.skippedNodes > 0 && diagnostics.skippedEdges > 0 && "and "}
+            {diagnostics.skippedEdges > 0 &&
+              `${diagnostics.skippedEdges} edge${diagnostics.skippedEdges === 1 ? "" : "s"} `}
+            could not be drawn: {diagnostics.reasons.join("; ")}.
+          </p>
+        )}
 
       <dl className="counts">
         <Count label="Files" value={summary.files} />
@@ -208,21 +227,26 @@ function Result({ payload }: { payload: AnalysisPayload }) {
         </p>
       )}
 
+      {/*
+        The canvas is a WebGL surface and is not semantically readable, so the
+        map is not the only way to reach this information. This list is the
+        accessible account of the same clustering, and it is always present
+        rather than being an assistive-technology afterthought.
+      */}
       <h2 className="subheading">Largest clusters</h2>
       <ul className="clusters">
         {largest.map((cluster) => (
-          <li key={cluster.label}>
+          <li key={cluster.id}>
+            <span
+              className="cluster-swatch"
+              style={{ background: clusterColor(cluster.id) }}
+              aria-hidden="true"
+            />
             <span className="cluster-label">{cluster.label}</span>
             <span className="cluster-count">{cluster.count}</span>
           </li>
         ))}
       </ul>
-
-      <p className="placeholder">
-        {layout.nodes.length} node{layout.nodes.length === 1 ? "" : "s"} have
-        been positioned by the Rust core. The graph view arrives in the next
-        slice.
-      </p>
     </div>
   );
 }

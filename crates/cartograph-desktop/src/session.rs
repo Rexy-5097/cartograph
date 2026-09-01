@@ -28,7 +28,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use cartograph_graph::layout::{self, Layout, LayoutParams};
+use cartograph_graph::layout::{self, LayoutParams};
+
+use crate::scene::{self, Scene};
 use cartograph_pipeline::pipeline::{self, Options};
 
 use crate::error::DesktopError;
@@ -68,8 +70,11 @@ pub struct AnalysisPayload {
     pub repository: String,
     /// Quantities for the summary line.
     pub summary: AnalysisSummary,
-    /// Positions and clusters, per ADR-0015.
-    pub layout: Layout,
+    /// Everything the renderer draws: positioned nodes, edges and clusters.
+    ///
+    /// Composed from the graph and the layout by [`crate::scene::compose`];
+    /// coordinates are copied out of the layout without arithmetic.
+    pub scene: Scene,
 }
 
 /// Analyses a validated repository and lays the result out.
@@ -88,6 +93,7 @@ pub fn analyze(repository: &ValidatedRepository) -> Result<AnalysisPayload, Desk
     let analysis = pipeline::run(repository.path(), Options { quiet: true })?;
 
     let layout = layout::layout(&analysis.graph, &LayoutParams::default());
+    let scene = scene::compose(&analysis.graph, &layout);
 
     Ok(AnalysisPayload {
         repository: repository.display_name().to_owned(),
@@ -98,6 +104,6 @@ pub fn analyze(repository: &ValidatedRepository) -> Result<AnalysisPayload, Desk
             edges: analysis.graph.edge_count(),
             clusters: layout.cluster_count(),
         },
-        layout,
+        scene,
     })
 }

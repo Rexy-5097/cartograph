@@ -21,3 +21,4 @@
 | [0014](../../docs/adr/ADR-0014-m10-scope-reconciliation.md) | M10 delivers incremental Stage C; three scope items deferred | Accepted |
 | [0015](../../docs/adr/ADR-0015-layout-contract.md) | The layout contract: directory clusters, per-cluster relaxation, determinism without stability | Accepted |
 | [0016](../../docs/adr/ADR-0016-desktop-boundary.md) | The desktop boundary: shared pipeline crate, testable session, thin shell outside the workspace | Accepted |
+| [0017](../../docs/adr/ADR-0017-render-scene.md) | The render scene: layout plus the minimum a reader needs | Accepted |

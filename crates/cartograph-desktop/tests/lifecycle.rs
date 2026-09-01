@@ -266,7 +266,7 @@ fn a_repository_with_supported_sources_analyses_and_lays_out() {
         "a repository with a model and a route must produce nodes"
     );
     assert_eq!(
-        payload.layout.node_count(),
+        payload.scene.node_count(),
         payload.summary.nodes,
         "every node must be positioned"
     );
@@ -276,7 +276,7 @@ fn a_repository_with_supported_sources_analyses_and_lays_out() {
     );
     assert_eq!(payload.repository, repository.display_name());
 
-    for node in &payload.layout.nodes {
+    for node in &payload.scene.nodes {
         assert!(
             node.x.is_finite() && node.y.is_finite(),
             "a non-finite coordinate would silently drop the node from a WebGL scene"
@@ -336,7 +336,7 @@ fn the_payload_survives_the_ipc_boundary() {
 
     assert_eq!(payload.summary, back.summary);
     assert_eq!(payload.repository, back.repository);
-    assert_eq!(payload.layout.node_count(), back.layout.node_count());
+    assert_eq!(payload.scene.node_count(), back.scene.node_count());
 }
 
 /// Two analyses of one unchanged repository must agree. If they did not, the
@@ -485,14 +485,14 @@ fn the_lifecycle_runs_over_a_real_repository() {
         "precondition: a real checkout must yield files"
     );
     assert_eq!(
-        payload.layout.node_count(),
+        payload.scene.node_count(),
         payload.summary.nodes,
         "every node the analyser found must be positioned"
     );
-    for node in &payload.layout.nodes {
+    for node in &payload.scene.nodes {
         assert!(node.x.is_finite() && node.y.is_finite());
         assert!(
-            payload.layout.clusters.iter().any(|c| c.id == node.cluster),
+            payload.scene.clusters.iter().any(|c| c.id == node.cluster),
             "node {} names a cluster outside the table",
             node.id
         );
@@ -526,7 +526,7 @@ fn the_lifecycle_runs_over_a_pinned_corpus() {
     let payload = analyze(&repository).expect("the corpus analyses");
 
     assert!(payload.summary.nodes > 0, "a corpus must produce nodes");
-    assert_eq!(payload.layout.node_count(), payload.summary.nodes);
+    assert_eq!(payload.scene.node_count(), payload.summary.nodes);
     println!(
         "corpus: {} files -> {} nodes, {} edges, {} clusters",
         payload.summary.files,
