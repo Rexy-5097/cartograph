@@ -131,7 +131,10 @@ jobs:
           FIXTURES=crates/cartograph-parser/tests/fixtures
 
           "$BIN" version | grep -q "cartograph 0.1.0"
-          "$BIN" version | grep -q "milestone M09"
+          # Derived from the ledger, not pinned. A literal here is invisible
+          # to cargo and to the gates, so it fails in CI a milestone late.
+          MILESTONE=$(grep '^current_milestone:' agentos/artifacts/project-state.yaml | awk '{print $2}')
+          "$BIN" version | grep -q "milestone $MILESTONE"
 
           "$BIN" "$FIXTURES" | grep -q "Nothing above is claimed to be verified"
           "$BIN" --json "$FIXTURES" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['schema_version']=='1.0'; assert d['summary']['files']>0"

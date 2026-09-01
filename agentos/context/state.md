@@ -8,25 +8,24 @@
 | Field | Value |
 |---|---|
 | Last accepted milestone | **M10 — incremental analysis engine** (accepted 2026-08-31) |
-| Status | M00–M10 **ACCEPTED**; M11 unlocked, no code written, no branch |
+| Status | M00–M10 **ACCEPTED**; M11 **implemented on `main`, not accepted** |
 | Branch | `main` |
 | Next permitted milestone | M11 — **unlocked**; M12 locked until M11 is accepted |
 | Last accepted checkpoint | `cartograph-m10` (immutable, commit `8690ebf`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger still reads **M09**, and that is deliberate.
-> It names what the binary reports: `version::MILESTONE` is `"M09"` and a unit
-> test in `crates/cartograph-cli/src/version.rs` asserts the two are equal. M10
-> added no CLI surface — the incremental engine is internal and both caches are
-> process-local — so the constant was never bumped.
+> `current_milestone` now reads **M11**, matching
+> `cartograph_cli::version::MILESTONE`. The two are asserted equal by a unit
+> test and must always move together, which is why they moved in a pull
+> request rather than a bookkeeping commit — the constant is product code.
 >
-> Advancing the field alone fails QG-004. Advancing it together with the
-> constant is a product-code change, which a bookkeeping commit may not make.
-> **The pair must move together in a pull request** — the first M11 PR, or a
-> dedicated one. Setting it to M11 would be false twice over: M11 is
-> NOT_STARTED, and the binary implements neither M11 nor M10's surface.
-> M10's acceptance is carried by `milestones.M10`, `last_checkpoint` and
-> `next_allowed_milestone`, exactly as M09 carried M10's unlock.
+> It read M09 through M10's acceptance because M10 added no CLI surface. M11
+> does: the desktop application is a second client of the same core, and its
+> four slices are merged (PRs #18, #19, #21, #22).
+>
+> **This is not acceptance.** `milestones.M11.status` is still `NOT_STARTED`,
+> `last_checkpoint` is still `cartograph-m10`, and `cartograph-m11` does not
+> exist. Those change only at the formal acceptance step.
 
 ## What exists
 

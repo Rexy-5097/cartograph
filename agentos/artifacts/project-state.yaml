@@ -4,27 +4,24 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M09
-status: ACCEPTED
+current_milestone: M11
+status: IN_PROGRESS             # M11 is implemented on main and NOT accepted
 current_branch: main
 next_allowed_milestone: M11    # UNLOCKED - M10 accepted; M12 locked until M11 is accepted
 # `current_milestone` names the milestone this tree implements, not the one
-# next in play: `cartograph_cli::version::MILESTONE` is checked against it by a
-# unit test (crates/cartograph-cli/src/version.rs), and that constant still
-# reads "M09".
+# next in play, and `cartograph_cli::version::MILESTONE` is checked against it
+# by a unit test (crates/cartograph-cli/src/version.rs). The two must always
+# move together, which is why they move in a pull request rather than in a
+# bookkeeping commit: the constant is product code, and CHECKPOINTS.md's
+# RULE 020 carve-out does not extend to it.
 #
-# It stays M09 through M10's acceptance. M10 added no CLI surface - the
-# incremental engine is internal and both caches are process-local - so the
-# constant was never bumped, and the test asserts MILESTONE == this field.
-# Advancing the field alone fails QG-004; advancing it together with the
-# constant is a product-code change, which a bookkeeping commit may not make
-# (CHECKPOINTS.md, RULE 020 carve-out).
+# It read M09 through M10's acceptance because M10 added no CLI surface. M11
+# does: the desktop application is a second client of the same core, and its
+# four slices are merged (PRs #18, #19, #21, #22). So the pair advances here.
 #
-# FOLLOW-UP: the pair must move together in a pull request - the first M11 PR,
-# or a dedicated one. Setting this field to M11 would be false twice over:
-# M11 is NOT_STARTED, and the binary implements neither M11 nor M10's surface.
-# M10's acceptance is recorded under milestones.M10 and last_checkpoint; the
-# unlock is carried by next_allowed_milestone, exactly as M09 carried M10's.
+# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
+# than ACCEPTED precisely because M11 is not accepted. Acceptance flips it,
+# together with milestones.M11.status, and only then.
 
 milestones:
   M00:
@@ -270,7 +267,12 @@ milestones:
       - airflow's subtree holds 13 Python files and zulip has no build aliases, so neither exercises both mechanisms at full scale
       - stable cross-run node identity does not exist; M13 requires it (ADR-0014)
   M11:
-    status: NOT_STARTED                   # unlocked; no code written, no branch
+    # Implementation is merged; acceptance has not happened. The status field
+    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
+    # to ACCEPTED at the formal acceptance step - not before. The comment
+    # carries what the two-value vocabulary cannot.
+    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
+    implementation: MERGED                # PRs #18, #19, #21, #22
     pull_request: null
     provisional_tag: null
     accepted_tag: null

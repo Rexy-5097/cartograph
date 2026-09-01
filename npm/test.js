@@ -29,6 +29,29 @@ function test(name, fn) {
 
 console.log("resolution");
 
+/**
+ * The milestone the project ledger declares.
+ *
+ * `agentos/artifacts/project-state.yaml` is the authority; the Rust constant
+ * is checked against it by a unit test, and this keeps the wrapper's
+ * expectation on the same single source rather than on a copy of it.
+ */
+function currentMilestone() {
+  const ledger = path.join(
+    __dirname,
+    "..",
+    "agentos",
+    "artifacts",
+    "project-state.yaml",
+  );
+  const text = fs.readFileSync(ledger, "utf8");
+  const marker = "current_milestone:";
+  const at = text.indexOf(marker);
+  assert.ok(at >= 0, "the ledger must declare current_milestone");
+  const line = text.slice(at + marker.length).split(String.fromCharCode(10))[0];
+  return line.trim();
+}
+
 test("every supported platform maps to a target triple", () => {
   assert.strictEqual(target("darwin", "arm64"), "aarch64-apple-darwin");
   assert.strictEqual(target("darwin", "x64"), "x86_64-apple-darwin");
@@ -120,7 +143,11 @@ test("json stays pure through the wrapper", () => {
   });
   const parsed = JSON.parse(out);
   assert.strictEqual(parsed.version, "0.1.0");
-  assert.strictEqual(parsed.milestone, "M09");
+  // Read from the ledger rather than pinned to a literal. A hard-coded
+  // milestone here is invisible to `cargo test` and to the quality gates --
+  // it lives outside the workspace -- so it only fails in CI, one milestone
+  // late, in a job that looks unrelated to the change that broke it.
+  assert.strictEqual(parsed.milestone, currentMilestone());
 });
 
 test("a success exit code is reproduced", () => {
