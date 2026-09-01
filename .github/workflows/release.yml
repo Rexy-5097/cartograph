@@ -72,7 +72,10 @@ jobs:
           BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
           "$BIN" version
           "$BIN" version | grep -q "cartograph 0.1.0"
-          "$BIN" version | grep -q "milestone M09"
+          # Derived from the ledger, not pinned. A literal here is invisible
+          # to cargo and to the gates, so it fails in CI a milestone late.
+          MILESTONE=$(grep '^current_milestone:' agentos/artifacts/project-state.yaml | awk '{print $2}')
+          "$BIN" version | grep -q "milestone $MILESTONE"
           "$BIN" version --json | grep -q '"version": "0.1.0"'
 
       - name: Smoke test — analyse a repository
