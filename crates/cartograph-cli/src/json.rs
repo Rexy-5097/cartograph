@@ -21,6 +21,14 @@
 //! of one chain only if they share a node id, and no name-based encoding can
 //! express that (ADR-0011).
 //!
+//! # Versions
+//!
+//! **1.0** — the shape M09 published. **1.1** — M12 adds the `blast` command,
+//! whose payload occupies the same `result` slot `trace` already used. The
+//! change is purely additive: `result` became a `oneOf` discriminated by
+//! `command`, and the `trace` branch is byte-identical to 1.0, so a consumer
+//! written against 1.0 keeps validating every `trace` document unchanged.
+//!
 //! # Compatibility
 //!
 //! The `parse`, `normalize` and `match` payload bodies predate this module and
@@ -39,7 +47,7 @@ use crate::pipeline::{FileDiagnostic, Languages, Repository, Totals};
 ///
 /// Bump the minor part for additive changes, the major part for anything a
 /// consumer could be broken by. Documented in `docs/architecture/json-schema.md`.
-pub const SCHEMA_VERSION: &str = "1.0";
+pub const SCHEMA_VERSION: &str = "1.1";
 
 /// One graph node.
 #[derive(Debug, Clone, Serialize)]
@@ -261,7 +269,7 @@ mod tests {
 
     #[test]
     fn the_schema_version_is_declared() {
-        assert_eq!(SCHEMA_VERSION, "1.0");
+        assert_eq!(SCHEMA_VERSION, "1.1");
     }
 
     #[test]
@@ -271,7 +279,7 @@ mod tests {
         let text = serde_json::to_string(&envelope).expect("serialises");
         let value: serde_json::Value = serde_json::from_str(&text).expect("round-trips");
 
-        assert_eq!(value["schema_version"], "1.0");
+        assert_eq!(value["schema_version"], "1.1");
         assert_eq!(value["command"], "trace");
         assert_eq!(value["errors"][0]["code"], "symbol-not-found");
         assert_eq!(value["errors"][0]["message"], "no such symbol");

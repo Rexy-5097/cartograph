@@ -93,11 +93,15 @@ jobs:
         run: |
           BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
           FIXTURES="crates/cartograph-parser/tests/fixtures"
+          # Derived from the constant rather than pinned: a literal version
+          # here is invisible to cargo and the gates, and this workflow only
+          # runs on a tag, so it would fail long after whatever broke it.
+          export SCHEMA=$(grep -oE 'SCHEMA_VERSION: &str = "[^"]+"' crates/cartograph-cli/src/json.rs | grep -oE '"[^"]+"' | tr -d '"')
           "$BIN" --json "$FIXTURES" > out.json
           python3 - <<'PY'
           import json, os
           d = json.load(open("out.json"))
-          assert d["schema_version"] == "1.0", d["schema_version"]
+          assert d["schema_version"] == os.environ["SCHEMA"], d["schema_version"]
           assert d["command"] == "summary"
           assert d["summary"]["files"] > 0
 

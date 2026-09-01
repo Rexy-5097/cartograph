@@ -2,7 +2,7 @@
 //!
 //! # Why the schema is executed rather than described
 //!
-//! `docs/architecture/cartograph-output-1.0.schema.json` is the contract a
+//! `docs/architecture/cartograph-output-1.1.schema.json` is the contract a
 //! future MCP server, editor plugin or CI integration will be written against.
 //! A schema file that nothing checks is a wish, and it drifts from the code the
 //! first time a field is renamed. These tests load that exact file and validate
@@ -41,14 +41,14 @@ fn schema() -> Value {
         .unwrap()
         .parent()
         .unwrap()
-        .join("docs/architecture/cartograph-output-1.0.schema.json");
+        .join("docs/architecture/cartograph-output-1.1.schema.json");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
     serde_json::from_str(&text).expect("the published schema is valid JSON")
 }
 
 /// The keywords the validator below understands.
-const SUPPORTED: [&str; 13] = [
+const SUPPORTED: [&str; 15] = [
     "$schema",
     "$id",
     "title",
@@ -62,6 +62,8 @@ const SUPPORTED: [&str; 13] = [
     "minimum",
     "maximum",
     "minLength",
+    "oneOf",
+    "additionalProperties",
 ];
 
 /// Validates `value` against `schema`, collecting every violation.
@@ -147,6 +149,62 @@ fn validate(value: &Value, schema: &Value, path: &str, problems: &mut Vec<String
             validate(element, items, &format!("{path}[{index}]"), problems);
         }
     }
+
+    check_additional_properties(value, object, path, problems);
+    check_one_of(value, object, path, problems);
+}
+
+/// `additionalProperties: false` — every field present must be declared.
+///
+/// Without this, a payload could grow a field the contract never promised and
+/// still "conform".
+fn check_additional_properties(
+    value: &Value,
+    schema: &serde_json::Map<String, Value>,
+    path: &str,
+    problems: &mut Vec<String>,
+) {
+    if schema.get("additionalProperties") != Some(&Value::Bool(false)) {
+        return;
+    }
+    if let (Some(Value::Object(declared)), Some(actual)) =
+        (schema.get("properties"), value.as_object())
+    {
+        for name in actual.keys() {
+            if !declared.contains_key(name) {
+                problems.push(format!("{path}: undeclared field `{name}`"));
+            }
+        }
+    }
+}
+
+/// `oneOf` — exactly one branch must accept the value.
+///
+/// Branches are tried against a scratch list so a failing alternative does not
+/// report itself as a problem with the document; only the count matters.
+fn check_one_of(
+    value: &Value,
+    schema: &serde_json::Map<String, Value>,
+    path: &str,
+    problems: &mut Vec<String>,
+) {
+    let Some(Value::Array(branches)) = schema.get("oneOf") else {
+        return;
+    };
+    let accepted = branches
+        .iter()
+        .filter(|branch| {
+            let mut scratch = Vec::new();
+            validate(value, branch, path, &mut scratch);
+            scratch.is_empty()
+        })
+        .count();
+    if accepted != 1 {
+        problems.push(format!(
+            "{path}: matched {accepted} of {} `oneOf` branches, expected exactly 1",
+            branches.len()
+        ));
+    }
 }
 
 fn assert_conforms(label: &str, document: &Value) {
@@ -199,6 +257,14 @@ fn unsupported_keywords_are_not_silently_ignored() {
             }
             if key == "items" {
                 walk(child, &format!("{path}[]"), unsupported);
+                continue;
+            }
+            if key == "oneOf" {
+                if let Some(branches) = child.as_array() {
+                    for (index, branch) in branches.iter().enumerate() {
+                        walk(branch, &format!("{path}.oneOf[{index}]"), unsupported);
+                    }
+                }
                 continue;
             }
             if !SUPPORTED.contains(&key.as_str()) {
@@ -261,6 +327,46 @@ fn the_trace_document_conforms() {
     );
 }
 
+/// The 1.1 addition. Also proves the discriminated `result` works: a blast
+/// document matches exactly one `oneOf` branch, and the validator now checks
+/// that rather than accepting anything shaped roughly right.
+#[test]
+fn the_blast_document_conforms() {
+    assert_conforms(
+        "blast",
+        &json_of(&["blast", "http.ts", "--json", "--path", "<fixtures>"]),
+    );
+}
+
+/// The compatibility promise of 1.1: the `trace` branch is the 1.0 shape, so a
+/// trace document must still match exactly one branch and never the blast one.
+#[test]
+fn a_trace_document_does_not_match_the_blast_branch() {
+    let document = json_of(&["trace", "http.ts", "--json", "--path", "<fixtures>"]);
+    let result = document.get("result").expect("trace emits a result");
+
+    let schema = schema();
+    let branches = schema["properties"]["result"]["oneOf"]
+        .as_array()
+        .expect("result is a oneOf");
+    let accepted: Vec<usize> = branches
+        .iter()
+        .enumerate()
+        .filter(|(_, branch)| {
+            let mut problems = Vec::new();
+            validate(result, branch, "result", &mut problems);
+            problems.is_empty()
+        })
+        .map(|(index, _)| index)
+        .collect();
+
+    assert_eq!(
+        accepted,
+        vec![0],
+        "a trace result must match the trace branch and only that one"
+    );
+}
+
 #[test]
 fn the_error_document_conforms() {
     assert_conforms(
@@ -274,7 +380,7 @@ fn the_per_stage_documents_carry_the_envelope() {
     for command in ["parse", "normalize", "match"] {
         let document = json_of(&[command, "--json", "<fixtures>"]);
         assert_conforms(command, &document);
-        assert_eq!(document["schema_version"], "1.0", "{command}");
+        assert_eq!(document["schema_version"], "1.1", "{command}");
         assert_eq!(document["command"], command);
     }
 }

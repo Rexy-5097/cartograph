@@ -174,7 +174,7 @@ pub fn run(
 /// A bare name matches on the node's name. A query containing `:` is read as
 /// `file:name` — `orders.py:create_order` — which is how a user disambiguates
 /// without needing to know node ids.
-fn resolve_symbol(graph: &ArchitectureGraph, query: &str) -> Result<NodeId, CliError> {
+pub(crate) fn resolve_symbol(graph: &ArchitectureGraph, query: &str) -> Result<NodeId, CliError> {
     let (file_hint, name) = match query.rsplit_once(':') {
         Some((file, name)) if !file.is_empty() && !name.is_empty() => (Some(file), name),
         _ => (None, query),
@@ -349,7 +349,7 @@ fn walk(
     (steps, None)
 }
 
-fn node_json(graph: &ArchitectureGraph, id: NodeId) -> JsonNode {
+pub(crate) fn node_json(graph: &ArchitectureGraph, id: NodeId) -> JsonNode {
     graph.node(id).map_or_else(
         || JsonNode {
             id: id.as_u64(),

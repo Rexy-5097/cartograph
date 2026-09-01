@@ -30,6 +30,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+mod blast_cmd;
 mod json;
 mod match_cmd;
 mod normalize_cmd;
@@ -112,6 +113,20 @@ enum Command {
         #[arg(long, default_value_t = trace_cmd::DEFAULT_MAX_DEPTH, value_name = "N")]
         max_depth: usize,
     },
+    /// Report what depends on a symbol, across language boundaries.
+    ///
+    /// Walks the graph *inward* to the named symbol: everything that can reach
+    /// it through a dependency relationship, with the confidence of the
+    /// best-supported route and one representative route per artefact. The
+    /// inverse of `trace`, which walks outward.
+    Blast {
+        /// The symbol to query. Qualify as `file:name` to disambiguate.
+        #[arg(value_name = "SYMBOL")]
+        symbol: String,
+        /// Repository to analyse.
+        #[arg(long, default_value = ".", value_name = "PATH")]
+        path: PathBuf,
+    },
     /// Extract syntactic facts from TypeScript, TSX and Python source.
     ///
     /// Reports what the files say — symbols, imports, call sites, string and
@@ -146,6 +161,7 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::Trace { .. } => "trace",
+            Self::Blast { .. } => "blast",
             Self::Parse { .. } => "parse",
             Self::Normalize { .. } => "normalize",
             Self::Match { .. } => "match",
@@ -188,6 +204,7 @@ fn dispatch(cli: &Cli) -> Result<(String, ExitCode), CliError> {
             path,
             max_depth,
         }) => trace_cmd::run(path, symbol, *max_depth, cli.json),
+        Some(Command::Blast { symbol, path }) => blast_cmd::run(path, symbol, cli.json),
         Some(Command::Parse { path }) => parse_cmd::run(path, cli.json),
         Some(Command::Normalize { path }) => normalize_cmd::run(path, cli.json),
         Some(Command::Match { path }) => match_cmd::run(path, cli.json),
@@ -268,11 +285,13 @@ mod tests {
     }
 
     #[test]
-    fn the_command_surface_is_the_m09_surface() {
-        // The command set is a deliberate milestone decision. `trace` and the
-        // default summary are the M09 deliverables; nothing beyond them
-        // belongs here until the milestone that implements it. If this test
-        // fails, the scope moved.
+    fn the_command_surface_is_the_accepted_surface() {
+        // The command set is a deliberate milestone decision, and this test
+        // exists so widening it cannot happen by accident. `trace`, `parse`,
+        // `normalize`, `match`, `version` and the default summary are M09's;
+        // `blast` is M12's, added when the milestone that owns it was built.
+        // If this test fails, the scope moved -- decide whether it should
+        // have, then change this list on purpose.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
@@ -280,14 +299,15 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            vec!["trace", "parse", "normalize", "match", "version"]
+            vec!["trace", "blast", "parse", "normalize", "match", "version"]
         );
     }
 
     #[test]
-    fn no_m10_or_later_command_is_present() {
+    fn no_unbuilt_milestone_command_is_present() {
         // Named explicitly so an accidental addition fails loudly rather than
-        // shipping a capability the project has not built.
+        // shipping a capability the project has not built. `diff` stays on the
+        // list: M13 owns it and it does not exist yet.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
