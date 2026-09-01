@@ -50,6 +50,17 @@ pub enum DesktopErrorKind {
     /// frontend stops waiting, but analysis already in flight runs to
     /// completion.
     Cancelled,
+    /// The selection belongs to an analysis that has been replaced.
+    ///
+    /// Not cosmetic. `EdgeId` is graph-local and restarts at zero per
+    /// analysis, so a stale id usually *exists* in the new graph as a
+    /// different relationship — answering it would show confident, wrong
+    /// evidence. Refusing is the only safe response.
+    StaleSelection,
+    /// The edge is not part of the current analysis.
+    UnknownEdge,
+    /// Evidence was requested before anything had been analysed.
+    NoAnalysis,
     /// A defect. Reaching this means Cartograph is wrong, not the user.
     Internal,
 }

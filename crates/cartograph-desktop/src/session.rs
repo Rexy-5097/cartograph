@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use cartograph_graph::layout::{self, LayoutParams};
 
+use crate::evidence::{AnalysisId, AnalysisSession};
 use crate::scene::{self, Scene};
 use cartograph_pipeline::pipeline::{self, Options};
 
@@ -66,6 +67,13 @@ pub struct AnalysisSummary {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisPayload {
+    /// Identifies this analysis.
+    ///
+    /// Carried so a later evidence lookup can prove it is asking about the
+    /// graph currently on screen. `EdgeId` restarts at zero per analysis, so
+    /// without this a stale selection would resolve against the new graph and
+    /// return confident, wrong evidence. See [`crate::evidence`].
+    pub analysis: AnalysisId,
     /// The safe-to-show repository name. Never an absolute path.
     pub repository: String,
     /// Quantities for the summary line.
@@ -90,12 +98,29 @@ pub struct AnalysisPayload {
 /// source is an error rather than an empty drawing, because a blank window
 /// with no explanation is the worst of both.
 pub fn analyze(repository: &ValidatedRepository) -> Result<AnalysisPayload, DesktopError> {
+    analyze_as(repository, AnalysisId::first()).map(|(payload, _)| payload)
+}
+
+/// Analyses under a caller-supplied id, returning the retained session too.
+///
+/// The shell uses this so it can keep the graph for evidence lookups while
+/// handing the payload to the window. Split from [`analyze`] rather than
+/// folded into it so the simple path stays simple and tests can pin an id.
+///
+/// # Errors
+///
+/// As [`analyze`].
+pub fn analyze_as(
+    repository: &ValidatedRepository,
+    id: AnalysisId,
+) -> Result<(AnalysisPayload, AnalysisSession), DesktopError> {
     let analysis = pipeline::run(repository.path(), Options { quiet: true })?;
 
     let layout = layout::layout(&analysis.graph, &LayoutParams::default());
     let scene = scene::compose(&analysis.graph, &layout);
 
-    Ok(AnalysisPayload {
+    let payload = AnalysisPayload {
+        analysis: id,
         repository: repository.display_name().to_owned(),
         summary: AnalysisSummary {
             files: analysis.totals.files,
@@ -105,5 +130,6 @@ pub fn analyze(repository: &ValidatedRepository) -> Result<AnalysisPayload, Desk
             clusters: layout.cluster_count(),
         },
         scene,
-    })
+    };
+    Ok((payload, AnalysisSession::new(id, analysis.graph)))
 }

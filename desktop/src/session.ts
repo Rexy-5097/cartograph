@@ -35,6 +35,9 @@ export type DesktopErrorKind =
   | "noSupportedSources"
   | "analysisFailed"
   | "cancelled"
+  | "staleSelection"
+  | "unknownEdge"
+  | "noAnalysis"
   | "internal";
 
 /** A failure, ready to show and ready to branch on. */
@@ -113,6 +116,49 @@ export interface SceneEdge {
   kind: EdgeKind;
 }
 
+/** Which analysis a payload or selection belongs to. */
+export type AnalysisId = number;
+
+/** One endpoint of a relationship. */
+export interface Endpoint {
+  id: number;
+  label: string;
+  kind: NodeKind;
+}
+
+/** Where a claim was observed. Repository-relative, never absolute. */
+export interface EvidenceLocation {
+  file: string;
+  line: number;
+  column: number | null;
+}
+
+/**
+ * Everything Cartograph knows about one edge.
+ *
+ * Every field is read off the edge in Rust. Nothing here is computed, and
+ * nothing may be computed from it: this file describes what arrives.
+ */
+export interface EvidenceRecord {
+  analysis: AnalysisId;
+  edge: number;
+  kind: EdgeKind;
+  source: Endpoint;
+  target: Endpoint;
+  /**
+   * The raw value. **Not a probability** — an uncalibrated prior selected by
+   * evidence class (M08: ECE 0.18, low bands unverified). `calibrated` says so
+   * from the data; the panel must not render this as a likelihood.
+   */
+  confidence: number;
+  calibrated: boolean;
+  provenance: string;
+  /** Whether the producing analysis computes rather than estimates. */
+  deterministic: boolean;
+  evidence: string;
+  location: EvidenceLocation;
+}
+
 /** A named group of nodes. */
 export interface Cluster {
   id: number;
@@ -142,6 +188,12 @@ export interface AnalysisSummary {
 
 /** A completed analysis. */
 export interface AnalysisPayload {
+  /**
+   * Identifies this analysis. Must be passed back with any evidence lookup:
+   * edge ids restart at zero per analysis, so without it a stale selection
+   * would resolve against the new graph and return wrong evidence.
+   */
+  analysis: AnalysisId;
   /** Safe-to-show repository name. Never an absolute path. */
   repository: string;
   summary: AnalysisSummary;

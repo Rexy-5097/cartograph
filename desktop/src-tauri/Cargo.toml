@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # The repository lifecycle: validation, orchestration, the error contract.
 # Everything testable lives there rather than here.
+cartograph-core = { path = "../../crates/cartograph-core" }
 cartograph-desktop = { path = "../../crates/cartograph-desktop" }
 tauri = { version = "2", features = [] }
 # The native folder picker. A desktop application that cannot open a folder
