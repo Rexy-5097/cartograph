@@ -52,7 +52,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use cartograph_core::{Node, NodeId};
+use cartograph_core::{Node, NodeId, NodeIdentity, identity_of};
 use serde::{Deserialize, Serialize};
 
 use crate::ArchitectureGraph;
@@ -508,4 +508,105 @@ fn normalise(
         }
     }
     out
+}
+
+/// Lays out `new_graph` while keeping artefacts the reader already knows where
+/// they were.
+///
+/// This is the M13 specification's `layout(prev_graph, new_graph,
+/// prev_positions)`. [`layout`] promises determinism but explicitly not
+/// stability: adding one node moves every node in its cluster, and adding a
+/// cluster re-indexes the ones after it ([ADR-0015](../../../docs/adr/ADR-0015-layout-contract.md)).
+/// That is correct for drawing one graph and wrong for drawing a *second* one
+/// to the same reader, who has to rebuild their mental map from scratch when
+/// nothing they were looking at actually moved.
+///
+/// # Why `prev_graph` is a parameter
+///
+/// `prev_positions` records coordinates against the previous graph's
+/// `NodeId`s, and those are graph-local — the same number names a different
+/// artefact in `new_graph`. `prev_graph` is what translates them into
+/// [`NodeIdentity`], the stable `(kind, name, file)` value M13's identity slice
+/// added. Correspondence is by identity throughout; **no `NodeId` is ever
+/// carried across the two graphs**.
+///
+/// # What happens to each node
+///
+/// - **Present in both, with a previous position** — keeps that position
+///   exactly. This is the whole point, and the reason nothing is re-normalised
+///   afterwards: a second pass over the combined set would move the very nodes
+///   this function exists to hold still.
+/// - **New, or previously unpositioned** — takes the position [`layout`] gives
+///   it, so placement stays deterministic and obeys the same clustering rules.
+///   A node whose file moved is *new* by construction: the file is part of its
+///   identity.
+/// - **Removed** — simply absent. The result has one record per node of
+///   `new_graph` and nothing else.
+///
+/// # Two constraints the existing contract imposes
+///
+/// **Cluster ids come from `new_graph`, never from the previous layout.** Ids
+/// are dense and ordered by label, so a directory appearing or disappearing
+/// renumbers them; a preserved id would point into the wrong table.
+///
+/// **A preserved coordinate is rejected if it lies outside `params.extent`.**
+/// Every layout record must sit inside the extent, and a previous layout
+/// computed with a larger extent would otherwise smuggle an out-of-range point
+/// into a contract that forbids it. Such a node falls back to its freshly
+/// computed position rather than the function returning something invalid.
+/// A non-finite previous coordinate is refused the same way.
+///
+/// # What this deliberately does not do
+///
+/// No animation, no interpolation, no new force model, no randomness. The
+/// positions are the previous ones where they exist and [`layout`]'s where they
+/// do not — nothing is invented in between.
+#[must_use]
+pub fn layout_stable(
+    prev_graph: &ArchitectureGraph,
+    new_graph: &ArchitectureGraph,
+    prev_positions: &Layout,
+    params: &LayoutParams,
+) -> Layout {
+    // Translate the previous layout out of its own numbering and into identity
+    // space. A `BTreeMap` because the iteration below must not depend on hash
+    // ordering, and because two nodes cannot share an identity within a graph.
+    let mut previous: BTreeMap<NodeIdentity, (f64, f64)> = BTreeMap::new();
+    for node in prev_graph.nodes() {
+        if let Some(placed) = prev_positions.node(node.id()) {
+            previous.insert(identity_of(node), (placed.x, placed.y));
+        }
+    }
+
+    // The fresh layout supplies clusters, ordering, and every position that is
+    // not being preserved. Reusing it rather than reimplementing placement is
+    // what keeps the two functions from drifting apart.
+    let mut fresh = layout(new_graph, params);
+
+    // Identity of each node of the new graph, looked up by its handle.
+    let identities: BTreeMap<NodeId, NodeIdentity> = new_graph
+        .nodes()
+        .map(|node| (node.id(), identity_of(node)))
+        .collect();
+
+    for placed in &mut fresh.nodes {
+        let Some(identity) = identities.get(&placed.id) else {
+            continue;
+        };
+        let Some(&(x, y)) = previous.get(identity) else {
+            continue;
+        };
+        // Refuse a coordinate that would break the layout contract rather than
+        // returning a record that violates it.
+        if !x.is_finite() || !y.is_finite() {
+            continue;
+        }
+        if x.abs() > params.extent || y.abs() > params.extent {
+            continue;
+        }
+        placed.x = x;
+        placed.y = y;
+    }
+
+    fresh
 }
