@@ -4,8 +4,8 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M11
-status: ACCEPTED                # M11 accepted 2026-09-01; see milestones.M11
+current_milestone: M12
+status: IN_PROGRESS             # M12 is implemented on main and NOT accepted
 current_branch: main
 next_allowed_milestone: M12    # UNLOCKED - M11 accepted; M13 locked until M12 is accepted
 # `current_milestone` names the milestone this tree implements, and
@@ -13,14 +13,17 @@ next_allowed_milestone: M12    # UNLOCKED - M11 accepted; M13 locked until M12 i
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
 # in a pull request, because the constant is product code.
 #
-# It reads M11 and stays there through M11's acceptance. Setting it to M12
-# would be wrong twice over: no M12 code exists, so the tree does not
-# implement M12; and the constant still reads "M11", so advancing this field
-# alone fails QG-004. A bookkeeping commit may not touch the constant.
+# It read M11 through M11's acceptance. M12's three slices are merged (PRs
+# #24, #25, #26), so the tree now implements M12 and the pair advances here -
+# the file said it would advance in the first M12 pull request; it did not,
+# and this pull request is the correction.
 #
-# M12 is unlocked by `next_allowed_milestone` and by its own NOT_STARTED
-# entry, exactly as M11 was unlocked at M10's acceptance. The pair advances in
-# the first M12 pull request.
+# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
+# than ACCEPTED precisely because M12 is not accepted. Acceptance flips it,
+# together with milestones.M12.status, and only then.
+#
+# `next_allowed_milestone` stays M12 until acceptance: M13 is locked until M12
+# is accepted, and it advances in the acceptance commit, not here.
 
 milestones:
   M00:
@@ -332,7 +335,12 @@ milestones:
       - the desktop shell is outside `cargo test --workspace` and is covered by a dedicated CI job (ADR-0016)
       - no stable cross-run node identity; M13 requires it (ADR-0014)
   M12:
-    status: NOT_STARTED                   # unlocked; no code written, no branch
+    # Implementation is merged; acceptance has not happened. The status field
+    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
+    # to ACCEPTED at the formal acceptance step - not before. The comment
+    # carries what the two-value vocabulary cannot.
+    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
+    implementation: MERGED                # PRs #24, #25, #26
     pull_request: null
     provisional_tag: null
     accepted_tag: null

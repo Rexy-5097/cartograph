@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Last accepted milestone | **M11 — desktop application, MAP** (accepted 2026-09-01) |
-| Status | M00–M11 **ACCEPTED**; M12 unlocked, no code written, no branch |
+| Status | M00–M11 **ACCEPTED**; M12 **implemented on `main`, not accepted** |
 | Branch | `main` |
 | Next permitted milestone | M12 — **unlocked**; M13 locked until M12 is accepted |
 | Last accepted checkpoint | `cartograph-m11` (immutable, commit `17f114e`) |
