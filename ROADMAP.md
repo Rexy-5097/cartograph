@@ -36,8 +36,8 @@ real-repository validation.
 | M09 | CLI polish, trace, JSON output, v0.1.0 public | Week 6 | **Accepted** (`cartograph-m09`) |
 | M10 | Incremental engine | Week 8 | **Accepted** (`cartograph-m10`) — Stage C only, see [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) |
 | M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | **Accepted** (`cartograph-m11`) |
-| M12 | Blast radius across language boundaries | Week 13 | **Unlocked, not started** |
-| M13 | Structural diff, branch against branch | Week 16 | Not started |
+| M12 | Blast radius across language boundaries | Week 13 | **Accepted** (`cartograph-m12`) |
+| M13 | Structural diff, branch against branch | Week 16 | **Unlocked, not started** |
 | M14 | GitHub Action posting architecture review on PRs | Week 19 | Not started |
 | M15 | MCP server | Week 21 | Not started |
 | M16 | ASK — explanation over subgraph evidence | Week 24 | Not started |

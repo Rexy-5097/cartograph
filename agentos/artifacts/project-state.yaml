@@ -5,9 +5,9 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M12
-status: IN_PROGRESS             # M12 is implemented on main and NOT accepted
+status: ACCEPTED                # M12 accepted 2026-09-02; see milestones.M12
 current_branch: main
-next_allowed_milestone: M12    # UNLOCKED - M11 accepted; M13 locked until M12 is accepted
+next_allowed_milestone: M13    # UNLOCKED - M12 accepted; M14 locked until M13 is accepted
 # `current_milestone` names the milestone this tree implements, and
 # `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
@@ -18,12 +18,11 @@ next_allowed_milestone: M12    # UNLOCKED - M11 accepted; M13 locked until M12 i
 # the file said it would advance in the first M12 pull request; it did not,
 # and this pull request is the correction.
 #
-# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
-# than ACCEPTED precisely because M12 is not accepted. Acceptance flips it,
-# together with milestones.M12.status, and only then.
+# `status` above describes `current_milestone`. M12 is accepted, so it reads
+# ACCEPTED, flipped together with milestones.M12.status at the acceptance step.
 #
-# `next_allowed_milestone` stays M12 until acceptance: M13 is locked until M12
-# is accepted, and it advances in the acceptance commit, not here.
+# It reads M12 and stays there through M12's acceptance. The pair advances in
+# the first M13 pull request, not in a bookkeeping commit.
 
 milestones:
   M00:
@@ -335,21 +334,50 @@ milestones:
       - the desktop shell is outside `cargo test --workspace` and is covered by a dedicated CI job (ADR-0016)
       - no stable cross-run node identity; M13 requires it (ADR-0014)
   M12:
-    # Implementation is merged; acceptance has not happened. The status field
-    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
-    # to ACCEPTED at the formal acceptance step - not before. The comment
-    # carries what the two-value vocabulary cannot.
-    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
-    implementation: MERGED                # PRs #24, #25, #26
-    pull_request: null
-    provisional_tag: null
-    accepted_tag: null
+    status: ACCEPTED
+    accepted: 2026-09-02
+    pull_request: [24, 25, 26, 28]         # three slices plus the version prerequisite
+    provisional_tag: null                  # ADR-0010: none needed
+    accepted_tag: cartograph-m12           # immutable
+    merge_commit: d04e76771f9ba0b0fb57ce3539d24b68377231c2
+    implementation: MERGED
+    scope_adrs: [ADR-0018]
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      The stated criterion is met, and the gates pass.
+
+      "Blast query on benchmark repos returns cross-stack impact sets with
+      evidence" - on Apache Airflow at 9b43d6abc0fc, target Connection (the
+      Python class) returns 767 impacted artefacts at maximum depth 5, of which
+      9 are TypeScript: React components, the generated API client and the
+      query hooks. A query rooted in Python reaches the browser through the
+      HTTP boundary, which is the cross-stack claim the milestone exists to
+      make.
+
+      Evidence is attached rather than implied: all 767 `via` ids resolve to
+      edges in the same document, each carrying kind, provenance, confidence
+      and location. Zulip at 0ce8f6278cde returns 113 impacted at depth 1 for
+      Stream, all resolving.
+
+      Core, CLI and desktop agree entry for entry on both corpora.
+    finding: |
+      Confidence along a path is the weakest step, not the product (ADR-0018).
+      Multiplying would rank a long certain chain below a short doubtful one and
+      make depth, not evidence, the thing the number measures. It remains an
+      uncalibrated prior - `calibrated: false` travels with every payload, and
+      M08's ECE of 0.18 is unchanged.
+
+      No cross-run identity was introduced: reverse reachability runs over one
+      graph, which ADR-0011 already serves, and id.rs is untouched. A node id
+      held across a re-analysis is refused as StaleSelection rather than
+      answered, because NodeId restarts at zero and a stale id would otherwise
+      name a real but different artefact.
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M11
+  milestone: M12
   class: accepted
-  tag: cartograph-m11
-  merge_commit: 17f114ee19c467261a89c012f8b77824b71affd2
+  tag: cartograph-m12
+  merge_commit: d04e76771f9ba0b0fb57ce3539d24b68377231c2
 
 gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001

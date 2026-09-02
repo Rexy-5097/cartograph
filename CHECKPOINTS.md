@@ -453,6 +453,125 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M12 — Blast radius
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-02 by the project owner |
+| Base | `cartograph-m11` — commit `17f114e` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#24](https://github.com/Rexy-5097/cartograph/pull/24) · [#25](https://github.com/Rexy-5097/cartograph/pull/25) · [#26](https://github.com/Rexy-5097/cartograph/pull/26) · [#28](https://github.com/Rexy-5097/cartograph/pull/28) |
+| **Accepted checkpoint** | **`cartograph-m12`** — merge commit `d04e767`, immutable |
+| Scope records | [ADR-0018](docs/adr/ADR-0018-blast-radius-confidence.md) |
+
+### Delivered in three slices
+
+| Slice | PR | What landed |
+|---|---|---|
+| 1 — core | #24 | Reverse reachability over `edges_to`, bottleneck relaxation, `is_dependency` allow-list |
+| 2 — CLI | #25 | `cartograph blast`, schema 1.1 (`oneOf` on `command`), exit codes |
+| 3 — desktop | #26 | Tauri command, highlight projection, find-by-name |
+| prerequisite | #28 | `version::MILESTONE` and `current_milestone` advanced together |
+
+### The decision the milestone was really about
+
+**Confidence along a path is the weakest step, not the product.** A five-hop
+chain of 0.98 edges multiplies to 0.90, and of 0.80 edges to 0.33 — which would
+rank a long certain chain below a short doubtful one and make depth, not
+evidence, the thing the number measures. [ADR-0018](docs/adr/ADR-0018-blast-radius-confidence.md)
+takes the **minimum along a path, maximised across paths**: a route is as strong
+as its weakest link, and an artefact is scored by its best-supported route.
+
+**The number is not a probability and says so.** `calibrated: false` travels
+with every payload on both surfaces rather than living in a surface's memory.
+M08 measured ECE 0.18, with 79% observed at a stated 0.80; RULE 009 and that
+finding point the same way.
+
+**One representative route is reported per artefact,** not every route. The
+field is named `routes: "representative"` so no reader concludes the set is
+exhaustive.
+
+**The clients decide nothing.** `cartograph-desktop` and the CLI each call
+`blast_radius` once and shape the result; there is no traversal, no confidence
+arithmetic and no edge-kind policy in either (RULE 002). The desktop answer was
+checked against the core's exhaustively, entry by entry, on real repositories.
+
+### Acceptance criterion — cross-stack impact sets with evidence
+
+**PASS.** Apache Airflow at `9b43d6abc0fc` (3,104 nodes · 3,350 edges), target
+`Connection` — the Python class, not the `connection` table or the function
+that shares its name:
+
+**767 impacted artefacts, maximum depth 5, of which 9 are TypeScript** — 7
+`.ts` and 2 `.tsx`, at depths 2–5: `AddConnectionButton.tsx` and
+`TestConnectionButton.tsx`, `postConnection`/`testConnection` in
+`services.gen.ts`, the `useAddConnection`/`useTestConnection` hooks, and
+`connections.spec.ts`. The remaining 758 are Python. A query rooted in a
+Python class reaches React components through the HTTP boundary, which is the
+cross-stack claim the milestone exists to make.
+
+**Every impacted artefact carries evidence.** All 767 `via` ids resolve to
+edges in the same document — none dangling — each with kind, provenance,
+confidence and location.
+
+Zulip at `0ce8f6278cde` (1,308 · 1,469), target `Stream`: **113 impacted,
+maximum depth 1**, all Python, all `via` resolving. The depth is 1 because
+every dependent is a direct ORM access, not because traversal stopped early.
+
+**The three surfaces agree exactly.** Desktop equals core entry for entry —
+Airflow `Connection` 767 (core 767), `DagRun` 107 (core 107); Zulip `Stream`
+113 (core 113) — and the CLI reports the same sets.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `d04e767`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy … -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **745 passed, 0 failed, 18 ignored** |
+| frontend typecheck · test · build | PASS — 85 tests |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100 |
+| CI on `d04e767` | PASS — all 8 checks |
+
+### Verification findings
+
+**No cross-run identity was introduced.** M12 runs over one graph, which
+ADR-0011's within-graph identity already serves; `crates/cartograph-core/src/id.rs`
+is unchanged. ADR-0014's gate stands untouched for M13.
+
+**A selection cannot outlive its graph.** `NodeId` restarts at zero each
+analysis, so a node id held across a re-analysis would name a real but
+different artefact — a confident wrong answer rather than an error. The desktop
+must present the `AnalysisId` it was looking at; a mismatch is refused as
+`StaleSelection`, an absent node as `UnknownNode`, and neither is ever reported
+as an empty radius. An empty radius is a true answer and stays distinguishable.
+
+**Highlighting moves nothing.** The blast overlay sets attributes on the loaded
+graph and never writes `x`, `y` or `cluster`; layout, topology, order and size
+hashes are identical before and after, asserted in the suite and observed on
+Airflow in the real window.
+
+### Accepted limitations
+
+- **Confidence is an uncalibrated prior**, not a likelihood, and must not be
+  thresholded as one. M08's ECE of 0.18 is unchanged by this milestone.
+- **One representative route per artefact.** Other routes may exist and are not
+  enumerated.
+- **Coincident geometry.** Where many edges converge on one node, a *particular*
+  highlighted route edge can be hard to click; every click still selects a real
+  edge and returns that edge's evidence. Pre-existing layout behaviour, not
+  introduced here.
+- **A node can be unclickable.** In Airflow the class `Connection` sits 0.19px
+  from a larger neighbour whose hit disc contains it at every zoom, which is why
+  Slice 3 added find-by-name. The CLI could always address it.
+- **The M11 renderer benchmark harness stalls** on its own `afterRender`
+  listener ordering; documented in `docs/benchmarks/m11-renderer.md` and not
+  fixed here.
+
 ## M11 — Desktop application, MAP
 
 | Field | Value |

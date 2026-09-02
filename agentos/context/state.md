@@ -7,22 +7,54 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M11 — desktop application, MAP** (accepted 2026-09-01) |
-| Status | M00–M11 **ACCEPTED**; M12 **implemented on `main`, not accepted** |
+| Last accepted milestone | **M12 — blast radius** (accepted 2026-09-02) |
+| Status | M00–M12 **ACCEPTED**; M13 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M12 — **unlocked**; M13 locked until M12 is accepted |
-| Last accepted checkpoint | `cartograph-m11` (immutable, commit `17f114e`) |
+| Next permitted milestone | M13 — **unlocked**; M14 locked until M13 is accepted |
+| Last accepted checkpoint | `cartograph-m12` (immutable, commit `d04e767`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger reads **M11** and stays there.
+> `current_milestone` in the ledger reads **M12** and stays there.
 > `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
 > so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. Setting the field to
-> M12 would be wrong twice over: no M12 code exists, and advancing it alone
-> fails QG-004. M12 is unlocked by `next_allowed_milestone`, exactly as M11 was
-> at M10's acceptance.
+> product code and a bookkeeping commit may not touch it. The pair advanced in
+> PR #28, which had to land before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M11 would have mislabelled it. M13 is
+> unlocked by `next_allowed_milestone`, exactly as M12 was at M11's acceptance.
 
 ## What exists
+
+- **M12: ACCEPTED** — blast radius, delivered as three reviewed slices
+  through the fork (PRs #24, #25, #26, plus #28 for the version prerequisite).
+
+  The milestone answers "what breaks if I change this?" by **reverse
+  reachability over one graph**, and the decision it turned on is arithmetic:
+  path confidence is the **weakest step, not the product**
+  ([ADR-0018](../../docs/adr/ADR-0018-blast-radius-confidence.md)). Multiplying
+  would score a five-hop chain of 0.98 edges at 0.90 and one of 0.80 edges at
+  0.33 — ranking a long certain chain below a short doubtful one, and measuring
+  depth rather than evidence. A node is scored by its best-supported route.
+
+  **Accepted on its stated criterion**: cross-stack impact sets with evidence.
+  On Airflow (`9b43d6abc0fc`), the Python class `Connection` reaches **767
+  artefacts at depth 5, nine of them TypeScript** — React components, the
+  generated client, the query hooks — through the HTTP boundary. All 767 `via`
+  ids resolve to edges carrying kind, provenance, confidence and location.
+  Zulip (`0ce8f6278cde`) gives 113 at depth 1 for `Stream`. Core, CLI and
+  desktop agree entry for entry.
+
+  **The clients decide nothing** (RULE 002): each calls `blast_radius` once.
+  No cross-run identity was introduced — reverse reachability runs over one
+  graph, and `id.rs` is untouched, so ADR-0014's gate still stands for M13.
+  A selection held across a re-analysis is refused as `StaleSelection` rather
+  than answered, because `NodeId` restarts at zero and would otherwise name a
+  real but different artefact.
+
+  **Confidence is still an uncalibrated prior** — `calibrated: false` travels
+  with every payload, and M08's ECE of 0.18 is unchanged. One representative
+  route is reported per artefact, not all of them. Where many edges converge,
+  a particular route edge can be hard to click, and a node can be geometrically
+  unclickable — which is why Slice 3 added find-by-name.
 
 - **M11: ACCEPTED** — MAP, the desktop application, delivered as four reviewed
   slices through an open-source fork (PRs #18, #19, #21, #22, plus #23 for the
