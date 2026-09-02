@@ -31,6 +31,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 mod blast_cmd;
+mod diff_cmd;
 mod json;
 mod match_cmd;
 mod normalize_cmd;
@@ -127,6 +128,21 @@ enum Command {
         #[arg(long, default_value = ".", value_name = "PATH")]
         path: PathBuf,
     },
+    /// Compare two checked-out trees and report what changed architecturally.
+    ///
+    /// Takes two directories rather than two revisions: Cartograph has no git
+    /// dependency, so the caller decides how the trees came to exist -- `git
+    /// worktree add` is the usual answer. Correspondence between the analyses
+    /// is by stable `(kind, name, file)` identity, never by node id, so a
+    /// relationship that merely moved down its file is not reported as churn.
+    Diff {
+        /// The earlier tree.
+        #[arg(value_name = "BEFORE")]
+        before: PathBuf,
+        /// The later tree.
+        #[arg(value_name = "AFTER")]
+        after: PathBuf,
+    },
     /// Extract syntactic facts from TypeScript, TSX and Python source.
     ///
     /// Reports what the files say — symbols, imports, call sites, string and
@@ -162,6 +178,7 @@ impl Command {
         match self {
             Self::Trace { .. } => "trace",
             Self::Blast { .. } => "blast",
+            Self::Diff { .. } => "diff",
             Self::Parse { .. } => "parse",
             Self::Normalize { .. } => "normalize",
             Self::Match { .. } => "match",
@@ -205,6 +222,7 @@ fn dispatch(cli: &Cli) -> Result<(String, ExitCode), CliError> {
             max_depth,
         }) => trace_cmd::run(path, symbol, *max_depth, cli.json),
         Some(Command::Blast { symbol, path }) => blast_cmd::run(path, symbol, cli.json),
+        Some(Command::Diff { before, after }) => diff_cmd::run(before, after, cli.json),
         Some(Command::Parse { path }) => parse_cmd::run(path, cli.json),
         Some(Command::Normalize { path }) => normalize_cmd::run(path, cli.json),
         Some(Command::Match { path }) => match_cmd::run(path, cli.json),
@@ -289,9 +307,9 @@ mod tests {
         // The command set is a deliberate milestone decision, and this test
         // exists so widening it cannot happen by accident. `trace`, `parse`,
         // `normalize`, `match`, `version` and the default summary are M09's;
-        // `blast` is M12's, added when the milestone that owns it was built.
-        // If this test fails, the scope moved -- decide whether it should
-        // have, then change this list on purpose.
+        // `blast` is M12's and `diff` is M13's, each added when the milestone
+        // that owns it was built. If this test fails, the scope moved --
+        // decide whether it should have, then change this list on purpose.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
@@ -299,21 +317,29 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            vec!["trace", "blast", "parse", "normalize", "match", "version"]
+            vec![
+                "trace",
+                "blast",
+                "diff",
+                "parse",
+                "normalize",
+                "match",
+                "version"
+            ]
         );
     }
 
     #[test]
     fn no_unbuilt_milestone_command_is_present() {
         // Named explicitly so an accidental addition fails loudly rather than
-        // shipping a capability the project has not built. `diff` stays on the
-        // list: M13 owns it and it does not exist yet.
+        // shipping a capability the project has not built. `diff` has left the
+        // list: M13 built it. The rest are still unbuilt milestones.
         let command = Cli::command();
         let names: Vec<_> = command
             .get_subcommands()
             .map(clap::Command::get_name)
             .collect();
-        for forbidden in ["watch", "serve", "diff", "ask", "mcp", "ui", "desktop"] {
+        for forbidden in ["watch", "serve", "ask", "mcp", "ui", "desktop"] {
             assert!(
                 !names.contains(&forbidden),
                 "`{forbidden}` is a later milestone's deliverable"

@@ -17,6 +17,7 @@
 //! See `docs/adr/ADR-0003-cartograph-owns-the-graph.md`.
 
 pub mod blast;
+pub mod diff;
 pub mod layout;
 
 use std::collections::HashMap;
