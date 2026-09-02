@@ -6,23 +6,25 @@ use crate::error::CoreError;
 
 /// Handle to a node in an architecture graph.
 ///
-/// Opaque and assigned by the graph that owns the node. Identity is *not* yet
-/// content-addressed: two analyses of the same repository may assign different
-/// `NodeId`s to the same function.
-///
-/// M10 built its incremental engine without it — per-file results are keyed by
-/// content and dependency identity, never by `NodeId`, and graphs are compared
-/// by semantic identity rather than by handle — so stable identity is deferred
-/// again, with its consumers named: M12 (blast radius) and M13 (structural
-/// diff) both require it. See ADR-0014.
+/// Opaque and assigned by the graph that owns the node. A `NodeId` is a
+/// *handle*, not an identity: two analyses of the same repository may assign
+/// different `NodeId`s to the same function, and M13 did not change that.
 ///
 /// # Handles are graph-local
 ///
 /// Ids are allocated per graph and start from zero, so the same `NodeId` names
 /// different artefacts in two different graphs. Passing a handle from one
 /// graph to another does not fail loudly — it silently addresses whatever
-/// happens to occupy that slot. Until identity becomes content-addressed, do
-/// not mix handles across graphs.
+/// happens to occupy that slot. Do not mix handles across graphs.
+///
+/// # Corresponding a node across analyses
+///
+/// Use [`NodeIdentity`](crate::NodeIdentity) — a *separate* value derived from
+/// `(kind, name, file)`, added by M13's identity slice. That is what names the
+/// same artefact in two independently built graphs. `NodeId` deliberately
+/// still cannot, and its meaning was not widened to make it able to: the two
+/// exist side by side, one addressing a slot and the other an artefact.
+/// See [`crate::identity`] and ADR-0014.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NodeId(u64);
