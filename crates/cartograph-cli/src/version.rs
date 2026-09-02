@@ -18,7 +18,7 @@ use serde::Serialize;
 /// The milestone whose scope this binary implements.
 ///
 /// Checked against the project ledger by a unit test rather than trusted.
-pub const MILESTONE: &str = "M11";
+pub const MILESTONE: &str = "M12";
 
 /// Release identity, in the shape `version --json` promises.
 #[derive(Debug, Clone, Copy, Serialize)]
