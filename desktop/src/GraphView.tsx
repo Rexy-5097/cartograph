@@ -30,6 +30,7 @@ import Sigma from "sigma";
 import { applyBlastHighlight, clearBlastHighlight } from "./blast";
 import { buildGraph, type BuildDiagnostics } from "./graph";
 import type { BlastResult, Scene } from "./session";
+import { SIGMA_SETTINGS } from "./sigmaSettings";
 
 interface Props {
   scene: Scene;
@@ -57,29 +58,10 @@ interface Props {
   blast?: BlastResult | null;
 }
 
-/**
- * Sigma settings. Presentation only; none of these touch graph semantics.
- *
- * Exported so the benchmark measures the same renderer configuration the
- * window uses. A benchmark with different settings would measure a Sigma
- * nobody ships.
- */
-export const SIGMA_SETTINGS = {
-  renderEdgeLabels: false,
-  defaultEdgeType: "line",
-  // Labels are the expensive part of a large scene: drawing ten thousand of
-  // them costs far more than drawing ten thousand nodes. The threshold hides
-  // them until zoomed in, which is also what makes the map readable.
-  labelRenderedSizeThreshold: 6,
-  labelDensity: 0.6,
-  labelGridCellSize: 80,
-  labelColor: { color: "#c8ccd4" },
-  labelFont: "ui-sans-serif, system-ui, sans-serif",
-  labelSize: 11,
-  zIndex: true,
-  minCameraRatio: 0.02,
-  maxCameraRatio: 40,
-} as const;
+// Re-exported so the benchmark and anything else that imported it from here
+// keeps working; the values live in their own module so a Node test can read
+// them without loading Sigma.
+export { SIGMA_SETTINGS };
 
 export default function GraphView({
   scene,
