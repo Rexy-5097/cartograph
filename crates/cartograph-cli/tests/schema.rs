@@ -2,7 +2,7 @@
 //!
 //! # Why the schema is executed rather than described
 //!
-//! `docs/architecture/cartograph-output-1.1.schema.json` is the contract a
+//! `docs/architecture/cartograph-output-1.2.schema.json` is the contract a
 //! future MCP server, editor plugin or CI integration will be written against.
 //! A schema file that nothing checks is a wish, and it drifts from the code the
 //! first time a field is renamed. These tests load that exact file and validate
@@ -41,14 +41,14 @@ fn schema() -> Value {
         .unwrap()
         .parent()
         .unwrap()
-        .join("docs/architecture/cartograph-output-1.1.schema.json");
+        .join("docs/architecture/cartograph-output-1.2.schema.json");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
     serde_json::from_str(&text).expect("the published schema is valid JSON")
 }
 
 /// The keywords the validator below understands.
-const SUPPORTED: [&str; 15] = [
+const SUPPORTED: [&str; 16] = [
     "$schema",
     "$id",
     "title",
@@ -62,6 +62,7 @@ const SUPPORTED: [&str; 15] = [
     "minimum",
     "maximum",
     "minLength",
+    "minItems",
     "oneOf",
     "additionalProperties",
 ];
@@ -125,6 +126,17 @@ fn validate(value: &Value, schema: &Value, path: &str, problems: &mut Vec<String
     ) {
         if (actual.len() as u64) < minimum {
             problems.push(format!("{path}: string shorter than {minimum}"));
+        }
+    }
+    // Implemented rather than dropped from the schema: 1.2 states that a
+    // reported change must name at least one differing field, and a validator
+    // that ignored the keyword would make that promise unchecked.
+    if let (Some(minimum), Some(actual)) = (
+        object.get("minItems").and_then(Value::as_u64),
+        value.as_array(),
+    ) {
+        if (actual.len() as u64) < minimum {
+            problems.push(format!("{path}: fewer than {minimum} items"));
         }
     }
 
@@ -338,6 +350,46 @@ fn the_blast_document_conforms() {
     );
 }
 
+/// The 1.2 addition. A diff document must match exactly one branch, and its
+/// `$defs` are exercised by every entry it carries.
+#[test]
+fn the_diff_document_conforms() {
+    assert_conforms(
+        "diff",
+        &json_of(&["diff", "<fixtures>", "<fixtures>", "--json"]),
+    );
+}
+
+/// The compatibility promise of 1.2, checked rather than asserted: a trace
+/// document produced today still matches the branch 1.1 defined for it, so the
+/// addition of `diff` widened the contract without moving it.
+#[test]
+fn a_trace_document_still_matches_only_the_trace_branch_under_1_2() {
+    let document = json_of(&["trace", "http.ts", "--json", "--path", "<fixtures>"]);
+    let result = document.get("result").expect("trace emits a result");
+
+    let schema = schema();
+    let branches = schema["properties"]["result"]["oneOf"]
+        .as_array()
+        .expect("result is a oneOf");
+    let accepted: Vec<usize> = branches
+        .iter()
+        .enumerate()
+        .filter(|(_, branch)| {
+            let mut problems = Vec::new();
+            validate(result, branch, "result", &mut problems);
+            problems.is_empty()
+        })
+        .map(|(index, _)| index)
+        .collect();
+
+    assert_eq!(
+        accepted,
+        vec![0],
+        "a trace result must match the trace branch and nothing else"
+    );
+}
+
 /// The compatibility promise of 1.1: the `trace` branch is the 1.0 shape, so a
 /// trace document must still match exactly one branch and never the blast one.
 #[test]
@@ -380,7 +432,7 @@ fn the_per_stage_documents_carry_the_envelope() {
     for command in ["parse", "normalize", "match"] {
         let document = json_of(&[command, "--json", "<fixtures>"]);
         assert_conforms(command, &document);
-        assert_eq!(document["schema_version"], "1.1", "{command}");
+        assert_eq!(document["schema_version"], "1.2", "{command}");
         assert_eq!(document["command"], command);
     }
 }

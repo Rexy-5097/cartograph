@@ -651,7 +651,7 @@ fn trace_json_reports_a_missing_symbol_as_json_on_stdout() {
     assert_eq!(output.status.code(), Some(exit::NOT_FOUND));
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)
         .expect("a failing --json run must still emit JSON on stdout");
-    assert_eq!(value["schema_version"], "1.1");
+    assert_eq!(value["schema_version"], "1.2");
     assert_eq!(value["command"], "trace");
     assert_eq!(value["errors"][0]["code"], "symbol-not-found");
 }
@@ -770,7 +770,7 @@ fn every_json_document_declares_the_schema_version_and_command() {
         let value: serde_json::Value = serde_json::from_slice(&output.stdout)
             .unwrap_or_else(|e| panic!("{command} did not emit pure JSON: {e}"));
 
-        assert_eq!(value["schema_version"], "1.1", "{command}");
+        assert_eq!(value["schema_version"], "1.2", "{command}");
         assert_eq!(value["command"], command, "{command}");
     }
 }
@@ -871,7 +871,7 @@ fn a_rooted_drive_less_path_never_reaches_serialised_output() {
         );
         // Still a well-formed document reporting the failure, not a panic.
         let value: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is pure JSON");
-        assert_eq!(value["schema_version"], "1.1");
+        assert_eq!(value["schema_version"], "1.2");
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(

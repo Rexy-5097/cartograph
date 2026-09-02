@@ -113,7 +113,7 @@ fn a_blast_query_succeeds_and_reports_the_target() {
     let document = json(&["blast", "Order", "--json", "--path", "<repo>"]);
 
     assert_eq!(document["command"], "blast");
-    assert_eq!(document["schema_version"], "1.1");
+    assert_eq!(document["schema_version"], "1.2");
     assert_eq!(document["result"]["target"]["name"], "Order");
     assert_eq!(document["result"]["calibrated"], false);
     assert_eq!(document["result"]["routes"], "representative");
