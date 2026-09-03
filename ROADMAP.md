@@ -38,7 +38,7 @@ real-repository validation.
 | M11 | Desktop app — Tauri, Sigma.js, MAP | Week 11 | **Accepted** (`cartograph-m11`) |
 | M12 | Blast radius across language boundaries | Week 13 | **Accepted** (`cartograph-m12`) |
 | M13 | Structural diff, branch against branch | Week 16 | **Accepted** (`cartograph-m13`) |
-| M14 | GitHub Action posting architecture review on PRs | Week 19 | **In progress** — Slices 1–2 merged, not accepted |
+| M14 | GitHub Action posting architecture review on PRs | Week 19 | **In progress** — Slices 1–2 merged (#33, #34), not accepted |
 | M15 | MCP server | Week 21 | Not started |
 | M16 | ASK — explanation over subgraph evidence | Week 24 | Not started |
 | M17 | Public launch and technical writeup | Week 25 | Not started |
