@@ -23,3 +23,4 @@
 | [0016](../../docs/adr/ADR-0016-desktop-boundary.md) | The desktop boundary: shared pipeline crate, testable session, thin shell outside the workspace | Accepted |
 | [0017](../../docs/adr/ADR-0017-render-scene.md) | The render scene: layout plus the minimum a reader needs | Accepted |
 | [0018](../../docs/adr/ADR-0018-blast-radius-confidence.md) | Blast radius confidence: weakest link along a path, best route to a node | Accepted |
+| [0019](../../docs/adr/ADR-0019-trace-belongs-to-the-graph.md) | The trace traversal belongs to the graph, not to a client | Accepted |

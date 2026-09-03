@@ -8,13 +8,23 @@
 //! "compute the architecture, prove the relationships" — becomes something a
 //! person can check line by line.
 //!
-//! # The path comes out of the graph
+//! # This module renders; it does not walk
 //!
-//! This module walks edges with [`ArchitectureGraph::edges_from`]. It does not
-//! re-derive a chain from the match results, or from the source, or from
-//! anything else. If the rendered path and the graph disagree, the rendering
-//! is wrong — there is no second opinion to consult. Every hop reports the
-//! confidence, provenance, evidence and location that the edge itself carries.
+//! The traversal and the symbol lookup live in [`cartograph_graph::trace`]
+//! (M15 Slice 1, ADR-0019). They were here until the MCP server became the
+//! third client and a binary crate turned out to be undependable — the same
+//! discovery ADR-0016 made at M11. What is left is presentation: the JSON
+//! document, the indented text, and the labels.
+//!
+//! Two things stay here because they are not graph facts. **Refusals** are
+//! observations the *resolver* declined, and they live in `Analysis::results`;
+//! reaching them from `cartograph-graph` would invert the dependency
+//! direction. **How a candidate is described to a person** is a client's
+//! choice, so the graph returns [`NodeId`]s and this module formats them.
+//!
+//! Every hop still reports the confidence, provenance, evidence and location
+//! that the edge itself carries. If the rendered path and the graph disagree,
+//! the rendering is wrong — there is no second opinion to consult.
 //!
 //! # Ambiguity is not resolved by choosing
 //!
@@ -24,11 +34,11 @@
 //! output depend on iteration order, which is exactly the class of quiet
 //! wrongness the project's refusal rules exist to prevent.
 
-use std::collections::HashSet;
 use std::fmt::Write as _;
 
 use cartograph_core::{EdgeKind, NodeId, NodeKind, Provenance};
 use cartograph_graph::ArchitectureGraph;
+use cartograph_graph::trace::{self, Stop, SymbolError, TraceStep};
 use cartograph_resolver::MatchStatus;
 use serde::Serialize;
 
@@ -38,30 +48,20 @@ use crate::pipeline::{self, Analysis};
 
 /// How deep a trace walks before stopping.
 ///
-/// A frontend → client → route → handler → model → table chain is five hops.
-/// Ten leaves room for longer real chains while bounding output on a graph
-/// with a long import spine.
-pub const DEFAULT_MAX_DEPTH: usize = 10;
+/// Re-exported so `--max-depth`'s default and the traversal that honours it
+/// cannot drift apart.
+pub const DEFAULT_MAX_DEPTH: usize = trace::DEFAULT_MAX_DEPTH;
 
-/// Why a walk stopped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum Stop {
-    /// The node has no outgoing edge. The chain genuinely ends here.
-    ChainEnd,
-    /// `--max-depth` was reached; more of the chain may exist.
-    MaxDepth,
-    /// The walk returned to a node already on this path.
-    Cycle,
-}
-
-impl Stop {
-    fn describe(self) -> &'static str {
-        match self {
-            Self::ChainEnd => "chain ends here — no outgoing edge from this node",
-            Self::MaxDepth => "stopped at --max-depth — the chain may continue",
-            Self::Cycle => "stopped — this node is already on the path",
-        }
+/// The sentence shown for a stop reason.
+///
+/// Wording is presentation, so it lives here rather than on the graph's
+/// [`Stop`]; `--max-depth` is named because it is the flag the reader would
+/// change.
+fn describe_stop(stop: Stop) -> &'static str {
+    match stop {
+        Stop::ChainEnd => "chain ends here — no outgoing edge from this node",
+        Stop::MaxDepth => "stopped at --max-depth — the chain may continue",
+        Stop::Cycle => "stopped — this node is already on the path",
     }
 }
 
@@ -138,9 +138,8 @@ pub fn run(
     let analysis = pipeline::run(path, pipeline::Options { quiet: as_json })?;
     let start = resolve_symbol(&analysis.graph, symbol)?;
 
-    let mut visited = HashSet::new();
-    visited.insert(start);
-    let (steps, stop) = walk(&analysis, start, max_depth, &mut visited);
+    let walk = trace::trace(&analysis.graph, start, max_depth);
+    let steps = render_steps_of(&analysis, &walk.steps);
 
     let refusals = if steps.is_empty() {
         refusals_near(&analysis, start)
@@ -153,7 +152,7 @@ pub fn run(
         from: node_json(&analysis.graph, start),
         reaches_table: reaches_table(&steps),
         steps,
-        stop,
+        stop: walk.stop,
         refusals,
         max_depth,
     };
@@ -169,85 +168,40 @@ pub fn run(
 
 // ── symbol resolution ───────────────────────────────────────────────
 
-/// Finds the single node a query names.
+/// Finds the single node a query names, as a CLI error when it cannot.
 ///
-/// A bare name matches on the node's name. A query containing `:` is read as
-/// `file:name` — `orders.py:create_order` — which is how a user disambiguates
-/// without needing to know node ids.
+/// The lookup itself is [`trace::resolve_symbol`]; what is here is how a
+/// failure is *said*. The graph returns candidate [`NodeId`]s precisely so
+/// that this decision stays in the client.
 pub(crate) fn resolve_symbol(graph: &ArchitectureGraph, query: &str) -> Result<NodeId, CliError> {
-    let (file_hint, name) = match query.rsplit_once(':') {
-        Some((file, name)) if !file.is_empty() && !name.is_empty() => (Some(file), name),
-        _ => (None, query),
-    };
-
-    let mut matches: Vec<&cartograph_core::Node> = graph
-        .nodes()
-        .filter(|node| node.name() == name)
-        .filter(|node| match file_hint {
-            None => true,
-            Some(hint) => node
-                .location()
-                .is_some_and(|location| path_matches(location.file(), hint)),
-        })
-        .collect();
-
-    // Deterministic ordering: the candidate list a user sees must not depend
-    // on graph iteration order.
-    matches.sort_by(|a, b| {
-        let key = |n: &cartograph_core::Node| {
-            (
-                n.location()
-                    .map(|l| l.file().to_owned())
-                    .unwrap_or_default(),
-                n.location()
-                    .map_or(0, cartograph_core::SourceLocation::line),
-                n.id().as_u64(),
-            )
-        };
-        key(a).cmp(&key(b))
-    });
-
-    match matches.as_slice() {
-        [] => Err(not_found(graph, query, name)),
-        [only] => Ok(only.id()),
-        many => Err(CliError::new(
+    trace::resolve_symbol(graph, query).map_err(|error| match error {
+        SymbolError::NotFound { near } => not_found(graph, query, &near),
+        SymbolError::Ambiguous { matches } => CliError::new(
             ErrorCode::AmbiguousSymbol,
-            format!("`{query}` matches {} symbols", many.len()),
+            format!("`{query}` matches {} symbols", matches.len()),
         )
-        .with_candidates(many.iter().map(|n| describe_node(n)).collect())
+        .with_candidates(describe_all(graph, &matches))
         .with_hint(
             "trace one of them by qualifying the name with its file, for example \
              `cartograph trace path/to/file.py:name`",
-        )),
-    }
+        ),
+    })
 }
 
-/// Whether a node's repository-relative path satisfies a user's file hint.
-///
-/// Suffix matching on path segments: `orders.py` matches `app/api/orders.py`,
-/// and `api/orders.py` matches it too, but `ders.py` does not.
-fn path_matches(file: &str, hint: &str) -> bool {
-    let hint = hint.trim_start_matches("./").replace('\\', "/");
-    if file == hint {
-        return true;
-    }
-    file.strip_suffix(hint.as_str())
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
+/// Describes each node, in the order given.
+fn describe_all(graph: &ArchitectureGraph, ids: &[NodeId]) -> Vec<String> {
+    ids.iter()
+        .filter_map(|id| graph.node(*id))
+        .map(describe_node)
+        .collect()
 }
 
 /// The not-found error, with near-misses when there are any.
-fn not_found(graph: &ArchitectureGraph, query: &str, name: &str) -> CliError {
-    // Case-insensitive equality first, then substring: the two mistakes a
-    // person actually makes. Not a general edit-distance search — suggesting
-    // `Order` for `Odrer` is guessing, and this command does not guess.
-    let mut near: Vec<String> = graph
-        .nodes()
-        .filter(|node| {
-            node.name().eq_ignore_ascii_case(name)
-                || (name.len() >= 3 && node.name().contains(name))
-        })
-        .map(describe_node)
-        .collect();
+fn not_found(graph: &ArchitectureGraph, query: &str, near: &[NodeId]) -> CliError {
+    // Sorted, de-duplicated and capped on the *rendered* description: two
+    // nodes can describe identically, and the list a person reads is what must
+    // not repeat itself.
+    let mut near: Vec<String> = describe_all(graph, near);
     near.sort();
     near.dedup();
     near.truncate(10);
@@ -283,70 +237,44 @@ fn describe_node(node: &cartograph_core::Node) -> String {
     }
 }
 
-// ── traversal ───────────────────────────────────────────────────────
+// ── from graph identifiers to a renderable document ──────────────────
 
-/// Walks outward from `from`, depth-first, following graph edges only.
-fn walk(
-    analysis: &Analysis,
-    from: NodeId,
-    remaining: usize,
-    visited: &mut HashSet<NodeId>,
-) -> (Vec<Step>, Option<Stop>) {
-    let graph = &analysis.graph;
-
-    let mut outgoing: Vec<&cartograph_core::Edge> = graph.edges_from(from).collect();
-    if outgoing.is_empty() {
-        return (Vec::new(), Some(Stop::ChainEnd));
-    }
-    if remaining == 0 {
-        return (Vec::new(), Some(Stop::MaxDepth));
-    }
-
-    // Deterministic branch order, independent of insertion order.
-    outgoing.sort_by_key(|edge| {
-        (
-            edge.kind() as u8,
-            edge.target().as_u64(),
-            edge.id().as_u64(),
-        )
-    });
-
-    let mut steps = Vec::with_capacity(outgoing.len());
-    for edge in outgoing {
-        let target = edge.target();
-        let step = if visited.contains(&target) {
-            Step {
-                edge: json::json_edge(edge),
-                to: node_json(graph, target),
-                next: Vec::new(),
-                stop: Some(Stop::Cycle),
-                refusals: Vec::new(),
-            }
-        } else {
-            visited.insert(target);
-            let (next, stop) = walk(analysis, target, remaining - 1, visited);
-            visited.remove(&target);
+/// Turns the graph's hops into the shape the document reports.
+///
+/// The walk hands back node and edge identifiers; this attaches the evidence
+/// each one stands for, and the refusals recorded near a break. Order is the
+/// graph's — nothing is re-sorted here, because branch order is a traversal
+/// decision and having two of them is how they disagree.
+///
+/// An identifier that does not resolve drops its hop rather than filling one
+/// in. It cannot happen — the ids come from the graph being read, and
+/// `cartograph_graph::trace`'s own test asserts every reported id resolves —
+/// but if a graph were ever corrupt, a missing edge is the one thing that must
+/// not be invented: an edge without real confidence, provenance and evidence
+/// is exactly what RULES 004-006 exist to prevent.
+fn render_steps_of(analysis: &Analysis, steps: &[TraceStep]) -> Vec<Step> {
+    steps
+        .iter()
+        .filter_map(|step| {
+            let next = render_steps_of(analysis, &step.next);
 
             // A break is only worth annotating when the chain stopped short of
             // data. Reaching a table is an ending, not a break.
-            let refusals = if next.is_empty() && stop == Some(Stop::ChainEnd) {
-                refusals_near(analysis, target)
+            let refusals = if next.is_empty() && step.stop == Some(Stop::ChainEnd) {
+                refusals_near(analysis, step.to)
             } else {
                 Vec::new()
             };
 
-            Step {
+            analysis.graph.edge(step.edge).map(|edge| Step {
                 edge: json::json_edge(edge),
-                to: node_json(graph, target),
+                to: node_json(&analysis.graph, step.to),
                 next,
-                stop,
+                stop: step.stop,
                 refusals,
-            }
-        };
-        steps.push(step);
-    }
-
-    (steps, None)
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn node_json(graph: &ArchitectureGraph, id: NodeId) -> JsonNode {
@@ -450,7 +378,7 @@ fn render_text(analysis: &Analysis, result: &TraceResult) -> String {
     render_steps(&mut out, &result.steps, "");
 
     if let Some(stop) = result.stop {
-        let _ = writeln!(out, "  ⊘ {}", stop.describe());
+        let _ = writeln!(out, "  ⊘ {}", describe_stop(stop));
         render_refusals(&mut out, &result.refusals, "  ");
     }
 
@@ -529,7 +457,7 @@ fn render_steps(out: &mut String, steps: &[Step], pad: &str) {
         if let Some(stop) = step.stop {
             // A chain that ends at a table has arrived, not stalled.
             if !(stop == Stop::ChainEnd && matches!(step.to.kind, NodeKind::Table)) {
-                let _ = writeln!(out, "{inner}  ⊘ {}", stop.describe());
+                let _ = writeln!(out, "{inner}  ⊘ {}", describe_stop(stop));
             }
             render_refusals(out, &step.refusals, &format!("{inner}  "));
         }
@@ -623,43 +551,21 @@ fn label_provenance(provenance: Provenance) -> &'static str {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_file_hint_matches_on_whole_path_segments() {
-        assert!(path_matches("app/api/orders.py", "orders.py"));
-        assert!(path_matches("app/api/orders.py", "api/orders.py"));
-        assert!(path_matches("app/api/orders.py", "app/api/orders.py"));
-        assert!(path_matches("orders.py", "orders.py"));
-        assert!(path_matches("app/api/orders.py", "./orders.py"));
-    }
-
-    #[test]
-    fn a_file_hint_does_not_match_a_partial_segment() {
-        // `ders.py` must not match `orders.py`: a hint that matched half a
-        // filename would silently pick the wrong symbol.
-        assert!(!path_matches("app/api/orders.py", "ders.py"));
-        assert!(!path_matches("app/api/orders.py", "reorders.py"));
-        assert!(!path_matches("app/api/orders.py", "other.py"));
-    }
+    // Path-hint matching, the traversal and the serialised stop slugs are
+    // tested in `cartograph_graph::trace`, which now owns them.
 
     #[test]
     fn every_stop_reason_explains_itself() {
         for stop in [Stop::ChainEnd, Stop::MaxDepth, Stop::Cycle] {
-            assert!(!stop.describe().is_empty());
+            assert!(!describe_stop(stop).is_empty());
         }
-        assert!(Stop::MaxDepth.describe().contains("may continue"));
+        assert!(describe_stop(Stop::MaxDepth).contains("may continue"));
     }
 
+    /// The flag's default and the traversal's default are the same number.
     #[test]
-    fn stop_reasons_serialise_as_stable_slugs() {
-        assert_eq!(
-            serde_json::to_string(&Stop::ChainEnd).unwrap(),
-            "\"chain-end\""
-        );
-        assert_eq!(
-            serde_json::to_string(&Stop::MaxDepth).unwrap(),
-            "\"max-depth\""
-        );
-        assert_eq!(serde_json::to_string(&Stop::Cycle).unwrap(), "\"cycle\"");
+    fn the_depth_default_is_the_graph_layer_default() {
+        assert_eq!(DEFAULT_MAX_DEPTH, trace::DEFAULT_MAX_DEPTH);
     }
 
     #[test]

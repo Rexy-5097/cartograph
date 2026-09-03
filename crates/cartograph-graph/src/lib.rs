@@ -19,6 +19,7 @@
 pub mod blast;
 pub mod diff;
 pub mod layout;
+pub mod trace;
 
 use std::collections::HashMap;
 
