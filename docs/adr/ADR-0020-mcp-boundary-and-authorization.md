@@ -5,13 +5,14 @@
 [ADR-0001](ADR-0001-rust-core-is-the-product.md) · Enforces
 [ADR-0005](ADR-0005-local-first-privacy.md)
 
-> **Amended 2026-09-03 — see *Amendment 1*, below, which is accepted.**
-> The four decisions below stand unchanged. The deferred item *"how the
-> canonical identity is derived"* turned out not to be a free choice:
-> investigation found that **no derivation from the analysed tree can satisfy
-> the diff rule this ADR also states**. Amendment 1 records that contradiction
-> and the owner's resolution — **R2, grant-supplied repository identity** —
-> together with the trust boundary it creates. This ADR is not rewritten.
+> **Amended 2026-09-03 — two amendments, both accepted.**
+> The four decisions below stand unchanged.
+> ***Amendment 1*** resolves where the identity comes from: investigation found
+> that **no derivation from the analysed tree can satisfy the diff rule this ADR
+> also states**, and the owner chose **R2, grant-supplied repository identity**.
+> ***Amendment 2*** resolves how a session receives that grant: **G1,
+> launch-time argv**, together with its trust boundary and its
+> path-exposure tradeoff. This ADR is not rewritten.
 
 ## Decisions recorded on acceptance
 
@@ -252,7 +253,7 @@ Not settled by this ADR. An implementation may not treat them as settled:
 | Deferred | Why it is still open |
 |---|---|
 | **How the canonical identity value is derived** | Still open. Amendment 1 decided *where identity comes from* — the grant — and deliberately did **not** decide what the value is. No `gix`, no populated `CommitId`, no durable fingerprint exists to derive one from |
-| **How a session receives its initial grant** | Choosing *canonical identity, one per session* does **not** imply a launch argument, a handshake tool, an environment variable or a config file. The owner selected the authorization property, not the grant channel |
+| ~~**How a session receives its initial grant**~~ | **Decided** by *Amendment 2*: launch-time argv (G1) |
 | **A4's concrete data model** | Accepted as a decision and a placement constraint; its shape is its own slice |
 | **The wire-level refusal code** | Belongs to the transport slice |
 
@@ -436,6 +437,143 @@ a guard that admits a query only when its tree was granted for that identity,
 and a paired guard for `diff` that requires both trees to carry it. Nothing in
 that list requires the identity value or the grant channel to be chosen, which
 is why Slice 2 can proceed while both remain deferred.
+
+## Amendment 2 — the initial grant arrives in argv
+
+**Status: Accepted, 2026-09-03.** Amendment 1 decided that identity is
+authorization state rather than something derived from a tree. It deliberately
+did not say who supplies it or how. This does.
+
+### Decision — G1, launch-time argv
+
+**The authorized repository grant is supplied in the process's own command line
+at start, before any MCP request is read.**
+
+Also accepted, and each load-bearing:
+
+| | |
+|---|---|
+| **Cardinality** | one repository identity per MCP session |
+| **Establishment** | the grant is fixed at process start; a session's authorization state is complete before query handling begins |
+| **Identity** | trusted authorization state, opaque, supplied by the grant — *derivation remains a separate, still-open problem* |
+| **Client authority** | an MCP request cannot replace, widen or add to the grant |
+| **Transport** | stdio, unchanged from decision C1 |
+| **Path exposure** | a repository path may appear in argv; accepted as a local-process tradeoff, subject to RULE 015 |
+
+### Why argv, from repository evidence
+
+Seven checks, each verified against the tree rather than assumed:
+
+1. **argv is the only production configuration surface that exists.** The CLI
+   takes a `PATH` positional and `--path` options; nothing else configures a
+   run.
+2. **No production code reads an environment variable or a configuration
+   file.** Every `env::var` and `env::temp_dir` site in the workspace is inside
+   a `#[cfg(test)]` module — `incremental.rs` (nine sites, all after its
+   `#[cfg(test)]` at line 240) and `pipeline.rs` (one site, after line 615).
+   There is no `dirs`, no `home_dir`, no `config_dir`, no XDG lookup and no
+   `.cartograph` file anywhere.
+3. **`mcp` is already reserved as a CLI subcommand.**
+   `no_unbuilt_milestone_command_is_present` (`crates/cartograph-cli/src/main.rs`)
+   lists `mcp` beside `watch`, `serve`, `ask`, `ui` and `desktop` as *"a later
+   milestone's deliverable"*, with `diff` already removed because M13 built it.
+   The repository's own expectation is that the server is reached as
+   `cartograph mcp`, and a subcommand's configuration surface is argv.
+4. **The launcher already forwards argv and stdio unchanged** —
+   `spawn(resolved.path, process.argv.slice(2), { stdio: "inherit" })`.
+5. **Nothing in the repository contradicts launch-time authorization.**
+6. **Nothing requires client-initiated authorization.**
+7. **No source defines a better mechanism.** Grants are named nowhere outside
+   this ADR.
+
+Two options were excluded on principle rather than on evidence. **Server-side
+discovery** is derivation from the tree, which Amendment 1 rejected. **A
+client-initiated handshake** would make the guarded party its own authority: if
+an MCP request can say *"authorize me for this repository"*, then "a client
+cannot widen its own scope" is not a property, it is a sentence.
+
+### Trust model
+
+> **The trusted grant producer is the process launcher.** Authorization is
+> established before any MCP query is handled. **The MCP client is not the
+> authority.**
+
+Concretely, the client cannot:
+
+- select a different repository;
+- replace the identity;
+- add a second repository;
+- expand the authorized set;
+- authorize another tree.
+
+The authorization object is **immutable for the session**. Slice 2 already
+enforces this in the type system: `AuthorizedRepository` exposes no mutator,
+and `AuthorizedTree` — the only thing `authorization::analyze` accepts — has
+private fields and no public constructor.
+
+### One repository, and what diff must do
+
+Exactly one identity per session. For a single-tree query the tree's identity
+must match the session's. For `diff`, **both** must, and both are decided
+before either analysis runs:
+
+| Case | Outcome |
+|---|---|
+| A before + A after, session authorized for A | allowed |
+| A before + B after | **refused** |
+| B before + A after | **refused** |
+| A alone, session authorized for A | allowed |
+| B alone, session authorized for A | **refused** |
+
+### Path exposure — an acknowledged tradeoff, not a non-issue
+
+A repository path in argv is **visible in the local process table**. Recorded
+plainly:
+
+- it is **local process metadata**;
+- it is **not sent over the network** — RULE 013 is untouched, and the server
+  needs no network at all;
+- it is **never an MCP response**;
+- it **must not be echoed into logs or error output** beyond what the existing
+  redaction rules already permit;
+- **RULE 015 still applies in full**, as do `discovery::is_rooted` and the
+  redaction it governs.
+
+**argv is not secret, and this exposure is not harmless.** It is accepted
+because the alternative channels are worse or absent: a configuration file
+would be a new surface that RULE 014's reasoning points away from, and an
+environment variable would be a new surface with no precedent in the codebase.
+It is also already the status quo — `cartograph --path <repo>` has put a
+repository path in argv since M09 — with one difference that must not be
+glossed: an MCP server is a **long-lived** process, so the exposure lasts as
+long as the session rather than as long as one command.
+
+### What the repository cannot establish, and what must not fill the gap
+
+These are **not** repository facts, and Slice 3 must determine them from
+observed behaviour rather than from convention:
+
+| Unknown | Why it matters |
+|---|---|
+| Whether Claude Code launches an MCP server with **user-authored** argv | If argv were composed by the agent rather than the user, the launcher and the client would be the same party and the trust model above would collapse into the handshake option this amendment rejected |
+| Whether Cursor does the same | The M15 scope names both clients; a mechanism that needs a per-client exception is not one mechanism |
+| Whether either client can rewrite process arguments dynamically | The grant's immutability depends on argv being fixed at exec |
+| Exact `rmcp` lifecycle semantics — connection, session and process boundaries | *"One repository per session"* maps cleanly onto *one process* only if a process serves one session |
+
+**No industry convention may be substituted for any of these.** They are
+recorded as Slice 3 obligations: verify against the real clients and the real
+library, and if the observation contradicts this amendment, amend it rather
+than reinterpreting it.
+
+### Consequences
+
+The last architectural gap in M15 is closed to the point where Slice 3 can
+begin: identity is authorization state (Amendment 1), it arrives at process
+start (Amendment 2), it is enforced below the transport (Slice 2, merged), and
+the transport is stdio (decision C1). What remains open is the identity
+**value**'s derivation, which none of this depends on — the boundary stores and
+compares an opaque token, so choosing a derivation later changes the granter and
+nothing else.
 
 ## Decision rule
 
