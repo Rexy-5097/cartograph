@@ -1,0 +1,42 @@
+[package]
+name = "cartograph-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# The MCP server is a peer client of the core, on equal footing with the CLI
+# and the desktop shell (ADR-0001, ADR-0016). It holds no analysis logic:
+# every answer comes from cartograph-graph or cartograph-pipeline.
+#
+# It deliberately does NOT depend on cartograph-cli, which is a binary crate
+# with no library target -- the fact that forced ADR-0019.
+
+[[bin]]
+name = "cartograph-mcp"
+path = "src/main.rs"
+
+[dependencies]
+cartograph-core.workspace = true
+cartograph-graph.workspace = true
+cartograph-pipeline.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# argv parsing, the grant channel ADR-0020 Amendment 2 chose. Already the
+# workspace's CLI parser; a second one would be a second set of behaviours.
+clap.workspace = true
+
+# The Model Context Protocol SDK, named for M15 in the frozen stack.
+# `transport-io` is the stdio transport (ADR-0020, decision C1). No network
+# feature is enabled: no reqwest, no auth, no HTTP server (RULE 013).
+rmcp = { workspace = true, features = ["server", "macros", "transport-io"] }
+# The async runtime rmcp requires. Named in the frozen stack at M04 and added
+# here, at the milestone that needs it. Only the features stdio serving uses.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-std", "signal"] }
+
+[dev-dependencies]
+cartograph-testkit.workspace = true
+
+[lints]
+workspace = true

@@ -288,6 +288,13 @@ def qg008():
 
     # No future-milestone dependencies. LSP is in the frozen stack but M04 did
     # not need it: route matching joins observations, not symbols.
+    #
+    # `rmcp` and `tokio` left this list at M15, which is the milestone that
+    # needs them: rmcp is the MCP SDK the frozen stack names for M15, and tokio
+    # is the runtime it requires. The list says "not yet", so an entry leaves it
+    # when its milestone arrives -- the same move `diff` made out of the CLI's
+    # forbidden-subcommand list when M13 built it. The remaining eight are still
+    # unbuilt.
     dep_names = {
         m.group(1)
         for line in read_text(os.path.join(ROOT, "Cargo.toml")).splitlines()
@@ -295,9 +302,9 @@ def qg008():
         for m in [re.match(r'\s*"?([A-Za-z0-9_-]+)"?\s*=', line)]
         if m
     }
-    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "rmcp", "regex", "url", "tokio", "salsa"):
+    for premature in ("async-lsp", "lsp-types", "redb", "gix", "notify", "regex", "url", "salsa"):
         if premature in dep_names:
-            problems.append(f"future-milestone dependency `{premature}` introduced at M04")
+            problems.append(f"future-milestone dependency `{premature}` introduced early")
 
     if "Analyze" in read_text(os.path.join(ROOT, "crates/cartograph-cli/src/main.rs")):
         problems.append("CLI exposes an `analyze` command before M09")

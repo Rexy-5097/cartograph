@@ -8,6 +8,7 @@ members = [
     "crates/cartograph-parser",
     "crates/cartograph-resolver",
     "crates/cartograph-cli",
+    "crates/cartograph-mcp",
     "crates/cartograph-testkit",
 ]
 
@@ -62,6 +63,12 @@ tree-sitter = "0.26"
 tree-sitter-typescript = "0.23"
 # M02: the Python grammar. Same runtime as M01; only the grammar is new.
 tree-sitter-python = "0.25"
+# M15: the Model Context Protocol SDK, named in the frozen stack for this
+# milestone. Default features are off so no network transport is compiled in.
+rmcp = { version = "3.2", default-features = false }
+# M15: the async runtime rmcp requires. Named in the frozen stack at M04 and
+# added at the milestone that actually needs it, per the dependency policy.
+tokio = { version = "1.53", default-features = false }
 
 cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
@@ -70,6 +77,7 @@ cartograph-desktop = { path = "crates/cartograph-desktop" }
 cartograph-parser = { path = "crates/cartograph-parser", version = "0.1.0" }
 cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.1.0" }
 cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.1.0" }
+cartograph-mcp = { path = "crates/cartograph-mcp" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
