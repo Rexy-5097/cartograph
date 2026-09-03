@@ -66,7 +66,7 @@ v1.0.
 | **0.4** | **MAP** — the desktop application | M11 — **delivered** |
 | 0.5 | Blast radius | M12 |
 | **0.6** | **DIFF** — the retention surface | M13 — **delivered** |
-| 0.7 | GitHub PR integration | M14 |
+| 0.7 | GitHub PR integration | M14 — in progress |
 | 0.8 | MCP | M15 |
 | 0.9 | ASK | M16 |
 | **1.0** | Stable | M17 |
