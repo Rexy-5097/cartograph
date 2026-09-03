@@ -39,6 +39,7 @@
 //! the name is left as a wart rather than paid for during a move. See
 //! ADR-0016.
 
+pub mod authorization;
 pub mod discovery;
 pub mod error;
 pub mod incremental;
