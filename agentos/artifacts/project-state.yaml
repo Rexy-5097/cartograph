@@ -5,26 +5,25 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M14
-status: IN_PROGRESS             # M14 is implemented on main and NOT accepted
+status: ACCEPTED                # M14 accepted 2026-09-03; see milestones.M14
 current_branch: main
-next_allowed_milestone: M14    # UNLOCKED - M13 accepted; M15 locked until M14 is accepted
+next_allowed_milestone: M15    # UNLOCKED - M14 accepted; M16 locked until M15 is accepted
 # `current_milestone` names the milestone this tree implements, and
 # `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
 # in a pull request, because the constant is product code.
 #
 # It read M13 through M13's acceptance. M14's slices are merged (PRs #33, #34,
-# plus #36 correcting how the Action obtains the head tree), so the tree now
-# implements M14 and the pair advances here - this is that pull request,
-# landing before the checkpoint so the tag cannot name a commit whose
-# `cartograph version` still reports M13.
+# plus #36 correcting how the Action obtains the head tree), so the tree
+# implements M14 and the pair advanced in PR #37, landing before the checkpoint
+# so the tag could not name a commit whose `cartograph version` still reported
+# M13.
 #
-# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
-# than ACCEPTED precisely because M14 is not accepted. Acceptance flips it,
-# together with milestones.M14.status, and only then.
+# `status` above describes `current_milestone`. M14 is accepted, so it reads
+# ACCEPTED, flipped together with milestones.M14.status at the acceptance step.
 #
-# `next_allowed_milestone` stays M14 until acceptance: M15 is locked until M14
-# is accepted, and it advances in the acceptance commit, not here.
+# It reads M14 and stays there through M14's acceptance. The pair advances in
+# the first M15 pull request, not in a bookkeeping commit.
 
 milestones:
   M00:
@@ -419,21 +418,71 @@ milestones:
       HARD GATE 3 received.
 
   M14:
-    # Implementation is merged; acceptance has not happened. The status field
-    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
-    # to ACCEPTED at the formal acceptance step - not before. The comment
-    # carries what the two-value vocabulary cannot.
-    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
-    implementation: MERGED                # PRs #33, #34, #36
-    pull_request: null
-    provisional_tag: null
-    accepted_tag: null
+    status: ACCEPTED
+    accepted: 2026-09-03
+    pull_request: [33, 34, 36, 37]         # two slices, one correction, the prerequisite
+    provisional_tag: null                  # ADR-0010: none needed
+    accepted_tag: cartograph-m14           # immutable
+    merge_commit: caba5ef695d6909543ca7b0b62aa4f738ea707a8
+    implementation: MERGED
+    scope_adrs: []
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      The stated criterion is met, and the gates pass.
+
+      "Action runs on Cartograph's own PRs" - on PR #35, a real pull request
+      from the fork, two pull_request_target runs completed green through all
+      ten steps. Run 33733818164 logged `created comment 5522919367`; run
+      33734082898 logged `updated comment 5522919367`. The comment was created
+      08:32:23Z and updated 08:35:41Z, and the count of comments carrying the
+      marker stayed at exactly 1. A third dispatch on PR #37 behaved
+      identically.
+
+      "No hosted infrastructure" - the binary runs in the repository's own CI.
+      The workflow obtains two trees, runs `cartograph diff --markdown` and
+      hands the result to a comment upsert; there is no service, no backend and
+      no analysis logic in YAML.
+
+      "Gates pass" - 9/9 at caba5ef, with 824 workspace tests and the helper's
+      20 tests green.
+
+      The workflow was sourced from main rather than from the pull request, and
+      that is provable: head 81c0285 carries a copy whose step 8 reads "Check
+      out the head tree", main reads "Fetch the head tree", and the run
+      executed Fetch. A fork cannot alter the workflow that reviews it.
+    finding: |
+      pull_request_target is required, not chosen for convenience: on
+      pull_request a fork's token is read-only, so pull-requests: write cannot
+      be granted and the comment 403s. Safety comes from never executing
+      pull-request code - the binary is built from the base commit at step 5,
+      the head arrives at step 7, and build.rs exists only in cartograph-cli,
+      so the head does not exist on disk when the only build script runs.
+
+      The first live run, 33722281806, failed: actions/checkout now refuses a
+      fork's head under pull_request_target without allow-unsafe-pr-checkout.
+      The opt-in was not taken. PR #36 fetches the head as a tarball, which
+      unpacks with no .git, no remote and no stored credential - so "the head
+      is data" became a property of the filesystem rather than of intent, and
+      the guardrail stays armed for whoever edits the file next.
+
+      Scopes are contents: read and pull-requests: write, reported by the
+      runner itself on both runs. Comment bodies and run logs carry no token
+      and no runner-local absolute path.
+
+      A workflow cannot validate a change to itself: pull_request_target reads
+      from the base branch, so #34 and #36 were each reviewed by the version
+      they replaced. That is a property of the trigger, not a defect.
+
+      HARD GATE 4 is a product-usage clock, not an engineering criterion, and
+      is recorded here as the owner's to start - the same treatment M09's
+      HARD GATE 3 and M13 received. Its 30-day period began only with M13's
+      acceptance on 2026-09-03 and has not elapsed.
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M13
+  milestone: M14
   class: accepted
-  tag: cartograph-m13
-  merge_commit: 5c34e16064247c26c432a26af29a07e932c0ffa7
+  tag: cartograph-m14
+  merge_commit: caba5ef695d6909543ca7b0b62aa4f738ea707a8
 
 gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001

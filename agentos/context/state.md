@@ -7,22 +7,76 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M13 — structural diff** (accepted 2026-09-03) |
-| Status | M00–M13 **ACCEPTED**; M14 **implemented on `main`, not accepted** |
+| Last accepted milestone | **M14 — GitHub PR integration** (accepted 2026-09-03) |
+| Status | M00–M14 **ACCEPTED**; M15 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M14 — **unlocked**; M15 locked until M14 is accepted |
-| Last accepted checkpoint | `cartograph-m13` (immutable, commit `5c34e16`) |
+| Next permitted milestone | M15 — **unlocked**; M16 locked until M15 is accepted |
+| Last accepted checkpoint | `cartograph-m14` (immutable, commit `caba5ef`) |
 | Spec | Frozen V3, August 2026 |
 
 > `current_milestone` in the ledger reads **M14** and stays there.
 > `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
 > so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. The pair advances
-> before the checkpoint for the same reason it did at M13: tagging a commit
-> whose `cartograph version` still reported the previous milestone would
-> mislabel it. M15 stays locked until M14 is accepted.
+> product code and a bookkeeping commit may not touch it. The pair advanced in
+> PR #37, which landed before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M13 would have mislabelled it. M15 is
+> unlocked by `next_allowed_milestone`, exactly as M14 was at M13's acceptance.
 
 ## What exists
+
+- **M14: ACCEPTED** — GitHub PR integration, delivered as two reviewed slices
+  through the fork (PRs #33, #34), a correction the first live run forced (#36),
+  and #37 for the version prerequisite.
+
+  The milestone puts the review where the decision is made. `cartograph diff
+  --markdown` renders it; a workflow obtains two trees, runs the binary and
+  posts what it returns. **No service, no backend, no analysis logic in YAML** —
+  the business-model line, *"runs the binary in the user's own CI — no server,
+  no hosting cost"*, is intact.
+
+  **Accepted on its stated criterion**: the Action runs on Cartograph's own PRs.
+  On [#35](https://github.com/Rexy-5097/cartograph/pull/35), two
+  `pull_request_target` runs went green through all ten steps — the first logged
+  `created comment 5522919367`, the second `updated comment 5522919367`. The
+  comment was **created 08:32:23Z and updated 08:35:41Z**, and the count of
+  comments carrying the marker stayed at **exactly 1**. A third dispatch on #37
+  behaved identically.
+
+  **The workflow came from `main`, provably.** Head `81c0285` carries its own
+  copy whose step 8 reads *"Check out the head tree"*; `main` reads *"Fetch the
+  head tree"*; the run executed **Fetch**. A fork cannot alter the workflow that
+  reviews it.
+
+  **`pull_request_target` is required, not convenient.** On `pull_request` a
+  fork's token is read-only, so `pull-requests: write` cannot be granted and the
+  comment 403s — the criterion would be unreachable for a fork contribution.
+  Safety comes from never executing pull-request code: the binary is built from
+  the base commit at step 5, the head arrives at step 7, and `build.rs` exists
+  only in `cartograph-cli`, so the head is not on disk when the only build
+  script runs. The analyser reads files and never executes them.
+
+  **The first live run failed, and the failure improved the design.**
+  `actions/checkout` now refuses a fork's head under `pull_request_target`
+  without `allow-unsafe-pr-checkout: true`. The opt-in was not taken; #36
+  fetches the head as a tarball, which unpacks with **no `.git`, no remote and
+  no stored credential**. "The head is data" became a property of the
+  filesystem rather than of intent, and the guardrail stays armed for whoever
+  edits the file next.
+
+  **Scopes are `contents: read` and `pull-requests: write`**, reported by the
+  runner itself on both runs. No token and no runner-local absolute path
+  reached a comment or a log. GitHub's 65,536-character limit is handled by
+  dropping whole lines and saying so — established on a 2 MB synthetic review,
+  not on a live pull request.
+
+  **Not delivered:** no reusable `action.yml` for third parties; no desktop
+  integration; and **a populated relationship table has never been observed
+  live**, because every dogfood pull request changed only Markdown or Rust, so
+  each review correctly read *"No architectural change."* A workflow also
+  cannot validate a change to itself — the trigger reads from the base branch,
+  so #34 and #36 were each reviewed by the version they replaced. HARD GATE 4
+  is a product-usage clock and is the owner's to start; its 30-day period began
+  with M13's acceptance and has not elapsed.
 
 - **M13: ACCEPTED** — structural diff, delivered as three reviewed slices
   through the fork (PRs #30, #29, #31, plus #32 for the version prerequisite).

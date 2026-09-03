@@ -453,6 +453,182 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M14 — GitHub PR integration
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-03 by the project owner |
+| Base | `cartograph-m13` — commit `5c34e16` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#33](https://github.com/Rexy-5097/cartograph/pull/33) · [#34](https://github.com/Rexy-5097/cartograph/pull/34) · [#36](https://github.com/Rexy-5097/cartograph/pull/36) · [#37](https://github.com/Rexy-5097/cartograph/pull/37) |
+| **Accepted checkpoint** | **`cartograph-m14`** — merge commit `caba5ef`, immutable |
+| Dogfood evidence | [#35](https://github.com/Rexy-5097/cartograph/pull/35) — kept as the record, closed rather than merged |
+
+### Delivered in two slices, plus a correction the first live run forced
+
+| Slice | PR | Merge | What landed |
+|---|---|---|---|
+| 1 — review content | #33 | `80b810d` | `cartograph diff --markdown`, the review the Action posts |
+| 2 — delivery | #34 | `a401b41` | The workflow, the comment upsert, its 20 tests |
+| correction | #36 | `c59f5a6` | Head tree fetched as an archive rather than checked out |
+| prerequisite | #37 | `caba5ef` | `version::MILESTONE` and `current_milestone` advanced together |
+
+### Acceptance criterion — the Action runs on Cartograph's own PRs
+
+**PASS**, on [#35](https://github.com/Rexy-5097/cartograph/pull/35), a real pull
+request from the fork.
+
+| | run | result |
+|---|---|---|
+| first | [33733818164](https://github.com/Rexy-5097/cartograph/actions/runs/33733818164) | `created comment 5522919367` |
+| second | [33734082898](https://github.com/Rexy-5097/cartograph/actions/runs/33734082898) | `updated comment 5522919367` |
+
+Both `pull_request_target`, both green through all ten steps. A third dispatch on
+#37 ([33735233760](https://github.com/Rexy-5097/cartograph/actions/runs/33735233760))
+behaved identically.
+
+**The workflow was sourced from `main`, and that is provable rather than assumed.**
+The head commit `81c0285` carries its own copy of the workflow, whose step 8 reads
+*"Check out the head tree"*. `main` reads *"Fetch the head tree"*. The run executed
+**Fetch**. A fork cannot alter the workflow that reviews it.
+
+**Every step did real work**, read from the runner log rather than inferred from a
+green tick: base checked out at `ref: a401b419…`; `Finished release profile in
+29.30s`, compiled from the base tree; `head tree: 663 files, no .git: yes`;
+`review is 418 bytes`; `PR_NUMBER: 35`.
+
+### Idempotency — one comment, updated
+
+`id=5522919367`, author `github-actions[bot]`, **created `08:32:23Z`, updated
+`08:35:41Z`**. Marker comments on the pull request after both runs: **exactly 1**.
+No second comment was appended.
+
+The comment is found by the hidden marker `<!-- cartograph-architecture-review -->`
+alone — never by author or prose, so a person quoting the review is not mistaken
+for it, and a duplicate would resolve to the lowest id rather than alternating
+between runs.
+
+### `pull_request_target`, and why it is safe here
+
+A contributor pull request comes from a fork, and on `pull_request` a fork's token
+is read-only: `pull-requests: write` cannot be granted and the comment 403s. The
+milestone's own criterion would be unreachable for a fork contribution.
+
+That trigger is dangerous when a workflow *executes* pull-request code. This one
+does not, and the separation is the design:
+
+- **The binary is built from the base commit.** `crates/cartograph-cli/build.rs` is
+  the only build script in the workspace, so building the head would run a
+  contributor's code. `cargo build` is step 5; the head arrives at step 7 — **the
+  head does not exist on disk when the build runs.**
+- **The head is data.** It is unpacked outside the Cargo workspace, whose `members`
+  is an explicit `crates/*` list, so nothing there can be drawn into a build.
+- **The analyser reads files and never executes them.** No `Command::new` in
+  `cartograph-parser`, `-resolver`, `-pipeline`, `-graph` or `-core`.
+
+### The first live run failed, and the failure improved the design
+
+Run [33722281806](https://github.com/Rexy-5097/cartograph/actions/runs/33722281806)
+failed at the head checkout: `actions/checkout` now refuses a fork's head under
+`pull_request_target` unless `allow-unsafe-pr-checkout: true` — a guardrail aimed
+at exactly the mistake this workflow was built to avoid.
+
+The opt-in was **not** taken. #36 fetches the head as a tarball instead. It unpacks
+with no `.git`, no remote and no stored credential, so *the head is data* became a
+property of the filesystem rather than of our intentions, and the guardrail stays
+armed for whoever edits the file next. `HEAD_REPO` and `HEAD_SHA` travel through
+`env` rather than into the script text, because a fork's name is
+contributor-controlled and contributor-controlled text must never become part of a
+command. An empty unpack is a hard failure: a missing tree would diff as *every
+relationship removed*, the most confident wrong review the workflow could post.
+
+### Minimum scopes, verified from the runner
+
+The scope line requires them, SECURITY.md records them as an M14 invariant, and the
+runner reported the grant itself on both runs:
+
+```
+Contents: read
+Metadata: read          # GitHub's implicit grant, not requested
+PullRequests: write
+```
+
+Contents stays read-only: a review that could push is a review that could be turned
+into one.
+
+### No hosted infrastructure
+
+The binary runs in the repository's own CI. No service, no backend, no analysis
+logic in YAML — the workflow obtains two trees, runs `cartograph diff --markdown`,
+and hands the result to a comment upsert. ROADMAP.md's business-model line holds:
+*"Runs the binary in the user's own CI — no server, no hosting cost."*
+
+### Leakage
+
+Comment bodies from both runs match none of `ghp_ ghs_ gho_ ghu_ ghr_ C:\ /home/
+/Users/ AppData scratchpad secret token runner/work` — **0 hits**. Both run logs
+contain **0** token-shaped strings; every token mention is `GH_TOKEN: ***` or
+`GITHUB_TOKEN: ***`. No runner-local absolute path reached a public comment.
+
+### The 65,536-character limit
+
+GitHub refuses a longer body, which would fail the run outright. Established by
+controlled test, not by a live pull request: a 2,075,746-character, 20,009-line
+review produces a **64,663-character** body — 661 rows emitted, **0 malformed**, no
+unterminated fence, byte-identical across runs, and a notice saying 19,341 lines
+were omitted and how to read the whole review locally. Whole lines are dropped, so
+a table row can never be cut in half and misalign every column after it. Quietly
+showing less would let a reader conclude a relationship was not reported when it
+merely did not fit.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `caba5ef`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy … -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **824 passed, 0 failed, 25 ignored** |
+| `node .github/scripts/review-comment.test.js` | PASS — **20/20** |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100 |
+| CI on each pull request | PASS — 10 checks each |
+
+### Verification findings
+
+**The helper is dependency-free Node**, like the npm wrapper. A comment upsert does
+not justify a framework, and a workflow with no lockfile cannot have one poisoned.
+Its tests stub the GitHub API at `fetch`, the boundary the helper owns — which is
+why the Action's real behaviour was established on a real pull request instead.
+
+**A workflow cannot validate a change to itself.** `pull_request_target` is read
+from the base branch, so #34 and #36 were both reviewed by the version of the
+workflow they were replacing. #34's own review never ran; #36's failed at the step
+it fixes. The first pull request after each merge is the first real test, and that
+is a permanent property of the trigger rather than a defect.
+
+### Accepted limitations
+
+- **No reusable `action.yml`.** The acceptance sentence asks for the Action on
+  Cartograph's own PRs, and that is what exists: a workflow in this repository.
+  Packaging it so another project can consume it — the "user's CI" half of the
+  scope line — is not done.
+- **A populated relationship table has never been observed live.** Every dogfood
+  pull request changed only Markdown or Rust, so each review correctly read *"No
+  architectural change… 8 were compared."* The populated form is covered by the
+  binary's own tests, not by a live run.
+- **One page of 100 comments is searched.** Beyond that a second comment would be
+  created rather than someone else's corrupted — a deliberate failure direction.
+- **Truncation drops a suffix**, so on a very large review the last sections are the
+  ones lost; it does not summarise.
+- **No desktop integration.** MAP does not consume the review.
+- **HARD GATE 4** — 7-day return under 15% after 30 days — is a product-usage clock,
+  not an engineering criterion, and is the owner's to start. Its 30-day measurement
+  period began only with M13's acceptance on 2026-09-03 and has not elapsed. M09's
+  HARD GATE 3 was treated the same way.
+
 ## M13 — Structural DIFF
 
 | Field | Value |
