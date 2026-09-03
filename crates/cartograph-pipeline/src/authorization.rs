@@ -545,7 +545,10 @@ mod tests {
         let secret = if cfg!(windows) {
             r"C:\workspace\clients\acme-secret\repo"
         } else {
-            "/home/someone/clients/acme-secret/repo"
+            // `username` is the placeholder form QG-005 allows; a real
+            // account name in a tracked file is the thing that gate exists
+            // to catch, and this test must not become the exception.
+            "/home/username/clients/acme-secret/repo"
         };
         let session = AuthorizedRepository::from_grant(
             identity("s3cr3t-identity-value"),
@@ -563,7 +566,7 @@ mod tests {
                 "acme-secret",
                 "clients",
                 "workspace",
-                "someone",
+                "username",
                 "s3cr3t-identity-value",
                 "C:\\",
                 "/home/",
@@ -577,12 +580,12 @@ mod tests {
     /// is never printed.
     #[test]
     fn an_identity_never_prints_its_value() {
-        let id = identity("/home/someone/private-repo");
+        let id = identity("/home/username/private-repo");
         let debugged = format!("{id:?}");
 
         assert_eq!(debugged, "RepositoryIdentity(<redacted>)");
         assert!(!debugged.contains("private-repo"));
-        assert!(!debugged.contains("/home/"));
+        assert!(!debugged.contains("username"));
     }
 
     /// The session itself is `Debug` for diagnostics, and must not become a way
