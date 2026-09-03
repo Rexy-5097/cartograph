@@ -8,19 +8,19 @@
 | Field | Value |
 |---|---|
 | Last accepted milestone | **M12 — blast radius** (accepted 2026-09-02) |
-| Status | M00–M12 **ACCEPTED**; M13 unlocked, no code written, no branch |
+| Status | M00–M12 **ACCEPTED**; M13 **implemented on `main`, not accepted** |
 | Branch | `main` |
 | Next permitted milestone | M13 — **unlocked**; M14 locked until M13 is accepted |
 | Last accepted checkpoint | `cartograph-m12` (immutable, commit `d04e767`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger reads **M12** and stays there.
+> `current_milestone` in the ledger reads **M13** and stays there.
 > `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
 > so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. The pair advanced in
-> PR #28, which had to land before the checkpoint: tagging a commit whose
-> `cartograph version` still reported M11 would have mislabelled it. M13 is
-> unlocked by `next_allowed_milestone`, exactly as M12 was at M11's acceptance.
+> product code and a bookkeeping commit may not touch it. The pair advances
+> before the checkpoint for the same reason it did at M12: tagging a commit
+> whose `cartograph version` still reported the previous milestone would
+> mislabel it. M14 stays locked until M13 is accepted.
 
 ## What exists
 
