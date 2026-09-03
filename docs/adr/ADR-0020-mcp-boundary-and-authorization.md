@@ -5,6 +5,15 @@
 [ADR-0001](ADR-0001-rust-core-is-the-product.md) · Enforces
 [ADR-0005](ADR-0005-local-first-privacy.md)
 
+> **Amended 2026-09-03 — see *Amendment 1*, below.**
+> The four decisions below stand unchanged. What has changed is that the
+> deferred item *"how the canonical identity is derived"* turned out not to be
+> a free choice: investigation found that **no derivation from the tree can
+> satisfy the diff rule this ADR also states**, because Cartograph's own diff
+> workflow analyses two trees that no repository metadata connects. Amendment 1
+> records the contradiction and puts the resolution to the owner. This ADR is
+> not rewritten.
+
 ## Decisions recorded on acceptance
 
 Four choices, selected by the project owner. This ADR was `Proposed` while they
@@ -243,7 +252,7 @@ Not settled by this ADR. An implementation may not treat them as settled:
 
 | Deferred | Why it is still open |
 |---|---|
-| **How the canonical identity is derived** | The repository provides no mechanism — no `gix`, no populated `CommitId`, no durable fingerprint, and `canonicalize()` used only opportunistically for a display name. The property is accepted; the algorithm needs its own evidence and its own decision |
+| **How the canonical identity is derived** | The repository provides no mechanism — no `gix`, no populated `CommitId`, no durable fingerprint, and `canonicalize()` used only opportunistically for a display name. Investigation then found something stronger than "no algorithm yet": **no derivation from the tree can work at all**. See *Amendment 1*, which is open |
 | **How a session receives its initial grant** | Choosing *canonical identity, one per session* does **not** imply a launch argument, a handshake tool, an environment variable or a config file. The owner selected the authorization property, not the grant channel |
 | **A4's concrete data model** | Accepted as a decision and a placement constraint; its shape is its own slice |
 | **The wire-level refusal code** | Belongs to the transport slice |
@@ -251,6 +260,129 @@ Not settled by this ADR. An implementation may not treat them as settled:
 The grant channel must not be allowed to mutate the property: whatever delivers
 the grant, *one canonical identity, bound to every query, refused before
 analysis* is fixed.
+
+## Amendment 1 — the identity source, and the two-tree contradiction
+
+**Status: open. Awaiting an owner decision.** The four accepted decisions above
+are unaffected; this resolves the *source* of the identity they assume.
+
+### The contradiction
+
+Two things this ADR states are, together, unsatisfiable by any derivation from
+the analysed tree:
+
+1. **"One MCP session has exactly one authorized repository identity"**, derived
+   as a *canonical repository identity*; and
+2. **"Both trees of a diff must resolve to the same authorized repository
+   identity"**, over a `diff` that takes **two filesystem paths**
+   (`diff_cmd` calls `pipeline::run` twice; `graph::diff` takes two graphs).
+
+The production path that breaks it is Cartograph's own, running today on `main`:
+
+```
+architecture-review.yml
+  trees/base  ← actions/checkout of  github.repository      (Rexy-5097/cartograph)
+  trees/head  ← gh api …/tarball/$SHA | tar -xz             (ronitsaha11/cartograph)
+  ./target/release/cartograph diff trees/base trees/head --markdown
+```
+
+Two facts from that workflow, both verified rather than assumed:
+
+- **The trees are asymmetric.** `trees/base` is a checkout and *has* `.git`;
+  `trees/head` is a tarball extraction and has none — the runner logged
+  `head tree: 663 files, no .git: yes` (run 33733818164).
+- **For a fork pull request they come from different repositories.** Base is
+  `github.repository`; head is
+  `github.event.pull_request.head.repo.full_name`, observed as
+  `HEAD_REPO: ronitsaha11/cartograph`. A Git-remote identity would call
+  Cartograph's own before/after pair **two different repositories** and refuse
+  the review that M14 was accepted on.
+
+M13's evidence has the same shape: *"Airflow `ed68491d8b` → `9b43d6abc0`, two
+revisions extracted read-only"* — two directories, compared by path.
+
+### What any option must establish
+
+| | Proposition |
+|---|---|
+| P1 | `before` belongs to the authorized repository |
+| P2 | `after` belongs to the authorized repository |
+| P3 | `before` and `after` are the **same** repository |
+| P4 | **`before` = repository A with `after` = repository B is refused** |
+
+P4 is the one that makes the others worth having. An option that satisfies
+P1–P3 by weakening P4 has not solved the problem; it has renamed it.
+
+### Option R1 — containing-root authorization
+
+The session authorizes a canonical root **C**; a query tree **T** is admitted
+when `canonicalize(T)` is `C` or beneath it.
+
+| | |
+|---|---|
+| Relation of the trees to the root | In the M14 workflow `trees/base` and `trees/head` are siblings inside the runner workspace, so a containing root **does** exist |
+| Symlink / junction escape | **Resisted, measured.** On this Windows machine `canonicalize()` resolves a directory junction to its target: `…\link` → `…\real`, identical to the target's own canonical form. A junction pointing outside **C** therefore canonicalizes outside **C** and fails containment — provided both sides are canonicalized |
+| Windows behaviour | **Measured.** `canonicalize()` normalises separators, `..`, drive case, component case and trailing slash — six aliasing forms of one path all compared equal — and returns a `\\?\`-prefixed absolute path that names the machine and must never be echoed (RULE 015, `is_rooted`) |
+| Extracted trees inside one root | Yes — this is the case the M14 workflow already produces |
+| Does Cartograph's own workflow satisfy it? | **Mechanically yes**, and that is the problem: the root it would authorize is the runner workspace — a scratch directory that also holds the base source and the built binary — not a repository |
+| Security guarantee | **Containment, not identity.** Honestly named it is an *authorized subtree* |
+| P4 | **Not satisfied.** Two unrelated repositories placed under one authorized root both pass. R1 cannot tell A-before/B-after from a legitimate pair, because it never learns what a repository is |
+| Residual | `canonicalize()` **errors on a nonexistent path**, so identity exists only while the tree does; and a directory replaced by a junction between check and analysis is a TOCTOU window |
+
+R1 is coherent and enforceable. It is not the property this ADR accepted, and
+adopting it would mean saying so.
+
+### Option R2 — grant-supplied identity
+
+Identity becomes part of the **authorization state** rather than something
+discovered in the directory. The grant binds one identity to the tree or trees
+that represent it.
+
+| | |
+|---|---|
+| How the trees prove correspondence | They do not. The grant asserts it, and the guard enforces *membership of the granted set* |
+| Where the proof happens | **Outside the analyser**, at grant time — by whoever knows that `trees/base` and `trees/head` are two views of one repository. In the M14 workflow that knowledge exists in the workflow, which fetched both |
+| Must the grant carry metadata? | Yes — at minimum an identity and the paths it covers. **What that metadata is remains the separately deferred grant-channel question, and this option does not decide it** |
+| Diff | Natural: one identity, two granted trees, P3 satisfied by the grant |
+| Non-Git repositories | **Unaffected** — nothing is derived from the tree, so a `.git`-less extraction is as authorizable as a clone |
+| Security assumption | Trust moves to the grant channel. The tree proves nothing; the guard enforces exactly what it was told |
+| Session lifecycle | Identity lives for the session, which is what "one session, one identity" already says |
+| P4 | **Satisfied**, conditionally: A-before/B-after is refused because B was never granted. The condition is that the granter is correct — the assertion is only as good as its source |
+| Honest characterisation | Identity becomes an **assertion**, not a derivation. Whether an asserted identity is a *canonical repository identity* in the sense accepted above is exactly what the owner must decide |
+
+### Option R3 — `diff` is not on M15's MCP surface
+
+One identity per session stands; `diff` waits for a mechanism that can connect
+two extracted trees.
+
+| | |
+|---|---|
+| Effect on the acceptance sentence | **None literally.** M15's acceptance is *"MCP client can query the graph of an authorized repo and nothing else; privacy gate extended to MCP; gates pass"* — it does **not** enumerate the four queries. The enumeration is in the *Scope* line |
+| Does the scope line require all four? | It reads *"exposing graph queries (map/trace/blast/diff)"* — a parenthetical list. Narrowing a scope line has precedent: [ADR-0014](ADR-0014-m10-scope-reconciliation.md) is *"the governing record of M10's delivered scope"* after three scope items were deferred |
+| Usefulness to Claude Code / Cursor | `map`, `trace` and `blast` answer three of the product's questions; `diff` is the one an agent reviewing a change would reach for |
+| Product cost | `ROADMAP.md:68` names **DIFF the retention surface**. Excluding it from the agent surface is a product decision, not only an engineering one |
+| Would the specification need rewriting? | Not rewritten — **reconciled**, in the ADR-0014 manner, recording what M15 delivered and why |
+| P1–P4 | Vacuous for `diff`; unchanged for the single-tree queries |
+
+### Owner decision required
+
+| Decision | Options | Consequence | Owner choice |
+|---|---|---|---|
+| **Where the authorized identity comes from** | **R1** containing root · **R2** grant-supplied · **R3** defer `diff` | R1 changes the accepted property from identity to containment; R2 makes identity an assertion and hands the grant channel a security role; R3 narrows M15's scope line | **UNDECIDED** |
+
+R1 and R2 are not mutually exclusive with R3 — a choice of R3 still needs R1 or
+R2 for the single-tree queries. They are listed together because the owner's
+answer to `diff` changes which of the other two is sufficient.
+
+The four terms this amendment keeps apart, because collapsing any two of them is
+how the contradiction was reached in the first place:
+
+| Term | Means |
+|---|---|
+| identity **property** | one canonical identity per session — **accepted, unchanged** |
+| identity **source** | derived from the tree, or asserted by the grant — **this amendment** |
+| **authorization state** | what the session holds and enforces on every query |
+| **initial grant** | how that state is first supplied — **still separately deferred** |
 
 ## Decision rule
 
