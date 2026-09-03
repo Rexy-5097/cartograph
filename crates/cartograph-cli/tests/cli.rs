@@ -24,7 +24,7 @@ fn version_prints_the_binary_and_specification_versions() {
         "missing spec line: {stdout}"
     );
     assert!(
-        stdout.contains("milestone M13"),
+        stdout.contains("milestone M14"),
         "missing milestone line: {stdout}"
     );
     assert!(stdout.contains("cartograph 0.1.0"), "not v0.1.0: {stdout}");
@@ -44,7 +44,7 @@ fn version_json_is_parseable() {
         serde_json::from_slice(&output.stdout).expect("stdout is valid JSON");
 
     assert_eq!(value["spec_version"], "V3");
-    assert_eq!(value["milestone"], "M13");
+    assert_eq!(value["milestone"], "M14");
     assert_eq!(value["version"], "0.1.0");
     assert!(value["commit"].is_string());
     assert!(value["target"].is_string());
