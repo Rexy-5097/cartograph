@@ -453,6 +453,139 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M13 — Structural DIFF
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-03 by the project owner |
+| Base | `cartograph-m12` — commit `d04e767` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#30](https://github.com/Rexy-5097/cartograph/pull/30) · [#29](https://github.com/Rexy-5097/cartograph/pull/29) · [#31](https://github.com/Rexy-5097/cartograph/pull/31) · [#32](https://github.com/Rexy-5097/cartograph/pull/32) |
+| **Accepted checkpoint** | **`cartograph-m13`** — merge commit `5c34e16`, immutable |
+| Scope records | [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md) identity gate, satisfied |
+
+### Delivered in three slices
+
+| Slice | PR | What landed |
+|---|---|---|
+| 1 — identity | #30 | Stable cross-run `(kind, name, file)` identity beside `NodeId` |
+| 2 — diff + CLI | #29 | Edge correspondence, `cartograph diff`, schema 1.2 |
+| 3 — layout | #31 | `layout(prev_graph, new_graph, prev_positions)` |
+| prerequisite | #32 | `version::MILESTONE` and `current_milestone` advanced together |
+
+### The prerequisite ADR-0014 deferred twice
+
+M13 could not begin with the diff. [ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md)
+states it plainly — *"M13 may not assume stable identity exists"* — and M12 did
+not deliver it. Two branches are two independent analyses, and nothing about a
+handle survives between them: `NodeId` restarts at zero in each graph, so the
+same number names a different artefact on each side.
+
+**Identity is `(kind, name, file)`.** The line is deliberately excluded: including
+it would make an edit anywhere above an artefact rename it, so every function
+below a new import would read as removed-plus-added. It is a separate value
+beside `NodeId`, which is unchanged and stays a graph-local handle.
+
+**The five-point gate, satisfied on real repositories rather than fixtures.**
+Two independent analyses of Airflow `9b43d6abc0fc` assigned identical
+identities to all **3,104** nodes; Zulip `0ce8f6278cde`, all **1,308**. Zero
+mismatches, and identity ordering differs from allocation ordering in both, so
+identity is not a relabelling of the handle.
+
+**Move is matched; rename is remove-plus-add, by policy.** Matching renames
+means guessing from similarity, and a wrong guess produces a confidently wrong
+diff — it claims one artefact evolved into another when the author split,
+merged or replaced it.
+
+### Acceptance criterion — a diff of two real branches, with evidence
+
+**PASS.** Airflow `ed68491d8b` → `9b43d6abc0`, two revisions extracted
+read-only:
+
+**20 added · 5 removed · 3,304 unchanged**, and 3,304 + 20 equals the after
+graph's edge count exactly. The result is legible as a real refactor:
+`DagsFilters` stopped calling `useDagTagsInfinite` and
+`useDagTimetableTypesInfinite` directly, and those calls appear in new
+`TagsFilter` and `TimetableTypeFilter` components.
+
+**Every reported edge carries evidence** — kind, provenance, confidence,
+location and the observation itself. Zero of 25 entries lacked any of it.
+
+**Correspondence is by identity, and the numbers show why that matters:**
+**2,257 of 3,071** shared artefacts received a different `NodeId` between the
+two analyses. Under handle correspondence nearly the whole graph would have
+read as churn.
+
+**The changed classification needed real source to exercise.** The upstream
+pair produced no changed edges, so one line — `method: 'GET',` — was removed
+from a client call. The artefact still requests the same endpoint, so the
+relationship holds; what weakens is the evidence *about the method*. Same
+source identity, same target identity, same kind, confidence **0.98 → 0.784** —
+exactly `UNDECLARED_METHOD_FACTOR`. **0 added, 0 removed, 1 changed, 3,323
+unchanged.** Not a contrived path: the unmodified corpus already contains 17
+edges at 0.784.
+
+### Mental-map-stable layout
+
+The scope line's second half, delivered as a tested API. `layout` promises
+determinism and explicitly not stability, so a second revision moves everything.
+`layout_stable` holds artefacts where the reader last saw them.
+
+Across the same Airflow pair: **3,071 survivors, 9 added, 3 removed — and all
+3,071 survivors kept their exact positions, where a plain layout would have
+moved every one of them.** 3,080 positions reproduced identically on a repeat.
+
+Cluster ids come from the new graph, and a preserved coordinate outside the
+extent is refused rather than returned, because every record must satisfy the
+layout contract.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `5c34e16`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy … -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **813 passed, 0 failed, 25 ignored** |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100 |
+| CI on each slice | PASS — 8 checks each |
+
+### Verification findings
+
+**`NodeId` semantics are unchanged.** It remains a graph-local handle; identity
+is a separate value. Nothing carries a handle between two graphs — `NodeId` does
+not appear as a value in either the diff engine or the stable layout.
+
+**Schema 1.2 is additive.** The 1.1 `trace` and `blast` branches are preserved
+byte-identically as `oneOf[0..2]`, the command enum gains only `diff`, and a
+test asserts a trace document still matches only its own branch. `minItems` was
+implemented in the conformance validator rather than dropped from the schema.
+
+**M10 and M12 are untouched.** Canonical equality holds — the differential suite
+passes unchanged at its recorded counts, and blast radius results are unmoved.
+
+### Accepted limitations
+
+- **Graph construction merges some artefacts.** `node_for` deduplicates on
+  `(kind, name, file)`, so two same-named methods in different classes of one
+  file are a single node before identity is computed. The diff inherits that and
+  cannot distinguish what was never distinguished. Changing it would move M10's
+  differential oracle and M12's blast results.
+- **`provenance` and `file` changes are unit-tested, not observed.** Provenance
+  is fixed per resolver path, and `file` moves with the source node's identity,
+  so neither varies naturally for a surviving edge.
+- **The changed-edge case is a synthesised one-line edit** to a real repository,
+  not two upstream commits.
+- **The stable layout has no desktop consumer.** The API is tested; no MAP user
+  sees the benefit yet.
+- **Real-corpus tests are opt-in** and do not run in CI.
+- **HARD GATE 4** — 7-day return under 15% after 30 days — is a product-usage
+  clock, not an engineering criterion, and is the owner's to start. M09's
+  HARD GATE 3 was treated the same way.
+
 ## M12 — Blast radius
 
 | Field | Value |

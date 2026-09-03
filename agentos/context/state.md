@@ -7,22 +7,66 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M12 — blast radius** (accepted 2026-09-02) |
-| Status | M00–M12 **ACCEPTED**; M13 **implemented on `main`, not accepted** |
+| Last accepted milestone | **M13 — structural diff** (accepted 2026-09-03) |
+| Status | M00–M13 **ACCEPTED**; M14 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M13 — **unlocked**; M14 locked until M13 is accepted |
-| Last accepted checkpoint | `cartograph-m12` (immutable, commit `d04e767`) |
+| Next permitted milestone | M14 — **unlocked**; M15 locked until M14 is accepted |
+| Last accepted checkpoint | `cartograph-m13` (immutable, commit `5c34e16`) |
 | Spec | Frozen V3, August 2026 |
 
 > `current_milestone` in the ledger reads **M13** and stays there.
 > `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
 > so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. The pair advances
-> before the checkpoint for the same reason it did at M12: tagging a commit
-> whose `cartograph version` still reported the previous milestone would
-> mislabel it. M14 stays locked until M13 is accepted.
+> product code and a bookkeeping commit may not touch it. The pair advanced in
+> PR #32, which landed before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M12 would have mislabelled it. M14 is
+> unlocked by `next_allowed_milestone`, exactly as M13 was at M12's acceptance.
 
 ## What exists
+
+- **M13: ACCEPTED** — structural diff, delivered as three reviewed slices
+  through the fork (PRs #30, #29, #31, plus #32 for the version prerequisite).
+
+  The milestone answers "what changed architecturally between two branches?",
+  and it could not begin until a prerequisite ADR-0014 had deferred twice was
+  met: **stable cross-run identity**. Two branches are two independent
+  analyses, so nothing about a handle survives between them — `NodeId` restarts
+  at zero in each graph. Identity is `(kind, name, file)`, with the line
+  deliberately excluded so an edit above an artefact does not rename it. Two
+  independent analyses of Airflow `9b43d6abc0fc` assigned identical identities
+  to all **3,104** nodes, and Zulip `0ce8f6278cde` to all **1,308**.
+
+  **Accepted on its stated criterion**: a diff of two real branches listing
+  added, removed and changed edges with evidence. Airflow `ed68491d8b` to
+  `9b43d6abc0` gives **20 added, 5 removed, 3,304 unchanged**, and the result
+  is legible as a real refactor — `DagsFilters` stopped calling two hooks
+  directly and those calls appear in new components. Every reported edge
+  carries kind, provenance, confidence, location and its observation.
+
+  **The changed case needed real source to exercise.** The upstream revision
+  pair produced none, so one declared HTTP method was removed from a client
+  call: the same artefact still requests the same endpoint, and the evidence
+  *about the method* weakens. Same source identity, same target identity, same
+  kind; confidence **0.98 → 0.784**, which is exactly the undeclared-method
+  factor. 0 added, 0 removed, 1 changed, 3,323 unchanged.
+
+  **A rename is remove-plus-add, by policy**, because matching renames means
+  guessing from similarity and a wrong guess claims one artefact became
+  another. A move within a file is matched.
+
+  **The scope line's second half is delivered as an API, not as a view.**
+  `layout(prev_graph, new_graph, prev_positions)` holds artefacts where the
+  reader last saw them: across the same Airflow pair, **all 3,071 survivors
+  kept their positions while a plain layout would have moved every one**, and
+  2,257 of those artefacts had been renumbered between the analyses. No desktop
+  client consumes it yet, so the benefit is not visible in MAP.
+
+  **Inherited, not fixed:** `node_for` merges artefacts sharing
+  `(kind, name, file)`, so two same-named methods in one file were already a
+  single node before identity existed. The diff cannot distinguish what graph
+  construction never distinguished. `provenance` and `file` changes remain
+  unit-tested rather than observed on a real corpus. HARD GATE 4 is a
+  product-usage clock and is the owner's to start.
 
 - **M12: ACCEPTED** — blast radius, delivered as three reviewed slices
   through the fork (PRs #24, #25, #26, plus #28 for the version prerequisite).

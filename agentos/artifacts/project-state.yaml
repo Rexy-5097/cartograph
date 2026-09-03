@@ -5,9 +5,9 @@ spec_version: V3
 spec_frozen: 2026-08
 
 current_milestone: M13
-status: IN_PROGRESS             # M13 is implemented on main and NOT accepted
+status: ACCEPTED                # M13 accepted 2026-09-03; see milestones.M13
 current_branch: main
-next_allowed_milestone: M13    # UNLOCKED - M12 accepted; M14 locked until M13 is accepted
+next_allowed_milestone: M14    # UNLOCKED - M13 accepted; M15 locked until M14 is accepted
 # `current_milestone` names the milestone this tree implements, and
 # `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
@@ -18,12 +18,11 @@ next_allowed_milestone: M13    # UNLOCKED - M12 accepted; M14 locked until M13 i
 # this is that pull request, landing before the checkpoint so the tag cannot
 # name a commit whose `cartograph version` still reports M12.
 #
-# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
-# than ACCEPTED precisely because M13 is not accepted. Acceptance flips it,
-# together with milestones.M13.status, and only then.
+# `status` above describes `current_milestone`. M13 is accepted, so it reads
+# ACCEPTED, flipped together with milestones.M13.status at the acceptance step.
 #
-# `next_allowed_milestone` stays M13 until acceptance: M14 is locked until M13
-# is accepted, and it advances in the acceptance commit, not here.
+# It reads M13 and stays there through M13's acceptance. The pair advances in
+# the first M14 pull request, not in a bookkeeping commit.
 
 milestones:
   M00:
@@ -375,21 +374,53 @@ milestones:
       name a real but different artefact.
 
   M13:
-    # Implementation is merged; acceptance has not happened. The status field
-    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
-    # to ACCEPTED at the formal acceptance step - not before. The comment
-    # carries what the two-value vocabulary cannot.
-    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
-    implementation: MERGED                # PRs #30, #29, #31
-    pull_request: null
-    provisional_tag: null
-    accepted_tag: null
+    status: ACCEPTED
+    accepted: 2026-09-03
+    pull_request: [30, 29, 31, 32]         # three slices plus the version prerequisite
+    provisional_tag: null                  # ADR-0010: none needed
+    accepted_tag: cartograph-m13           # immutable
+    merge_commit: 5c34e16064247c26c432a26af29a07e932c0ffa7
+    implementation: MERGED
+    scope_adrs: []                         # ADR-0014's identity gate satisfied, not amended
+    acceptance_criterion: PASS
+    acceptance_reason: |
+      The stated criterion is met, and the gates pass.
+
+      "Diff of two real branches lists added/removed/changed edges with
+      evidence" - on Airflow, ed68491d8b to 9b43d6abc0 returns 20 added, 5
+      removed and 3,304 unchanged, every reported edge carrying kind,
+      provenance, confidence, location and the observation itself. The changed
+      classification was exercised separately on real source: removing one
+      declared HTTP method moved a surviving edge from 0.98 to 0.784 with the
+      same source identity, target identity and kind - 0 added, 0 removed, 1
+      changed, 3,323 unchanged.
+
+      ADR-0014's identity gate was satisfied first, on a real repository:
+      two independent analyses of airflow 9b43d6abc0fc assigned identical
+      identities to all 3,104 nodes, and zulip 0ce8f6278cde to all 1,308.
+    finding: |
+      Two branches are two independent analyses, so correspondence cannot use
+      NodeId - it restarts at zero in each graph. Identity is (kind, name,
+      file), with the line deliberately excluded so that an edit above an
+      artefact does not rename it. A move within a file is matched; a rename
+      is remove-plus-add by policy, because matching renames means guessing.
+
+      The scope line's second half - layout(prev_graph, new_graph,
+      prev_positions) - is delivered as a tested API. Across the same Airflow
+      revision pair, all 3,071 surviving artefacts held their positions while
+      a plain layout would have moved every one of them, and 2,257 of those
+      artefacts had been renumbered between the analyses. No desktop client
+      consumes it yet; the benefit is not visible in MAP.
+
+      HARD GATE 4 is a product-usage clock, not an engineering criterion, and
+      is recorded here as the owner's to start - the same treatment M09's
+      HARD GATE 3 received.
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
-  milestone: M12
+  milestone: M13
   class: accepted
-  tag: cartograph-m12
-  merge_commit: d04e76771f9ba0b0fb57ce3539d24b68377231c2
+  tag: cartograph-m13
+  merge_commit: 5c34e16064247c26c432a26af29a07e932c0ffa7
 
 gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
   repository: PASS               # QG-001
