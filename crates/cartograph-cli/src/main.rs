@@ -142,6 +142,11 @@ enum Command {
         /// The later tree.
         #[arg(value_name = "AFTER")]
         after: PathBuf,
+        /// Render the architecture review as Markdown, for a pull request
+        /// comment. M14's Action runs the binary and posts what it returns,
+        /// so the review is produced here rather than assembled in YAML.
+        #[arg(long, conflicts_with = "json")]
+        markdown: bool,
     },
     /// Extract syntactic facts from TypeScript, TSX and Python source.
     ///
@@ -222,7 +227,22 @@ fn dispatch(cli: &Cli) -> Result<(String, ExitCode), CliError> {
             max_depth,
         }) => trace_cmd::run(path, symbol, *max_depth, cli.json),
         Some(Command::Blast { symbol, path }) => blast_cmd::run(path, symbol, cli.json),
-        Some(Command::Diff { before, after }) => diff_cmd::run(before, after, cli.json),
+        Some(Command::Diff {
+            before,
+            after,
+            markdown,
+        }) => {
+            // `--json` and `--markdown` are mutually exclusive at the parser,
+            // so the order of these arms cannot hide one behind the other.
+            let form = if *markdown {
+                diff_cmd::Form::Markdown
+            } else if cli.json {
+                diff_cmd::Form::Json
+            } else {
+                diff_cmd::Form::Text
+            };
+            diff_cmd::run(before, after, form)
+        }
         Some(Command::Parse { path }) => parse_cmd::run(path, cli.json),
         Some(Command::Normalize { path }) => normalize_cmd::run(path, cli.json),
         Some(Command::Match { path }) => match_cmd::run(path, cli.json),
