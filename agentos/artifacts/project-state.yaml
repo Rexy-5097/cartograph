@@ -4,8 +4,8 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M13
-status: ACCEPTED                # M13 accepted 2026-09-03; see milestones.M13
+current_milestone: M14
+status: IN_PROGRESS             # M14 is implemented on main and NOT accepted
 current_branch: main
 next_allowed_milestone: M14    # UNLOCKED - M13 accepted; M15 locked until M14 is accepted
 # `current_milestone` names the milestone this tree implements, and
@@ -13,16 +13,18 @@ next_allowed_milestone: M14    # UNLOCKED - M13 accepted; M15 locked until M14 i
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
 # in a pull request, because the constant is product code.
 #
-# It read M12 through M12's acceptance. M13's three slices are merged (PRs
-# #30, #29, #31), so the tree now implements M13 and the pair advances here -
-# this is that pull request, landing before the checkpoint so the tag cannot
-# name a commit whose `cartograph version` still reports M12.
+# It read M13 through M13's acceptance. M14's slices are merged (PRs #33, #34,
+# plus #36 correcting how the Action obtains the head tree), so the tree now
+# implements M14 and the pair advances here - this is that pull request,
+# landing before the checkpoint so the tag cannot name a commit whose
+# `cartograph version` still reports M13.
 #
-# `status` above describes `current_milestone`. M13 is accepted, so it reads
-# ACCEPTED, flipped together with milestones.M13.status at the acceptance step.
+# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
+# than ACCEPTED precisely because M14 is not accepted. Acceptance flips it,
+# together with milestones.M14.status, and only then.
 #
-# It reads M13 and stays there through M13's acceptance. The pair advances in
-# the first M14 pull request, not in a bookkeeping commit.
+# `next_allowed_milestone` stays M14 until acceptance: M15 is locked until M14
+# is accepted, and it advances in the acceptance commit, not here.
 
 milestones:
   M00:
@@ -415,6 +417,17 @@ milestones:
       HARD GATE 4 is a product-usage clock, not an engineering criterion, and
       is recorded here as the owner's to start - the same treatment M09's
       HARD GATE 3 received.
+
+  M14:
+    # Implementation is merged; acceptance has not happened. The status field
+    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
+    # to ACCEPTED at the formal acceptance step - not before. The comment
+    # carries what the two-value vocabulary cannot.
+    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see below
+    implementation: MERGED                # PRs #33, #34, #36
+    pull_request: null
+    provisional_tag: null
+    accepted_tag: null
 
 last_checkpoint:                 # ADR-0010: the tag is the authority for its SHA
   milestone: M13
