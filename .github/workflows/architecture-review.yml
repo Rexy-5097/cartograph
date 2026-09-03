@@ -1,0 +1,130 @@
+# Cartograph's architecture review on its own pull requests.
+#
+# M14's Action runs the binary in the user's own CI and posts what it returns.
+# ROADMAP.md states that shape and the reason for it: "Runs the binary in the
+# user's own CI — no server, no hosting cost … Running analysis in the user's
+# CI rather than on hosted infrastructure holds operating cost at zero through
+# launch. Do not undo that without a reason." So there is no service here, no
+# backend, and no analysis logic in YAML — the workflow obtains two trees, runs
+# `cartograph diff --markdown`, and hands the result to a comment upsert.
+#
+# ## Why `pull_request_target`, and why that is safe here
+#
+# A contributor pull request comes from a fork. On `pull_request`, GitHub gives
+# a fork's workflow a read-only token, so `pull-requests: write` cannot be
+# granted and the comment would fail with 403. `pull_request_target` runs in the
+# base repository's context with a writable token, which is what makes the
+# milestone's own acceptance — "Action runs on Cartograph's own PRs" — possible
+# for a fork contribution at all.
+#
+# `pull_request_target` is dangerous when a workflow *executes* code from the
+# pull request. This one does not, and the separation is deliberate:
+#
+#   * The binary is built from the **base** commit. `cargo build` runs
+#     `crates/cartograph-cli/build.rs`, and that is the only build script in the
+#     workspace — building from the head would execute a contributor's code.
+#     The base checkout is the one this workflow builds, always.
+#   * The head is checked out **as data only**, into a directory outside the
+#     cargo workspace, with credentials not persisted. Nothing is built there
+#     and no script from it is run.
+#   * Cartograph reads files; it does not execute them. There is no
+#     `Command::new` anywhere in the parser, resolver, pipeline, graph or core
+#     crates — the analyser opens files and parses them.
+#
+# The token therefore never reaches contributor-controlled code.
+#
+# ## Scopes
+#
+# `contents: read` and `pull-requests: write`, and nothing else. SECURITY.md
+# records "Minimum GitHub scopes" as an M14 invariant. Contents stays read-only:
+# this workflow has no reason to write to the repository, and a review that
+# could push is a review that could be turned into one.
+#
+# ## When this first runs
+#
+# GitHub reads a `pull_request_target` workflow from the **base** branch, not
+# from the pull request. So this file does not run on the pull request that
+# introduces it -- observed on PR #34, where `ci` ran and this did not -- and
+# begins reviewing pull requests once it is on `main`. That is the same property
+# that makes the trigger safe, so it is a consequence to record rather than a
+# bug to work around: a fork cannot alter the workflow that reviews it.
+name: architecture review
+
+on:
+  pull_request_target:
+    # `synchronize` is what makes the update path real: a second push to the
+    # same pull request must update the existing comment, not add another.
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# One review per pull request at a time. Two runs racing would both try to
+# upsert the same comment, and the slower one would overwrite the newer review.
+concurrency:
+  group: architecture-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: architecture review
+    runs-on: ubuntu-latest
+    steps:
+      # 1. The base commit, into the workspace. This is the trusted tree, and
+      #    the only one this workflow builds.
+      - name: Check out the base commit (trusted; this is what gets built)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: review-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build the engine
+        run: cargo build --release -p cartograph-cli
+
+      # 2. The two trees to compare, both outside the cargo workspace so that
+      #    nothing here can be drawn into a build.
+      - name: Check out the base tree to analyse
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trees/base
+          persist-credentials: false
+
+      - name: Check out the head tree to analyse (data only — never built)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          path: trees/head
+          persist-credentials: false
+
+      # 3. The binary produces the review. Nothing downstream reformats it.
+      - name: Render the architecture review
+        run: |
+          ./target/release/cartograph diff trees/base trees/head --markdown > review.md
+          echo "review is $(wc -c < review.md) bytes"
+
+      # 4. Deliver it. The helper finds Cartograph's own comment by a hidden
+      #    marker and updates it, or creates one when absent.
+      - name: Post the review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_FILE: review.md
+        run: node .github/scripts/review-comment.js
