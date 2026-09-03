@@ -39,6 +39,15 @@
 # records "Minimum GitHub scopes" as an M14 invariant. Contents stays read-only:
 # this workflow has no reason to write to the repository, and a review that
 # could push is a review that could be turned into one.
+#
+# ## When this first runs
+#
+# GitHub reads a `pull_request_target` workflow from the **base** branch, not
+# from the pull request. So this file does not run on the pull request that
+# introduces it -- observed on PR #34, where `ci` ran and this did not -- and
+# begins reviewing pull requests once it is on `main`. That is the same property
+# that makes the trigger safe, so it is a consequence to record rather than a
+# bug to work around: a fork cannot alter the workflow that reviews it.
 name: architecture review
 
 on:
