@@ -75,33 +75,40 @@ in the repository.
 
 ### Candidates
 
-| | **A1 — analysis summary** | **A2 — the graph itself** | **A3 — the render scene** |
-|---|---|---|---|
-| Lives in | data in `cartograph_pipeline::Totals`; shape in `cartograph-cli/src/json.rs` (`Summary`) | `cartograph_graph::ArchitectureGraph` | `cartograph_desktop::scene::Scene` |
-| Question it answers | *"can Cartograph analyse this repository, and what did it find?"* (`summary_cmd.rs:5–6`) | "what artefacts and relationships exist" | *"what is this system?"* — MAP's own question ([ADR-0015](ADR-0015-layout-contract.md):42) |
-| Reusable by another client | **Yes** — `Summary::from_totals` is a field-for-field copy of `Totals`, a library type | **Yes** | Yes, but see below |
-| Client-to-client dependency | **No** — read `Totals` directly, never the CLI type | **No** | **Yes** — `cartograph-desktop` is a peer client |
-| Deterministic | Yes except `duration_ms` (wall clock) | Yes | Yes ([ADR-0015](ADR-0015-layout-contract.md) promises determinism, not stability) |
-| Existing tests | CLI goldens (`summary.json`, `summary.txt`) | extensive, across graph/pipeline | `cartograph-desktop` scene tests, [ADR-0017](ADR-0017-render-scene.md) |
-| Output size (measured this session) | ~20 scalar fields | **Airflow 3,104 nodes / 3,350 edges → 2,054,974 bytes of JSON**; Zulip 1,308 / 1,469 → 747,079 bytes | node count + x/y/cluster/label/kind per node |
-| Privacy | `Repository { name, requested }` already redacts rooted paths to `<absolute>` | node/edge locations are repository-relative by construction (`SourceLocation` refuses absolute paths) | same as A2 plus coordinates |
-| MCP compatibility | fits any response budget | **exceeds any sane response budget unfiltered** | x/y coordinates are meaningless to a text agent |
-| Extraction work required | **None** if built from `Totals`. If the CLI's *rendered* summary is wanted, `summary_cmd` must be extracted — it is in a binary crate | **None** | Would need lifting out of a peer client, or duplicating [ADR-0017](ADR-0017-render-scene.md)'s composition |
+| | **A1 — analysis summary** | **A2 — the graph itself** | **A3 — the render scene** | **A4 — a filtered/aggregated view** |
+|---|---|---|---|---|
+| Lives in | data in `cartograph_pipeline::Totals`; shape in `cartograph-cli/src/json.rs` (`Summary`) | `cartograph_graph::ArchitectureGraph` | `cartograph_desktop::scene::Scene` | **nowhere — does not exist** |
+| Question it answers | *"can Cartograph analyse this repository, and what did it find?"* (`summary_cmd.rs:5–6`) | "what artefacts and relationships exist" | *"what is this system?"* — MAP's own question ([ADR-0015](ADR-0015-layout-contract.md):42) | *"what is this system?"*, answered in text: clusters, boundary crossings, per-language counts |
+| Reusable by another client | **Yes** — `Summary::from_totals` is a field-for-field copy of `Totals`, a library type | **Yes** | Yes, but see below | n/a — would be built |
+| Client-to-client dependency | **No** — read `Totals` directly, never the CLI type | **No** | **Yes** — `cartograph-desktop` is a peer client | **No**, if built in `cartograph-graph` or `-pipeline` |
+| Deterministic | Yes except `duration_ms` (wall clock) | Yes | Yes ([ADR-0015](ADR-0015-layout-contract.md) promises determinism, not stability) | must be specified as such; nothing enforces it yet |
+| Existing tests | CLI goldens (`summary.json`, `summary.txt`) | extensive, across graph/pipeline | `cartograph-desktop` scene tests, [ADR-0017](ADR-0017-render-scene.md) | **none** |
+| Output size (measured this session) | ~20 scalar fields | **Airflow 3,104 nodes / 3,350 edges → 2,054,974 bytes of JSON**; Zulip 1,308 / 1,469 → 747,079 bytes | node count + x/y/cluster/label/kind per node | bounded by design — the only candidate whose size is a choice |
+| Privacy | `Repository { name, requested }` already redacts rooted paths to `<absolute>` | node/edge locations are repository-relative by construction (`SourceLocation` refuses absolute paths) | same as A2 plus coordinates | same as A2 |
+| MCP compatibility | fits any response budget | **exceeds any sane response budget unfiltered** | x/y coordinates are meaningless to a text agent | the best fit for an agent, and the only one requiring new analysis-shaped code |
+| Extraction work required | **None** if built from `Totals`. If the CLI's *rendered* summary is wanted, `summary_cmd` must be extracted — it is in a binary crate | **None** | Would need lifting out of a peer client, or duplicating [ADR-0017](ADR-0017-render-scene.md)'s composition | **new work, not extraction** — and it is *analysis*, so RULE 002 puts it in the core, not in `cartograph-mcp` |
 
-A fourth reading exists and is not a variant of the above: **a filtered or
-aggregated view** — clusters, boundary crossings, per-language counts — that no
-component currently produces. `summary_cmd`'s `count_by_kind` /
-`count_by_provenance` / `count_by_confidence` are the nearest thing, and they
-key on **presentation label strings**, so kinds sharing the `"edge"` fallback
-label merge. That is a rendering decision baked into a count, not an API.
+**A4 is not a variant of the others.** Nothing in the repository produces it.
+`summary_cmd`'s `count_by_kind` / `count_by_provenance` / `count_by_confidence`
+are the nearest thing, and they key on **presentation label strings**, so kinds
+sharing the `"edge"` fallback label merge — a rendering decision baked into a
+count, not an API. Choosing A4 makes M15 larger than the other three: it adds a
+new analysis capability, and RULE 002 puts that in `cartograph-graph` or
+`cartograph-pipeline`, never in the MCP client.
 
 ### Why the repository does not choose
 
-A1 is the easiest to build and answers a *different question* from the one MAP
-is defined by. A3 answers MAP's actual question and is architecturally
-unavailable. A2 is literally "the graph" but is two megabytes on a real
-repository. Nothing in the specification, the ADRs, the roadmap or the code
-prefers one, and each produces a materially different tool.
+A1 is the cheapest and answers a *different question* from the one MAP is
+defined by. A3 answers MAP's actual question and is architecturally
+unavailable. A2 is literally "the graph" and is two megabytes on a real
+repository. A4 answers the question well and does not exist. Nothing in the
+specification, the ADRs, the roadmap or the code prefers one, and each produces
+a materially different tool.
+
+**There is no authoritative mapping in this repository from M15's word "map" to
+any of A1–A4.** That is the finding, not a gap in the search: `README.md`'s
+surface table, `ROADMAP.md`, `ARCHITECTURE.md`, the M15 specification and every
+ADR were read, and none makes the connection.
 
 ---
 
@@ -146,6 +153,22 @@ So containment *inside* a tree exists; the identity of the *root* does not.
 **None of these is excluded by evidence, and none is selected by it.** B3 is the
 only one whose scoping property is structural rather than enforced by code, but
 "structural" is an argument, not a repository fact.
+
+### Single or multiple authorized repositories
+
+A separate question from *how* authorization is established, and the evidence
+does not settle it either.
+
+| | **One repository per session** | **Several per session** |
+|---|---|---|
+| Textual support | ADR-0005 and `ARCHITECTURE.md:176` both say *"the repository"*, singular; `SECURITY.md` likewise | the M15 spec says *"an authorized repo"*, which does not exclude a set |
+| Security property | the smallest possible surface: one root, one answer | every added root widens what a compromised or confused client can read |
+| `diff` | **cannot serve `diff` as the CLI does it** without defining a second tree (revision? sibling path?) | serves `diff` naturally |
+| Lifecycle | trivially defined by the session | needs add/remove semantics and a bound |
+| Failure behaviour | any other path is refused — one rule | a set membership test — still one rule, larger state |
+
+Neither reading is contradicted by evidence. The choice is load-bearing because
+it decides whether `diff` is on M15's MCP surface at all.
 
 ### The `diff` coupling
 
@@ -199,11 +222,14 @@ states a transport. Choosing stdio would be a decision, not a reading — and
 recording it as though it were a reading is precisely the failure this ADR
 exists to prevent.
 
-| Option | Evidence for | Evidence against |
-|---|---|---|
-| **stdio** | the three facts above | none — but no positive requirement either |
-| **loopback TCP / HTTP** | rmcp supports it; both named clients support it | no listener code, no port convention, no frozen-stack HTTP server, non-goal 7 |
-| **Unix socket** | local-only by construction | Windows is a first-class target (M09's privacy defect was a Windows finding; CI builds Windows) |
+| Option | Evidence for | Evidence against | Label |
+|---|---|---|---|
+| **C1 — stdio** | the three facts above | none — but no positive requirement either | **strong inference** |
+| **C2 — loopback TCP / HTTP** | rmcp supports it; both named clients support it | no listener code, no port convention, no frozen-stack HTTP server, non-goal 7 (*"Any cloud component before a user asks for one and offers to pay"*) | **plausible, unsupported** |
+| **C3 — Unix socket** | local-only by construction | Windows is a first-class target — M09's privacy defect was a Windows finding, and CI builds Windows | **plausible, weakened by evidence** |
+
+C1 is an **inference**, not a requirement. C2 and C3 are admissible options
+recorded so that choosing C1 is visibly a choice.
 
 ---
 
@@ -225,6 +251,23 @@ exists to prevent.
   `Cargo.lock`**. The dependency policy permits adding a named crate at the
   milestone that needs it, so neither crate needs its own ADR — the
   *architecture around them* does.
+
+The intended shape, which no evidence disproves:
+
+```
+cartograph-core
+      ↑
+cartograph-graph        (trace · blast · diff)
+      ↑
+cartograph-pipeline     (run · run_with_cache · Analysis)
+      ↑
+cartograph-mcp          ← rmcp + tokio live here and nowhere else
+      ↑
+Claude Code / Cursor
+```
+
+`cartograph-mcp` must **not** depend on `cartograph-cli`, and `-core`, `-graph`
+and `-pipeline` must stay free of any MCP or transport dependency.
 
 **Proposed consequence of the decisions above** (not yet decided):
 
@@ -326,6 +369,36 @@ much as to its graph.
 
 Until this ADR is accepted, **no dependency may be added and no MCP code
 written**. Slice 2 is blocked on B; Slice 3 is blocked on A, C and D.
+
+## Decision rule
+
+Until an owner selection is recorded in this ADR, or an authoritative
+repository source is found that settles a question, **no implementation may
+treat any option here as chosen.** In particular none of the following is a
+decision:
+
+> "most likely" · "obvious" · "industry standard" · "usual MCP behaviour" ·
+> "strongly implied" · "what every other server does"
+
+RULE 009 — unknown values remain unknown — is a rule about the graph, and it
+applies to the project's own design for the same reason: a plausible-looking
+guess recorded as a fact is worse than a gap, because nobody goes back to check
+it.
+
+## Owner Decision Required
+
+Four choices. `Owner choice` stays **UNDECIDED** until the owner fills it in;
+this ADR then moves to `Accepted` recording what was chosen and why.
+
+| Decision | Options | Repository evidence | Consequence | Owner choice |
+|---|---|---|---|---|
+| **A — what "map" is** | A1 analysis summary · A2 the graph · A3 the render scene · A4 a filtered/aggregated view | **None selects one.** MAP is defined by `README.md` as *"what is this system?"* and realised only as the desktop app. TRACE is absent from that table, so the spec's list is not homogeneous. | A1 needs no extraction; A2 is 2 MB on Airflow; A3 is owned by a peer client; A4 is new analysis work in the core | **UNDECIDED** |
+| **B-mechanism — how authorization is established** | B1 path prefix · B2 canonical identity · B3 launch-time grant · B4 handshake tool | Four one-sentence invariants state *that* MCP is session-scoped; **none states a mechanism**, and no code implements one | Determines all of Slice 2. B3 is structural; B1/B2/B4 are enforced by code | **UNDECIDED** |
+| **B-cardinality — how many repositories per session** | one · several | ADR-0005, `ARCHITECTURE.md:176`, SECURITY.md say *"the repository"* (singular); the spec says *"an authorized repo"* | Decides whether **`diff` can be on M15's MCP surface at all** | **UNDECIDED** |
+| **C — transport** | C1 stdio · C2 loopback TCP/HTTP · C3 Unix socket | No transport is named anywhere. C1 is a strong inference from three facts; it is **not** a requirement | Shapes `cartograph-mcp` and gates the first `rmcp`/`tokio` dependency | **UNDECIDED** |
+
+An inference may be recorded in the discussion above — C1 is — but an inference
+never belongs in the `Owner choice` column.
 
 ## Alternatives
 
