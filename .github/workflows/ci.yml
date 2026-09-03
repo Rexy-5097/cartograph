@@ -175,6 +175,23 @@ jobs:
           CARTOGRAPH_BINARY: ${{ github.workspace }}/target/release/cartograph
         run: node test.js
 
+  # M14's review-comment helper. It is plain Node with no dependencies, like
+  # the npm wrapper, so it needs no install step — and a workflow with no
+  # lockfile cannot have one poisoned. The GitHub API is stubbed at `fetch`,
+  # which is the boundary the helper owns; whether the Action actually runs on
+  # a pull request is established on a real pull request, not here.
+  action-scripts:
+    name: action scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test the review-comment upsert
+        working-directory: .github/scripts
+        run: node review-comment.test.js
+
   # MAP's desktop shell (M11). It is a separate cargo workspace on purpose —
   # `tauri` links a system webview, and the jobs above have never needed GUI
   # libraries — so it gets its own job that installs what it needs rather than
