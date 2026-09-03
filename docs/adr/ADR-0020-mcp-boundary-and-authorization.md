@@ -215,9 +215,13 @@ Claude Code / Cursor
   and any transport dependency**. Nothing about a traversal or a pipeline run
   is asynchronous.
 - **A4 does not live in `cartograph-mcp`** merely because MCP consumes it.
-- `rmcp` (frozen stack, M15) and `tokio` (frozen stack, M04) are **not yet in
-  `Cargo.toml` or `Cargo.lock`**, and arrive with the transport slice — not
-  before.
+- `rmcp` (frozen stack, M15) and `tokio` (frozen stack, M04) are **not in the
+  workspace's `Cargo.toml` or `Cargo.lock`** — zero entries for either — and
+  arrive with the transport slice, not before. (`tokio` does appear in
+  `desktop/src-tauri/Cargo.lock` as a Tauri transitive dependency; that crate is
+  `exclude`d from the workspace by
+  [ADR-0016](ADR-0016-desktop-boundary.md) decision 3 and is not a workspace
+  dependency.)
 
 ### E. Where the authorization type lives
 
