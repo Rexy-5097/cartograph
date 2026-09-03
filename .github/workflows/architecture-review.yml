@@ -24,9 +24,14 @@
 #     `crates/cartograph-cli/build.rs`, and that is the only build script in the
 #     workspace — building from the head would execute a contributor's code.
 #     The base checkout is the one this workflow builds, always.
-#   * The head is checked out **as data only**, into a directory outside the
-#     cargo workspace, with credentials not persisted. Nothing is built there
-#     and no script from it is run.
+#   * The head arrives **as an archive, not a checkout**, unpacked into a
+#     directory outside the cargo workspace. `actions/checkout` refuses a
+#     fork's head under `pull_request_target` unless `allow-unsafe-pr-checkout:
+#     true` is set, because a checkout in this context is how "pwn request"
+#     bugs happen. Opting in would work here -- this workflow never runs what
+#     it fetches -- but an archive is better than an opt-out: it arrives with
+#     no `.git`, no remote and no stored credential, so "the head is data" is
+#     true of the filesystem and not only of our intentions.
 #   * Cartograph reads files; it does not execute them. There is no
 #     `Command::new` anywhere in the parser, resolver, pipeline, graph or core
 #     crates — the analyser opens files and parses them.
@@ -105,13 +110,30 @@ jobs:
           path: trees/base
           persist-credentials: false
 
-      - name: Check out the head tree to analyse (data only — never built)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          path: trees/head
-          persist-credentials: false
+      # The head is fetched, not checked out -- see the note at the top. The
+      # token is used to download and nothing else; it is never written into
+      # the tree. Both values go through `env` rather than being interpolated
+      # into the script: a fork's name is contributor-controlled text, and text
+      # a contributor controls must never become part of a command.
+      - name: Fetch the head tree to analyse (data only — never built)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p trees/head
+          gh api "repos/$HEAD_REPO/tarball/$HEAD_SHA" > head.tar.gz
+          tar -xzf head.tar.gz -C trees/head --strip-components=1
+          rm head.tar.gz
+
+          # An empty tree would diff as "every relationship removed", which is
+          # a confident and completely wrong review. Fail instead.
+          test -n "$(ls -A trees/head)" || {
+            echo "the head archive unpacked to nothing" >&2
+            exit 1
+          }
+          echo "head tree: $(find trees/head -type f | wc -l) files, no .git: $([ -d trees/head/.git ] && echo NO || echo yes)"
 
       # 3. The binary produces the review. Nothing downstream reformats it.
       - name: Render the architecture review
