@@ -160,22 +160,36 @@ fn payload(before_name: &str, after_name: &str, result: &GraphDiff) -> DiffJson 
     }
 }
 
+/// Which rendering of the comparison the caller asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Form {
+    /// The human form, for a terminal.
+    Text,
+    /// The machine form, against schema 1.2.
+    Json,
+    /// The architecture review, as Markdown for a pull request comment.
+    Markdown,
+}
+
 /// Runs the comparison.
 ///
 /// # Errors
 ///
 /// Propagates the analyser's error for either path — an unreadable tree is an
 /// input problem and exits `3`, the same as for every other command.
-pub fn run(before: &Path, after: &Path, as_json: bool) -> Result<(String, ExitCode), CliError> {
-    let left = pipeline::run(before, pipeline::Options { quiet: as_json })?;
-    let right = pipeline::run(after, pipeline::Options { quiet: as_json })?;
+pub fn run(before: &Path, after: &Path, form: Form) -> Result<(String, ExitCode), CliError> {
+    // Progress chatter belongs on a terminal. Both machine forms are consumed
+    // by something that parses or posts them, so the analyser stays quiet.
+    let quiet = form != Form::Text;
+    let left = pipeline::run(before, pipeline::Options { quiet })?;
+    let right = pipeline::run(after, pipeline::Options { quiet })?;
 
     let result = diff(&left.graph, &right.graph);
 
-    let text = if as_json {
-        render_json(&left, &right, &result)?
-    } else {
-        render_text(&left, &right, &result)
+    let text = match form {
+        Form::Json => render_json(&left, &right, &result)?,
+        Form::Text => render_text(&left, &right, &result),
+        Form::Markdown => render_markdown(&result),
     };
     // An empty diff is a true answer about two identical trees, so the exit
     // code says success either way. A script asking "did anything change?"
@@ -335,4 +349,162 @@ fn provenance_token(provenance: Provenance) -> &'static str {
         // diff rendering. Naming it unknown is honest; guessing would not be.
         _ => "unknown",
     }
+}
+
+/// The architecture review, as Markdown for a pull request comment.
+///
+/// # Why this lives in the binary
+///
+/// M14's Action *runs the binary* in the user's own CI — `ROADMAP.md` states
+/// that explicitly, and adds that keeping analysis out of hosted
+/// infrastructure holds operating cost at zero. So the Action is a thin
+/// wrapper: it obtains two trees, runs this, and posts what comes back. Every
+/// other command renders its own output in Rust for the same reason, and a
+/// renderer living in a YAML file could not be tested by this suite at all.
+///
+/// # What it says, and what it refuses to say
+///
+/// It reports what changed architecturally and nothing more. There is no
+/// verdict, no score, and no approve/reject: Cartograph reports evidence and
+/// leaves judgement to the reader (RULE 006, RULE 009). A review that told a
+/// team their pull request was "risky" would be asserting something the
+/// analysis cannot support.
+///
+/// Confidence is shown as the uncalibrated prior it is, with the caveat
+/// attached wherever a number appears.
+///
+/// # Determinism
+///
+/// The diff engine orders its own results, and nothing here re-sorts them, so
+/// the same pair of trees always produces byte-identical Markdown. That
+/// matters more than usual here: a comment that reshuffled between runs would
+/// make every re-run look like a change.
+fn render_markdown(result: &GraphDiff) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+    let _ = writeln!(out, "## Cartograph — architecture review");
+    let _ = writeln!(out);
+
+    if result.is_empty() {
+        let _ = writeln!(
+            out,
+            "**No architectural change.** The relationships between artefacts are \
+             the same on both sides; {} were compared.",
+            result.unchanged
+        );
+        let _ = writeln!(out);
+        let _ = writeln!(out, "{FOOTNOTE}");
+        return out;
+    }
+
+    let _ = writeln!(
+        out,
+        "**{} added · {} removed · {} changed**, with {} unchanged.",
+        result.added.len(),
+        result.removed.len(),
+        result.changed.len(),
+        result.unchanged
+    );
+
+    table(
+        &mut out,
+        "Added relationships",
+        "These are claims the later tree makes and the earlier one did not.",
+        &result.added,
+    );
+    table(
+        &mut out,
+        "Removed relationships",
+        "These are claims the earlier tree made and the later one does not.",
+        &result.removed,
+    );
+    changed_table(&mut out, &result.changed);
+
+    let _ = writeln!(out);
+    let _ = writeln!(out, "{FOOTNOTE}");
+    out
+}
+
+/// The caveat that travels with every confidence number.
+const FOOTNOTE: &str = "> Confidence is an uncalibrated prior selected by evidence class, not a \
+     probability, and must not be thresholded as one. Correspondence between \
+     the two trees is by stable `(kind, name, file)` identity, so an artefact \
+     that merely moved within its file is not reported.";
+
+/// One side-only section of the review.
+fn table(out: &mut String, heading: &str, note: &str, entries: &[EdgeAppearance]) {
+    use std::fmt::Write as _;
+
+    if entries.is_empty() {
+        return;
+    }
+    let _ = writeln!(out);
+    let _ = writeln!(out, "### {heading} ({})", entries.len());
+    let _ = writeln!(out);
+    let _ = writeln!(out, "{note}");
+    let _ = writeln!(out);
+    let _ = writeln!(out, "| From | To | Kind | Confidence | Observed at |");
+    let _ = writeln!(out, "|---|---|---|---:|---|");
+    for entry in entries {
+        let _ = writeln!(
+            out,
+            "| {} | {} | `{}` | {:.2} | `{}:{}` |",
+            escape(&short(&entry.identity.source)),
+            escape(&short(&entry.identity.target)),
+            entry.identity.kind,
+            entry.facts.confidence,
+            escape(&entry.facts.file),
+            entry.facts.line
+        );
+    }
+}
+
+/// The changed section, showing both observations so a reader can see what moved.
+fn changed_table(out: &mut String, entries: &[ChangedEdge]) {
+    use std::fmt::Write as _;
+
+    if entries.is_empty() {
+        return;
+    }
+    let _ = writeln!(out);
+    let _ = writeln!(out, "### Changed relationships ({})", entries.len());
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "The same claim on both sides, with different evidence. A different \
+         endpoint or kind is reported as a removal and an addition instead."
+    );
+    let _ = writeln!(out);
+    let _ = writeln!(out, "| From | To | Kind | Changed | Before | After |");
+    let _ = writeln!(out, "|---|---|---|---|---|---|");
+    for entry in entries {
+        let fields: Vec<&str> = entry.fields.iter().map(|f| f.token()).collect();
+        let _ = writeln!(
+            out,
+            "| {} | {} | `{}` | {} | {:.2} {} `{}:{}` | {:.2} {} `{}:{}` |",
+            escape(&short(&entry.identity.source)),
+            escape(&short(&entry.identity.target)),
+            entry.identity.kind,
+            fields.join(", "),
+            entry.before.confidence,
+            provenance_token(entry.before.provenance),
+            escape(&entry.before.file),
+            entry.before.line,
+            entry.after.confidence,
+            provenance_token(entry.after.provenance),
+            escape(&entry.after.file),
+            entry.after.line
+        );
+    }
+}
+
+/// Makes a value safe inside a Markdown table cell.
+///
+/// A `|` in an artefact name would otherwise split the row and silently
+/// misalign every column after it, and a backslash could escape the pipe that
+/// follows. Source is never quoted here — only names and repository-relative
+/// paths, which the analyser already guarantees are relative (RULE 015).
+fn escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('|', "\\|")
 }
