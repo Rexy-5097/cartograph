@@ -43,4 +43,5 @@ pub mod authorization;
 pub mod discovery;
 pub mod error;
 pub mod incremental;
+pub mod map;
 pub mod pipeline;
