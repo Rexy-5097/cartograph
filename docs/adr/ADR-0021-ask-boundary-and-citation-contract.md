@@ -10,9 +10,11 @@
 > document that authorises dependencies is not in this repository. See
 > *Deferred, deliberately*. An implementation may not treat C or D as settled.
 >
-> **Amended 2026-09-05.** The specification is now available and has been
-> read. C and D are **still** deferred, for a narrower reason: it names no
-> crate for either. See *Amendment 1*.
+> **Amended 2026-09-05 — two amendments.** ***Amendment 1***: the
+> specification is now available and has been read; it names no crate for C
+> or D. ***Amendment 2*** proposes the crate for **D**, as an implementation
+> choice this repository makes rather than frozen-stack content. **C remains
+> deferred.**
 
 ## Context
 
@@ -178,7 +180,7 @@ Not settled by this ADR. An implementation may not treat them as settled.
 | Deferred | Why it is still open |
 |---|---|
 | **C — AI provider and HTTP client** | **Superseded by Amendment 1**, and still open. The specification is available; §10 names no HTTP client and no AI provider SDK. Its only network-adjacent entries, `async-lsp` and `tokio`, are for LSP transport |
-| **D — Keychain crate** | **Superseded by Amendment 1**, and still open. §13 requires the OS keychain; §10 names no credential-storage crate. Slice 4 ships the boundary with no backend |
+| **D — Keychain crate** | **Proposed by Amendment 2**, awaiting acceptance. §13 requires the OS keychain; §10 names no crate, so the choice is the repository's own. Slice 4 ships the boundary with no backend until it is accepted |
 | **The configuration file's path** | Decided as a *kind* of thing (B); the platform-specific location needs platform evidence |
 | **The redaction layer's implementation** | Placement and ordering are decided (F); the mechanism is its slice's work |
 | **Whether MCP ASK ships in M16 or after the desktop surface** | A sequencing question the slice plan may answer with evidence |
@@ -264,6 +266,131 @@ directory crate is added; §10 names neither, and neither is needed.
 Decisions A, B, E and F stand. C and D remain in *Deferred, deliberately*, with
 their reason restated: the specification is available and does not name a crate
 for either.
+## Amendment 2 — the keychain implementation choice (D)
+
+**Status: Proposed, 2026-09-05.** Amendment 1 established that §13 requires the
+OS keychain and §10 names no crate for it. This proposes the crate. It is an
+**implementation choice this repository makes**, and it is **not** claimed to be
+part of Frozen Engineering Specification V3.
+
+The distinction is the point of this amendment, so it is stated before anything
+else:
+
+| | |
+|---|---|
+| **Frozen requirement (§13)** | *"Credentials live in the OS keychain, never in configuration files."* Not negotiable, not chosen here. |
+| **Implementation choice (this amendment)** | `keyring-core` plus a native platform store per target. Chosen here, on the evidence below, and reopenable like any other dependency. |
+
+### Decision
+
+**Depend on `keyring-core` for the credential interface, and on one native
+platform store per target. Take no umbrella crate and no default features.**
+
+| | |
+|---|---|
+| Interface | `keyring-core` `^1` — default features (none enabled) |
+| Windows | `windows-native-keyring-store` `^1` — Windows Credential Manager |
+| macOS | `apple-native-keyring-store` `^1` — macOS Keychain |
+| Linux | a Secret Service store, **pure-Rust transport preferred** — see below |
+| Tests | `keyring-core`'s `mock` store; **no test touches a real keychain** |
+| Licence | MIT OR Apache-2.0, dual, matching the project's Apache-2.0 distribution |
+
+### Why this satisfies the requirement
+
+§13 asks for the *OS* keychain, and these are the OS keychains: the Windows
+Credential Manager, the macOS Keychain, and on Linux the Secret Service that
+GNOME Keyring and KWallet implement. Nothing is stored by Cartograph itself, so
+the credential never reaches a file the product owns — which is the second half
+of §13, *"never in configuration files"*, and is already enforced structurally
+by `optin.rs` holding only a locator, an opaque identity and a flag.
+
+### Why the stores are separate crates, and why that matters
+
+The upstream README is explicit that credential stores live "all in separate
+crates of their own", and that consumers "should take dependencies on the
+keyring-core crate and the specific credential stores they want to use". It
+cautions specifically against the `cli` feature, which "will bring with it a
+host of credential stores (and other libraries) they don't need".
+
+So the smallest correct shape is not the umbrella `keyring` crate with features
+switched off — it is `keyring-core` plus exactly the store each target needs.
+That is what §10's own dependency test asks for: *"what concrete Cartograph
+problem does this solve right now?"* One store per platform solves it; a
+bundle does not.
+
+`keyring-core` `1.0.0` has a single feature, `sample`, **off by default** — and
+`sample` is the one that pulls `chrono`, `dashmap`, `regex`, `ron`, `serde` and
+`uuid`. Leaving it off keeps the interface dependency close to nothing. The
+`mock` store is **not** behind that feature and is available regardless, which
+is what makes the test story work without switching anything on.
+
+### The Linux backend, decided on the dossier's own reasoning
+
+Two Secret Service transports exist upstream: one over `libdbus` (a C library)
+and one over `zbus` (pure Rust). §10 chooses pure Rust twice, and says why both
+times — *"redb — Pure Rust, embedded, no C dependency"*, and *"gix — Pure Rust;
+libgit2 breaks five-platform cross-compilation"*. Cartograph ships prebuilt
+binaries for three desktop targets (§14), so the same reasoning applies
+unchanged: **prefer the pure-Rust transport**.
+
+A kernel `keyutils` store also exists and needs no session daemon, but its
+credentials are session-scoped rather than durable, which is the wrong shape for
+a key a user sets once. Recorded so the alternative is visible rather than
+unconsidered.
+
+### Why file-backed alternatives are rejected
+
+`cryptex` supports "file-backed keyrings instead of the OS keyring". That is
+precisely what §13 forbids, so it is rejected on the specification rather than
+on preference. `keyring-search` searches credential stores and does not store,
+so it does not answer the requirement. `uv-keyring` is a downstream fork with a
+narrower platform set and no advantage here.
+
+### Why a mock backend in tests, and why CI needs no keychain
+
+A test that reached a real keychain would prompt a developer, fail in CI where
+no session keyring exists, and — worst — could read or overwrite a real
+credential belonging to the person running it. `keyring-core`'s `mock` store
+removes all three. The existing `CredentialStore` trait in
+`cartograph_desktop::credential` already lets a test substitute a store, and
+Slice 4's suite does exactly that today with `NoCredentials` and two hand-written
+mocks; nothing about that changes.
+
+### Why the dependency is introduced now, and not earlier or later
+
+Not earlier: §10's dependency test rejects "we might need it later", and until
+M16 there was no credential to store. Not later: Slice 5 sends a request that
+needs a key, and a credential path added alongside the code that first uses it
+is a credential path that has already shipped once without review.
+
+§10 reads *"Frozen. Not reopened until M9 ships."* M09 shipped, so the list is
+reopenable by its own terms; and QG-006 already provides the mechanism —
+*"new dependencies not named in the frozen stack need an ADR reference in the
+PR."* This amendment is that reference.
+
+### What this amendment does not do
+
+- It **adds no dependency**. No manifest or lockfile changes with it; the crates
+  named here arrive in the implementation PR that cites this amendment, and only
+  if it is accepted.
+- It does **not** settle **C** — the AI provider and HTTP client. §10 names
+  neither, and that decision has its own evidence and its own amendment.
+- It does **not** claim `keyring-core` is frozen-stack content. It is not.
+
+### Consequences
+
+- The desktop gains its first credential-storage dependency, and on Linux a
+  Secret Service transport. The CI desktop job runs on Ubuntu and macOS, so the
+  implementation PR must confirm that the Linux job builds without a session
+  keyring present — tests use `mock`, so none should be needed, and that must be
+  demonstrated rather than assumed.
+- `NoCredentials` stays. A machine with no store, a locked store, or a build
+  without a backend all continue to read as "no credential", which is what keeps
+  §13's *"fully useful with no API key and no network"* true.
+- Slice 4's boundary is unchanged: `get` / `set` / `delete`, with
+  `PermissionDenied`, `Unavailable` and `Backend` distinguished from absence.
+  A backend plugs in behind it without a caller changing.
+
 ## Security implications
 
 Two invariants are widened by M16 and neither may be widened silently.
