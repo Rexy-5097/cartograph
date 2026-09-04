@@ -320,7 +320,16 @@ fn a_unicode_symbol_is_handled_without_panicking() {
 
 #[test]
 fn a_repository_path_containing_spaces_works() {
-    let root = std::env::temp_dir().join("cartograph blast spaces");
+    // The spaces are the point of this test, but the name must still be
+    // unique: full-workspace runs can overlap (`run_gates.py` shells out to
+    // `cargo test --workspace` too), and a shared path lets one process delete
+    // the tree another is still analysing.
+    let root = std::env::temp_dir().join(format!(
+        "cartograph blast spaces {}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
     let api = root.join("api");
     std::fs::create_dir_all(&api).expect("create");
     std::fs::write(
