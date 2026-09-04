@@ -5,14 +5,18 @@
 [ADR-0001](ADR-0001-rust-core-is-the-product.md) · Enforces
 [ADR-0005](ADR-0005-local-first-privacy.md)
 
-> **Amended 2026-09-03 — two amendments, both accepted.**
+> **Amended 2026-09-03 and 2026-09-05 — three amendments, all accepted.**
 > The four decisions below stand unchanged.
 > ***Amendment 1*** resolves where the identity comes from: investigation found
 > that **no derivation from the analysed tree can satisfy the diff rule this ADR
 > also states**, and the owner chose **R2, grant-supplied repository identity**.
 > ***Amendment 2*** resolves how a session receives that grant: **G1,
 > launch-time argv**, together with its trust boundary and its
-> path-exposure tradeoff. This ADR is not rewritten.
+> path-exposure tradeoff.
+> ***Amendment 3*** resolves who else may produce a grant: **the desktop**,
+> after an explicit human repository selection, under the same one identity
+> model — no second identity, and still nothing derived from the tree.
+> This ADR is not rewritten.
 
 ## Decisions recorded on acceptance
 
@@ -574,6 +578,118 @@ the transport is stdio (decision C1). What remains open is the identity
 **value**'s derivation, which none of this depends on — the boundary stores and
 compares an opaque token, so choosing a derivation later changes the granter and
 nothing else.
+
+## Amendment 3 — the desktop is a second grant producer
+
+**Status: Accepted, 2026-09-05.** Amendment 1 decided that identity is
+authorization state rather than something derived from a tree. Amendment 2
+decided how an *MCP session* receives it. Neither said whether any other client
+may hold one, and M16 asks the question: ASK is a desktop surface
+([ADR-0021](ADR-0021-ask-boundary-and-citation-contract.md) decision A) whose
+opt-in is per repository, and the desktop had no repository identity at all.
+
+This amendment answers that, and nothing else. It does **not** reopen A, B or C,
+and it does **not** close the still-open derivation question below — because
+nothing is derived here either.
+
+### Decision — the desktop grants, the model does not change
+
+**`RepositoryIdentity` remains the single opaque repository identity model for
+the whole product. The desktop becomes a second producer of grants under that
+same model, after an explicit human repository selection.**
+
+| | |
+|---|---|
+| **Identity model** | one, unchanged: `RepositoryIdentity`, opaque, compared and never interpreted |
+| **MCP producer** | launch-time argv, unchanged from Amendment 2 |
+| **Desktop producer** | the trusted desktop grant boundary, after the human selects a repository |
+| **Derivation** | none — never from filesystem path, source contents, Git, hashing or canonicalisation |
+| **Path** | a **locator**, never the identity |
+| **Where it lives** | Rust-side session state in `cartograph-desktop`; the shell and the frontend never receive the value |
+| **Opt-in association** | per-repository ASK opt-in is keyed by that same identity |
+| **New types** | none |
+
+### Why this does not weaken Amendment 1 or 2
+
+The identity was written granter-agnostic from the start:
+`RepositoryIdentity::from_grant` documents the value as *"a token whose meaning
+belongs to the granter"*, and `AuthorizedRepository::from_grant` is already
+public. Nothing in `authorization.rs` inspects, canonicalises, hashes or resolves
+the value — `authorize` compares granted paths by equality and clones the
+identity through, and *"nothing on disk is touched"*. A second producer therefore
+changes **who supplies the token**, not what the token is or what the
+authorization layer may do with it.
+
+The five M15 properties each survive, and each for a stated reason:
+
+| M15 property | Why it holds |
+|---|---|
+| Identity comes from the granter | The granter differs; the rule does not |
+| A client cannot widen scope | `authorize` still admits only granted trees, before analysis |
+| The identity is opaque | Still never interpreted by the authorization layer |
+| Authorization consumes the grant | Same code path, unchanged |
+| Not derived from the analysed tree | The desktop **mints** a value; it does not compute one from the tree |
+
+### The locator-to-identity mapping is a persisted fact, not a derivation
+
+Per-repository opt-in must survive a restart, and on restart the human selects a
+folder again. The only key available for that lookup is the locator. So the
+desktop records a mapping — locator, opaque identity, opt-in state — and on a
+later selection either recovers the identity that locator was recorded against,
+or mints a fresh one and records it.
+
+This is deliberately **not** derivation. No function maps a path to an identity;
+the association is a fact that was written down once. The distinction is the
+whole point of Amendment 1, and it is load-bearing here: a derivation would make
+two spellings of one path agree, and a recorded mapping does not pretend to.
+
+The identity-generation mechanism is **not fixed by this amendment**. It must be
+opaque and it must not be a function of the tree; beyond that it is an
+implementation detail, and no claim of cryptographic uniqueness is made or needed
+— the value is compared for equality within one machine's configuration, never
+used as a secret and never transmitted.
+
+### Consequences, stated rather than discovered later
+
+- **The desktop configuration becomes a grant-bearing surface.** Amendment 2
+  weighed a configuration file as a grant channel for MCP and pointed away from
+  it, on RULE 014's reasoning. That reasoning is revisited here rather than
+  ignored: MCP is launched by another program and has argv; a desktop
+  application launched by a person double-clicking it has no argv to carry a
+  grant, and the alternative — asking for consent again every session — is the
+  option the per-repository decision in
+  [ADR-0021](ADR-0021-ask-boundary-and-citation-contract.md) already excludes.
+- **The trust boundary is the OS user account**, the same boundary that protects
+  the keychain. Anyone who can write the configuration can already read the
+  repositories it names.
+- **The configuration holds the minimum association data only** — locator,
+  opaque identity, opt-in state. It holds **no API key, no token, no source, no
+  `Evidence`, no analysis graph and no environment values**. The credential lives
+  in the OS keychain (RULE 014), never here.
+- **The frontend receives an enabled/disabled state and nothing else.** The
+  identity value does not cross into JavaScript.
+- **Moving or renaming a repository does not carry its opt-in.** The locator no
+  longer matches, so the next selection mints a new identity and the repository
+  reads as not opted in. The user re-enables it.
+- **One physical tree reached through two locators may hold two identities** — a
+  symlinked root, a different case on Windows, a `..`-relative path. This follows
+  directly from *"containment inside a tree exists; identity of the root does
+  not"*, and is visible product behaviour rather than a defect to be papered
+  over.
+- **Stale entries may be pruned.** A locator that no longer exists is a
+  bookkeeping matter, not an authorization one.
+- **`cartograph-core`, `-graph` and `-pipeline` are unchanged in shape.** No new
+  identity type is introduced anywhere.
+
+### What this amendment does not settle
+
+- **How the canonical identity value is derived** stays open in *Deferred,
+  deliberately*, and is not closed here. Amendment 3 does not derive anything; it
+  records that one producer is handed a value and another mints one.
+- **C — the AI provider and HTTP client** and **D — the keychain crate** remain
+  deferred in [ADR-0021](ADR-0021-ask-boundary-and-citation-contract.md). The
+  frozen engineering specification that authorises dependencies is still not
+  available in this repository, and no crate is named here.
 
 ## Decision rule
 
