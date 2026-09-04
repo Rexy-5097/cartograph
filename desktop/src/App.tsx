@@ -29,6 +29,7 @@ import { clusterColor, clusterSummary, type BuildDiagnostics } from "./graph";
 
 import {
   type AnalysisPayload,
+  type AskAnswer,
   type BlastResult,
   type DesktopError,
   type EvidenceRecord,
@@ -210,6 +211,8 @@ function Result({ payload }: { payload: AnalysisPayload }) {
   const [selectionError, setSelectionError] = useState<DesktopError | null>(null);
   const [blast, setBlast] = useState<BlastResult | null>(null);
   const [blastPending, setBlastPending] = useState(false);
+  const [answer, setAnswer] = useState<AskAnswer | null>(null);
+  const [askPending, setAskPending] = useState(false);
   const largest = useMemo(() => clusterSummary(scene).slice(0, 8), [scene]);
 
   // A selection belongs to one analysis. When the payload is replaced the old
@@ -218,10 +221,13 @@ function Result({ payload }: { payload: AnalysisPayload }) {
   // that guarantee, not the whole of it.
   useEffect(() => {
     blastRequest.current += 1;
+    askRequest.current += 1;
     setSelected(null);
     setSelectionError(null);
     setBlast(null);
     setBlastPending(false);
+    setAnswer(null);
+    setAskPending(false);
   }, [payload.analysis]);
 
   const selectEdge = useCallback(
@@ -232,6 +238,7 @@ function Result({ payload }: { payload: AnalysisPayload }) {
           analysis: payload.analysis,
           edge,
         });
+        setAnswer(null);
         setSelected(record);
       } catch (raw) {
         // A refused lookup must not leave the previous edge's evidence on
@@ -285,18 +292,73 @@ function Result({ payload }: { payload: AnalysisPayload }) {
     [payload.analysis],
   );
 
+  /**
+   * Asks for the derived evidence behind one artefact.
+   *
+   * The degraded ASK path: no model, no key, no network. The same two guards
+   * `blastNode` needs, for the same reasons — Rust refuses a stale
+   * `AnalysisId`, and this token stops a slower answer landing after a faster
+   * one the user has already moved past.
+   */
+  const askRequest = useRef(0);
+
+  const askNode = useCallback(
+    async (node: number) => {
+      const token = askRequest.current + 1;
+      askRequest.current = token;
+      setSelectionError(null);
+      setAskPending(true);
+      try {
+        const result = await invoke<AskAnswer>("ask_evidence", {
+          analysis: payload.analysis,
+          node,
+        });
+        if (askRequest.current !== token) {
+          return; // superseded; a later request owns the panel
+        }
+        // One panel, one subject: an explanation replaces a single-edge
+        // selection rather than stacking on top of it.
+        setSelected(null);
+        setAnswer(result);
+      } catch (raw) {
+        if (askRequest.current !== token) {
+          return;
+        }
+        setAnswer(null);
+        setSelectionError(asDesktopError(raw));
+      } finally {
+        if (askRequest.current === token) {
+          setAskPending(false);
+        }
+      }
+    },
+    [payload.analysis],
+  );
+
+  const clearAnswer = useCallback(() => {
+    askRequest.current += 1;
+    setAnswer(null);
+    setAskPending(false);
+  }, []);
+
   const clearBlast = useCallback(() => {
     // Invalidate anything in flight, so a response that has not arrived yet
     // cannot repaint after the user cleared.
     blastRequest.current += 1;
+    askRequest.current += 1;
     setBlast(null);
     setBlastPending(false);
+    setAnswer(null);
+    setAskPending(false);
   }, []);
 
   const clearSelection = useCallback(() => {
     blastRequest.current += 1;
+    askRequest.current += 1;
     setBlast(null);
     setBlastPending(false);
+    setAnswer(null);
+    setAskPending(false);
     setSelected(null);
     setSelectionError(null);
   }, []);
@@ -364,6 +426,12 @@ function Result({ payload }: { payload: AnalysisPayload }) {
         </p>
       )}
 
+      {askPending && (
+        <p className="note" role="status">
+          Gathering the evidence behind that artefact…
+        </p>
+      )}
+
       {blast !== null && (
         <div className="blast-summary" role="status">
           <p>{describeBlast(blast)}</p>
@@ -374,6 +442,9 @@ function Result({ payload }: { payload: AnalysisPayload }) {
               artefact; others may exist.
             </p>
           )}
+          <button type="button" onClick={() => void askNode(blast.target)}>
+            Explain this artefact
+          </button>
           <button type="button" onClick={clearBlast}>
             Clear blast radius
           </button>
@@ -382,6 +453,10 @@ function Result({ payload }: { payload: AnalysisPayload }) {
 
       {selected !== null && (
         <EvidencePanel record={selected} onClose={clearSelection} />
+      )}
+
+      {answer !== null && (
+        <EvidencePanel answer={answer} onClose={clearAnswer} />
       )}
 
       {selectionError !== null && (
