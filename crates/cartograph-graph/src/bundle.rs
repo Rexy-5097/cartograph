@@ -40,7 +40,9 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use cartograph_core::{Confidence, Edge, EdgeId, EdgeKind, NodeIdentity, Provenance, identity_of};
+use cartograph_core::{
+    Confidence, Edge, EdgeId, EdgeKind, NodeIdentity, Provenance, Sensitive, identity_of, sensitive,
+};
 use thiserror::Error;
 
 use crate::ArchitectureGraph;
@@ -124,31 +126,8 @@ pub enum BundleError {
         /// The edge whose evidence was refused.
         edge: EdgeId,
         /// What kind of thing was found, never the thing itself.
-        what: Unsafe,
+        what: Sensitive,
     },
-}
-
-/// What was found in evidence that may not leave the machine.
-///
-/// Deliberately a category rather than the text: naming the category is enough
-/// to debug, and reproducing the value would put it in the log the check exists
-/// to keep it out of.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Unsafe {
-    /// A path inside somebody's home directory, or a drive-rooted path.
-    MachinePath,
-    /// A credential-shaped string.
-    Secret,
-}
-
-impl std::fmt::Display for Unsafe {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::MachinePath => "a machine-specific path",
-            Self::Secret => "a credential-shaped string",
-        })
-    }
 }
 
 /// Why a citation was refused.
@@ -267,7 +246,7 @@ impl EvidenceBundle {
             let edge = graph
                 .edge(id)
                 .ok_or(BundleError::MissingEdge { edge: id })?;
-            if let Some(what) = unsafe_in(edge.evidence().as_str()) {
+            if let Some(what) = sensitive::found_in(edge.evidence().as_str()) {
                 return Err(BundleError::UnsafeEvidence { edge: id, what });
             }
             bundled.push(bundle_one(graph, edge));
@@ -447,82 +426,6 @@ fn scope_of(edges: &[BundledEdge]) -> BundleScope {
         edge.location.line().hash(&mut hasher);
     }
     BundleScope(hasher.finish())
-}
-
-/// Whether evidence carries something that may not leave the machine.
-///
-/// The shapes are QG-005's, restated here because the gate scans tracked files
-/// and this scans a value at runtime — the same rule enforced at a second
-/// place, not a new rule. A generic "starts with `/`" test is deliberately
-/// absent: route evidence legitimately reads `GET /api/orders`, and a check
-/// that refused it would be a check nobody could keep.
-fn unsafe_in(text: &str) -> Option<Unsafe> {
-    if has_home_path(text) || has_drive_path(text) {
-        return Some(Unsafe::MachinePath);
-    }
-    if has_secret(text) {
-        return Some(Unsafe::Secret);
-    }
-    None
-}
-
-/// A path inside somebody's home directory: `/Users/<name>/`, `/home/<name>/`.
-fn has_home_path(text: &str) -> bool {
-    ["/Users/", "/home/"].iter().any(|prefix| {
-        text.match_indices(prefix).any(|(at, _)| {
-            let rest = &text[at + prefix.len()..];
-            // A named component that is itself followed by a separator: the
-            // shape QG-005 matches, and the one that identifies a real account
-            // rather than the bare directory.
-            rest.split_once('/').is_some_and(|(name, _)| {
-                !name.is_empty()
-                    && name
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
-            })
-        })
-    })
-}
-
-/// A drive-rooted Windows path: `C:\...` or `C:/...`.
-fn has_drive_path(text: &str) -> bool {
-    text.as_bytes().windows(3).any(|window| {
-        window[0].is_ascii_alphabetic()
-            && window[1] == b':'
-            && (window[2] == b'\\' || window[2] == b'/')
-    })
-}
-
-/// A credential-shaped string, in QG-005's vocabulary.
-fn has_secret(text: &str) -> bool {
-    const GITHUB: [&str; 5] = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"];
-
-    if text.contains("-----BEGIN ") && text.contains("PRIVATE KEY") {
-        return true;
-    }
-    if GITHUB.iter().any(|prefix| {
-        text.match_indices(prefix).any(|(at, _)| {
-            text[at + prefix.len()..]
-                .chars()
-                .take_while(char::is_ascii_alphanumeric)
-                .count()
-                >= 20
-        })
-    }) {
-        return true;
-    }
-    if text.match_indices("AKIA").any(|(at, _)| {
-        text[at + 4..]
-            .chars()
-            .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-            .count()
-            >= 16
-    }) {
-        return true;
-    }
-    ["xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"]
-        .iter()
-        .any(|prefix| text.contains(prefix))
 }
 
 #[cfg(test)]
@@ -847,7 +750,7 @@ mod tests {
             EvidenceBundle::from_edges(&graph, [id]),
             Err(BundleError::UnsafeEvidence {
                 edge: id,
-                what: Unsafe::MachinePath
+                what: Sensitive::MachinePath
             })
         );
     }
@@ -879,7 +782,7 @@ mod tests {
             EvidenceBundle::from_edges(&graph, [id]),
             Err(BundleError::UnsafeEvidence {
                 edge: id,
-                what: Unsafe::MachinePath
+                what: Sensitive::MachinePath
             })
         );
     }
@@ -898,7 +801,7 @@ mod tests {
             EvidenceBundle::from_edges(&graph, [id]),
             Err(BundleError::UnsafeEvidence {
                 edge: id,
-                what: Unsafe::Secret
+                what: Sensitive::Secret
             })
         );
     }
@@ -957,7 +860,10 @@ mod tests {
                 edge.evidence,
                 edge.location.file()
             );
-            assert!(unsafe_in(&rendered).is_none(), "unsafe content: {rendered}");
+            assert!(
+                sensitive::found_in(&rendered).is_none(),
+                "unsafe content: {rendered}"
+            );
             assert!(
                 !edge.location.file().starts_with('/'),
                 "absolute location: {}",

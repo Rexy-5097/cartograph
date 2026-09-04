@@ -289,8 +289,10 @@ fn report_failure(error: &CliError, command: &'static str, as_json: bool) -> Exi
 /// Configures logging.
 ///
 /// Logs carry spans and structured fields, never source-file contents,
-/// environment variable values or credentials (RULE 015). Nothing in this
-/// binary is permitted to log a file's text.
+/// environment variable values or credentials (RULE 015). That is enforced by
+/// the field formatter rather than promised: every value passes through
+/// `cartograph_pipeline::redaction`, so a call site that logs something it
+/// should not is redacted rather than trusted.
 fn init_tracing(verbosity: u8) {
     let default = match verbosity {
         0 => "warn",
@@ -305,9 +307,13 @@ fn init_tracing(verbosity: u8) {
     let filter = tracing_subscriber::EnvFilter::try_from_env("CARTOGRAPH_LOG")
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default));
 
+    // The redacting field formatter, not the default one. RULE 015 is a
+    // property of the sink rather than of whoever wrote the call site, and
+    // this is where that becomes true (ADR-0021, M16 Slice 3).
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
+        .fmt_fields(cartograph_pipeline::redaction::Redacting)
         .init();
 }
 
