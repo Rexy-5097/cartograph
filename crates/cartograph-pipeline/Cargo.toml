@@ -15,6 +15,11 @@ cartograph-resolver.workspace = true
 cartograph-graph.workspace = true
 serde.workspace = true
 tracing.workspace = true
+# M16 Slice 3: the redacting field formatter. Already a workspace dependency
+# (the CLI builds its subscriber with it); this crate needs the `FormatFields`
+# trait to implement one, so the guarantee can be installed by every client
+# rather than by whichever one remembered.
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 # Canonical graph equality for the M10 differential tests: `incremental ==

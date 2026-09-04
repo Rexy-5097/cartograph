@@ -30,6 +30,7 @@ pub mod identity;
 pub mod location;
 pub mod node;
 pub mod provenance;
+pub mod sensitive;
 
 pub use confidence::Confidence;
 pub use edge::{Edge, EdgeKind};
@@ -40,6 +41,7 @@ pub use identity::{NodeIdentity, identity_of, identity_parts, kind_token};
 pub use location::SourceLocation;
 pub use node::{Node, NodeKind};
 pub use provenance::Provenance;
+pub use sensitive::{REDACTED, Sensitive};
 
 /// Version of the frozen engineering specification this domain model implements.
 ///

@@ -45,3 +45,4 @@ pub mod error;
 pub mod incremental;
 pub mod map;
 pub mod pipeline;
+pub mod redaction;
