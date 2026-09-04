@@ -473,6 +473,23 @@ body {
   color: var(--muted);
 }
 
+/* One claim inside an explanation. Entries stack, so each needs a visible
+   edge; without it two adjacent claims read as one longer claim. */
+.evidence-entry + .evidence-entry {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Whether a model was involved. Stated plainly and near the top, because a
+   reader deciding how much to trust an explanation needs it before the
+   explanation, not after it. */
+.evidence-ai {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .evidence-prompt {
   font-style: italic;
 }

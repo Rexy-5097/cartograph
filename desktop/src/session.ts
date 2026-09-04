@@ -197,6 +197,45 @@ export interface BlastResult {
   routes: string;
 }
 
+/**
+ * Whether a model contributed to an ASK answer.
+ *
+ * A string union rather than a boolean: "no model was consulted" and "a model
+ * was consulted and declined" are different things, and a boolean would force
+ * them to look the same the moment the second one exists.
+ */
+export type AiState = "disabled";
+
+/**
+ * An answer about one artefact, assembled from derived evidence alone.
+ *
+ * M16's degraded path. Every entry is an ordinary `EvidenceRecord` — the same
+ * shape the panel already renders for a single selected edge — because two
+ * descriptions of one claim would eventually disagree, and the place a reader
+ * would notice is the place it matters.
+ */
+export interface AskAnswer {
+  /** The analysis this belongs to; a response for any other must be discarded. */
+  analysis: AnalysisId;
+  /** The artefact asked about. */
+  target: number;
+  /** Whether a model was involved. Read this rather than assuming. */
+  ai: AiState;
+  /**
+   * The bundle the entries came from.
+   *
+   * Opaque: compare it, never interpret it. It exists so a later slice can
+   * prove a citation belongs to the evidence actually shown.
+   */
+  scope: number;
+  /**
+   * The evidence, in Rust's deterministic order.
+   *
+   * Empty is an answer, not a failure.
+   */
+  entries: EvidenceRecord[];
+}
+
 /** A named group of nodes. */
 export interface Cluster {
   id: number;

@@ -22,6 +22,7 @@
 
 use std::sync::Mutex;
 
+use cartograph_desktop::ask::{self, AskAnswer};
 use cartograph_desktop::blast::{self, BlastPayload};
 use cartograph_desktop::error::{DesktopError, DesktopErrorKind};
 use cartograph_desktop::evidence::{AnalysisId, AnalysisSession, EvidenceRecord};
@@ -122,6 +123,35 @@ fn blast_radius(
     blast::radius(session, analysis, cartograph_core::NodeId::from_raw(node))
 }
 
+/// The derived evidence behind one artefact, with no model involved.
+///
+/// M16's degraded path: no key, no network, no provider. What comes back is
+/// the evidence the analysis already produced, in the bundle's deterministic
+/// order, and the payload says `ai: "disabled"` so the window states that from
+/// the data rather than assuming it.
+///
+/// Takes the analysis id for the same reason its neighbours do: `NodeId`
+/// restarts at zero per analysis, so an id from a replaced graph would explain
+/// a different artefact confidently and wrongly.
+///
+/// Runs on the blocking pool: walking a large graph is CPU-bound, and holding
+/// an async worker for it would stall other commands.
+#[tauri::command(async)]
+fn ask_evidence(
+    analysis: AnalysisId,
+    node: u64,
+    current: tauri::State<'_, Current>,
+) -> Result<AskAnswer, DesktopError> {
+    let held = current.0.lock().map_err(|_| poisoned())?;
+    let session = held.as_ref().ok_or_else(|| {
+        DesktopError::new(
+            DesktopErrorKind::NoAnalysis,
+            "No repository has been analysed yet.",
+        )
+    })?;
+    ask::answer(session, analysis, cartograph_core::NodeId::from_raw(node))
+}
+
 /// A poisoned lock means a command panicked while holding it. That is a defect
 /// here, not a user error, and it is reported as one rather than papered over.
 fn poisoned() -> DesktopError {
@@ -149,7 +179,8 @@ fn main() {
             validate_repository,
             analyze_repository,
             edge_evidence,
-            blast_radius
+            blast_radius,
+            ask_evidence
         ])
         .run(tauri::generate_context!())
         .expect("the Tauri runtime failed to start");
