@@ -24,5 +24,5 @@
 | [0017](../../docs/adr/ADR-0017-render-scene.md) | The render scene: layout plus the minimum a reader needs | Accepted |
 | [0018](../../docs/adr/ADR-0018-blast-radius-confidence.md) | Blast radius confidence: weakest link along a path, best route to a node | Accepted |
 | [0019](../../docs/adr/ADR-0019-trace-belongs-to-the-graph.md) | The trace traversal belongs to the graph, not to a client | Accepted |
-| [0020](../../docs/adr/ADR-0020-mcp-boundary-and-authorization.md) | MCP boundary and authorization model: map is an aggregated view, authorization is one canonical repository identity per session, transport is stdio | Accepted · Amendments 1-2: identity is grant-supplied, granted in argv at launch |
+| [0020](../../docs/adr/ADR-0020-mcp-boundary-and-authorization.md) | MCP boundary and authorization model: map is an aggregated view, authorization is one canonical repository identity per session, transport is stdio | Accepted · Amendments 1-3: identity is grant-supplied, granted in argv at launch, and the desktop is a second grant producer under the same one identity model |
 | [0021](../../docs/adr/ADR-0021-ask-boundary-and-citation-contract.md) | The ASK boundary: surfaces, citation contract, and the first network edge | Proposed · C (AI provider/HTTP client) and D (keychain crate) deferred pending frozen-stack verification |
