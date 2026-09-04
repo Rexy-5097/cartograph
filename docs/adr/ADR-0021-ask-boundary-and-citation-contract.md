@@ -9,6 +9,10 @@
 > (AI provider and HTTP client) and **D** (keychain crate) — because the
 > document that authorises dependencies is not in this repository. See
 > *Deferred, deliberately*. An implementation may not treat C or D as settled.
+>
+> **Amended 2026-09-05.** The specification is now available and has been
+> read. C and D are **still** deferred, for a narrower reason: it names no
+> crate for either. See *Amendment 1*.
 
 ## Context
 
@@ -173,12 +177,93 @@ Not settled by this ADR. An implementation may not treat them as settled.
 
 | Deferred | Why it is still open |
 |---|---|
-| **C — AI provider and HTTP client** | The frozen engineering specification, which authorises dependencies, is **not in this repository**. `Cargo.toml` cites a "dossier §10" that is also absent. QG-006 requires that "new dependencies not named in the frozen stack need an ADR reference in the PR" — that reference cannot be written honestly without reading the stack |
-| **D — Keychain crate** | The same blocker. `docs/security/README.md` schedules keychain storage at M16 but names no crate |
+| **C — AI provider and HTTP client** | **Superseded by Amendment 1**, and still open. The specification is available; §10 names no HTTP client and no AI provider SDK. Its only network-adjacent entries, `async-lsp` and `tokio`, are for LSP transport |
+| **D — Keychain crate** | **Superseded by Amendment 1**, and still open. §13 requires the OS keychain; §10 names no credential-storage crate. Slice 4 ships the boundary with no backend |
 | **The configuration file's path** | Decided as a *kind* of thing (B); the platform-specific location needs platform evidence |
 | **The redaction layer's implementation** | Placement and ordering are decided (F); the mechanism is its slice's work |
 | **Whether MCP ASK ships in M16 or after the desktop surface** | A sequencing question the slice plan may answer with evidence |
 
+## Amendment 1 — the frozen specification is available, and it names no crate for C or D
+
+**Status: Accepted, 2026-09-05.** When this ADR was written, C and D were
+deferred because *"the frozen engineering specification, which authorises
+dependencies, is not in this repository."* The specification —
+**Cartograph, Frozen Engineering Specification V3, August 2026** — is now
+available and has been read. That sentence is superseded, and what replaces it
+is narrower rather than broader.
+
+### What the specification establishes
+
+**§13 Security** states the requirement plainly:
+
+> *Credentials live in the OS keychain, never in configuration files.*
+> *AI is opt-in, per repository, off by default. The product is fully useful
+> with no API key and no network.*
+> *Never log source contents, tokens, or environment variables. Redact at the
+> tracing layer.*
+
+**§10 Tech stack** is the authorising list, and it is complete: thirteen crates
+for the Rust core — `tree-sitter`, `async-lsp` + `lsp-types`, `petgraph`,
+`redb`, `gix`, `notify`, `rayon`, `tokio`, `clap`, `thiserror`/`anyhow`,
+`tracing`, `criterion`, `rmcp` — and eight choices for the desktop.
+
+### The distinction that matters
+
+§13 states a **requirement**. §10 is the list of **authorised crates**. They are
+not the same thing, and for M16 they do not meet:
+
+| | Status |
+|---|---|
+| **C — AI provider / HTTP client** | §10 names **no HTTP client** and **no AI provider SDK**. The only network-adjacent entries are `async-lsp` and `tokio`, both for LSP transport. **Still deferred.** |
+| **D — keychain crate** | §13 requires the OS keychain; §10 names **no credential-storage crate**. **Still deferred.** |
+
+So the blocker changed shape rather than lifting: it is no longer *"the document
+is missing"* but *"the document is present and does not name one."* That is a
+better place to be — it is now a question with a known answer procedure rather
+than an unknown — but it is not authorisation, and this ADR does not treat it
+as one.
+
+The route is the repository's own: §10's freeze reads *"Frozen. Not reopened
+until M9 ships"*, and M09 shipped long ago, so the list is reopenable; and
+QG-006 already says *"new dependencies not named in the frozen stack need an ADR
+reference in the PR."* Choosing a keychain crate is therefore a decision with
+its own evidence — platform behaviour, maintenance, dependency footprint,
+testability without a real user's credentials — and belongs in its own ADR, not
+inside an implementation slice.
+
+### What Slice 4 does instead
+
+It ships the **credential boundary and no backend**:
+`cartograph_desktop::credential` defines `CredentialStore` (`get` / `set` /
+`delete`, with `PermissionDenied`, `Unavailable` and `Backend` distinguished
+from absence) and a `NoCredentials` implementation that reports every
+credential as absent.
+
+That is not a placeholder for its own sake. With no backend, ASK degrades to raw
+evidence — which is precisely the property §13 asks for, *"fully useful with no
+API key and no network"*, and it is the behaviour that ships and is tested. A
+keychain backend can be added behind the trait without any caller changing.
+
+### Storage: why the opt-in table is not `redb`
+
+§10 does name a storage crate — `redb`, *"Pure Rust, embedded, no C
+dependency"* — so the choice was made deliberately rather than overlooked.
+`redb` is the local **graph** store (§5's figure labels it *"redb — local
+graph"*), and it is not a dependency of this workspace yet. Introducing an
+embedded database to hold one boolean per repository would fail §10's own
+dependency test: *"what concrete Cartograph problem does this solve right
+now?"*
+
+The opt-in table is instead a small JSON document written with `serde_json`,
+already a workspace dependency, in an OS configuration directory resolved from
+the platform's own environment variables. No configuration-format crate and no
+directory crate is added; §10 names neither, and neither is needed.
+
+### What is unchanged
+
+Decisions A, B, E and F stand. C and D remain in *Deferred, deliberately*, with
+their reason restated: the specification is available and does not name a crate
+for either.
 ## Security implications
 
 Two invariants are widened by M16 and neither may be widened silently.

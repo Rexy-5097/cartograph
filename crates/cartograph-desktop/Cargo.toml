@@ -16,9 +16,12 @@ cartograph-pipeline.workspace = true
 cartograph-core.workspace = true
 cartograph-graph.workspace = true
 serde.workspace = true
+# M16 Slice 4: the per-repository opt-in table is a small JSON document.
+# Promoted from dev-dependencies, so no package is added to the lockfile. The
+# frozen stack (§10) names no configuration-format crate, and none is needed.
+serde_json.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
 # Fixed clock, so a composed scene is byte-stable across runs.
 cartograph-testkit.workspace = true
 
