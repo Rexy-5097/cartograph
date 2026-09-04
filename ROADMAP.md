@@ -39,8 +39,8 @@ real-repository validation.
 | M12 | Blast radius across language boundaries | Week 13 | **Accepted** (`cartograph-m12`) |
 | M13 | Structural diff, branch against branch | Week 16 | **Accepted** (`cartograph-m13`) |
 | M14 | GitHub Action posting architecture review on PRs | Week 19 | **Accepted** (`cartograph-m14`) |
-| M15 | MCP server | Week 21 | **Unlocked, not started** |
-| M16 | ASK — explanation over subgraph evidence | Week 24 | Not started |
+| M15 | MCP server | Week 21 | **Accepted** (`cartograph-m15`) |
+| M16 | ASK — explanation over subgraph evidence | Week 24 | **Unlocked, not started** |
 | M17 | Public launch and technical writeup | Week 25 | Not started |
 
 Statuses here are the human-readable view; the authoritative record is
@@ -67,7 +67,7 @@ v1.0.
 | 0.5 | Blast radius | M12 |
 | **0.6** | **DIFF** — the retention surface | M13 — **delivered** |
 | **0.7** | **GitHub PR integration** | M14 — **delivered** |
-| 0.8 | MCP | M15 |
+| **0.8** | **MCP** — the agent surface | M15 — **delivered** |
 | 0.9 | ASK | M16 |
 | **1.0** | Stable | M17 |
 

@@ -453,6 +453,164 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M15 — MCP server
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-04 by the project owner |
+| Base | `cartograph-m14` — commit `caba5ef` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#38](https://github.com/Rexy-5097/cartograph/pull/38) · [#41](https://github.com/Rexy-5097/cartograph/pull/41) · [#43](https://github.com/Rexy-5097/cartograph/pull/43) · [#44](https://github.com/Rexy-5097/cartograph/pull/44) · [#45](https://github.com/Rexy-5097/cartograph/pull/45) |
+| Scope ADR | [ADR-0020](docs/adr/ADR-0020-mcp-boundary-and-authorization.md), with Amendments 1 and 2 |
+| **Accepted checkpoint** | **`cartograph-m15`** — merge commit `7d0c7f9`, immutable |
+| Real-client evidence | A Claude Code session driving the server over stdio |
+
+### Delivered in three slices, plus a test fix and the prerequisite
+
+| Slice | PR | Merge | What landed |
+|---|---|---|---|
+| 1 — traversal | #38 | `5d88405` | Trace traversal extracted into `cartograph-graph` |
+| 2 — authorization | #41 | `4f89e56` | The session authorization boundary |
+| 3 — the server | #43 | `75e72af` | `cartograph-mcp` over stdio: map, trace, blast, diff |
+| test fix | #44 | `c02cde8` | A blast test isolated from a shared temporary path |
+| prerequisite | #45 | `7d0c7f9` | `version::MILESTONE` and `current_milestone` advanced together |
+
+ADR-0020 and its two amendments landed as #39 (`6477025`), #40 (`4f37184`) and
+#42 (`f0e1304`).
+
+### Acceptance criterion
+
+*"MCP client can query the graph of an authorized repo and nothing else;
+privacy gate extended to MCP; gates pass."*
+
+**PASS**, on all three clauses. The client was **a real Claude Code session**,
+not a hand-written harness: the server was launched from the client's own
+configuration with
+
+```
+--repository-identity cartograph-m15
+--repository D:/dev/cartograph-contrib
+--repository D:/dev/cartograph-m15-before
+```
+
+and an empty environment. Tool discovery returned **exactly four** tools —
+`map`, `trace`, `blast`, `diff`. There is no `authorize`, `set_repository`,
+`switch_repository` or `add_repository`.
+
+#### "Can query the graph of an authorized repo"
+
+| Query | Result |
+|---|---|
+| `map` | The A4 view: 14 artefacts, 11 relationships, 5 cross-language, `hubs_omitted: 0` — **byte-identical across runs** |
+| `trace(loadOrders)` | TypeScript → Python `http-call` (0.784, `RouteMatcher`) → `orm-access` to `Order` (0.8, `OrmResolution`) → `queries` → table `orders`; `reaches_table: true` |
+| `blast(orders)` | Three dependents at depths 1–3, weakest-link confidence propagating 0.8 → 0.784 |
+| `diff` (both granted trees) | `added 3, removed 0, changed 0, unchanged 8` |
+
+Every step carried evidence, provenance and a confidence that is an
+uncalibrated prior rather than a probability, exactly as the server's own
+description promises.
+
+#### "And nothing else"
+
+Refusals were tested rather than assumed, in both directions:
+
+| Call | Result |
+|---|---|
+| `map` on an ungranted tree | REFUSED |
+| `trace` on an ungranted tree | REFUSED **on authorization**, not "unknown symbol" |
+| `diff(granted, ungranted)` | REFUSED |
+| `diff(ungranted, granted)` | REFUSED |
+| `diff(ungranted, ungranted)` | REFUSED |
+
+Four distinct ungranted trees were refused. That `trace` refuses on
+authorization rather than reporting an unknown symbol shows authorization
+precedes analysis at the client boundary, not only in the unit tests.
+
+#### "Privacy gate extended to MCP"
+
+No response — successful or refused — carried an absolute path, a parent path,
+the opaque repository identity, an environment value or a token. Successful
+responses name files repo-relatively (`crates/…`). **The refusal echoes none of
+its input.**
+
+**Existence is not disclosed.** An ungranted tree that *exists* on disk and an
+ungranted path that does *not* exist produced **byte-identical** refusals.
+
+Evidence strings such as `Order.objects.all(...)` come from the **authorized**
+tree, with call arguments elided, and are the documented purpose of `trace`.
+They are authorized evidence, not leakage. QG-005 passes. The MAP suite asserts
+the boundary directly: `the_map_carries_no_evidence_or_source_text` and
+`the_map_carries_no_absolute_path`.
+
+#### Session immutability
+
+The grant arrives in argv and cannot be changed afterwards. The whole surface is
+`tree` / `before` / `after` / `symbol` / `max_depth`; `tree` **selects among
+trees granted at launch** rather than widening the grant — which the refusals
+demonstrate rather than assert. The server was not restarted during validation.
+
+#### Protocol integrity
+
+Every response was a well-formed MCP result or a structured error. No diagnostic
+text corrupted the stream.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `7d0c7f9`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy … -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **887 passed, 0 failed, 30 ignored** |
+| `cargo test -p cartograph-mcp` | PASS — **20/20** session tests |
+| MAP suite (`map::tests`) | PASS — **9/9** |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 98/100 |
+| CI on each pull request | PASS — 10 checks each |
+
+### Verification findings
+
+**A symbol chosen for validation did not exist, and that was a test-input error
+rather than a defect.** An early script traced `system_map`, which returned
+``no symbol named `system_map` is in the graph``. `system_map` is a **Rust**
+function at `crates/cartograph-pipeline/src/map.rs:270`, and the workspace
+compiles only the TypeScript and Python tree-sitter grammars — so no Rust
+artefact can enter a graph, and the symbol could never be traced. `trace` and
+`blast` were re-run against symbols the live `map` proves exist and both
+succeeded. Neither was modified to make the original symbol resolvable.
+
+**A test raced on a shared temporary path.** `a_repository_path_containing_spaces_works`
+built its fixture at a fixed `temp_dir()/"cartograph blast spaces"`, so two
+overlapping full-workspace runs — routine, because `run_gates.py` shells out to
+`cargo test --workspace` itself — could delete a tree the other was analysing.
+Reproduced deterministically at **5 failures in 12 concurrent runs**, and **0 in
+16** after #44 gave the directory a process and thread qualifier.
+
+### Accepted limitations
+
+- **No Rust grammar.** Only `tree-sitter-typescript` and `tree-sitter-python` are
+  compiled in, so a Rust repository maps empty and no Rust symbol can be traced
+  or blast-analysed. Cartograph's own self-map therefore reports only its
+  Python and TypeScript test fixtures.
+- **Real-client evidence is Claude Code specifically.** Other MCP clients are
+  unproven here.
+- **Not exercised against a large repository by a real client.** The granted
+  tree is small; behaviour on a repository the size of Airflow or Zulip is
+  covered by earlier engine work, not by this milestone's client evidence.
+- **Analysis latency remains a follow-up concern.** Airflow measured roughly
+  **267.6s cold and 31.7s warm** before this milestone, and M15 added no
+  caching.
+- **No desktop consumer.** MAP does not consume the MCP surface.
+- **No reusable packaging** for a third party to run the server against their
+  own repository beyond launching the binary with a grant.
+- **One identity per session.** Two unrelated repositories cannot be authorized
+  together; that is the boundary ADR-0020 chose, and it is why cross-repository
+  `diff` is refused rather than supported.
+
+---
+
 ## M14 — GitHub PR integration
 
 | Field | Value |

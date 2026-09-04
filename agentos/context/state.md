@@ -7,22 +7,58 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M14 — GitHub PR integration** (accepted 2026-09-03) |
-| Status | M00–M14 **ACCEPTED**; M15 **implemented on `main`, not accepted** |
+| Last accepted milestone | **M15 — MCP server** (accepted 2026-09-04) |
+| Status | M00–M14 **ACCEPTED**; M16 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M15 — **unlocked**; M16 locked until M15 is accepted |
-| Last accepted checkpoint | `cartograph-m14` (immutable, commit `caba5ef`) |
+| Next permitted milestone | M16 — **unlocked**; M17 locked until M16 is accepted |
+| Last accepted checkpoint | `cartograph-m15` (immutable, commit `7d0c7f9`) |
 | Spec | Frozen V3, August 2026 |
 
 > `current_milestone` in the ledger reads **M15** and stays there.
 > `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
 > so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. The pair advances
-> before the checkpoint for the same reason it did at M14: tagging a commit
-> whose `cartograph version` still reported the previous milestone would
-> mislabel it. M16 stays locked until M15 is accepted.
+> product code and a bookkeeping commit may not touch it. The pair advanced in
+> PR #45, which landed before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M14 would have mislabelled it. M16 is
+> unlocked by `next_allowed_milestone`, exactly as M15 was at M14's acceptance.
 
 ## What exists
+
+- **M15: ACCEPTED** — the MCP server, delivered as three reviewed slices through
+  the fork (PRs #38, #41, #43), a test-isolation fix (#44) and #45 for the
+  version prerequisite. Scope recorded in
+  [ADR-0020](../../docs/adr/ADR-0020-mcp-boundary-and-authorization.md).
+
+  The milestone puts the graph where an agent already is. `cartograph-mcp`
+  speaks MCP over stdio and exposes exactly four tools — `map`, `trace`,
+  `blast`, `diff` — over **one** repository identity, granted in argv when the
+  server is launched.
+
+  **Accepted on its stated criterion**, and the client was a real Claude Code
+  session rather than a hand-written harness. `map` returned the A4 view
+  byte-identically across runs; `trace` walked TypeScript → Python over an
+  http-call at confidence 0.784, then `orm-access` to `Order` and `queries` to
+  the table `orders`, reaching a table in three hops with evidence and
+  provenance on every step; `blast` returned three dependents at depths 1–3
+  carrying weakest-link confidence; `diff` over the two granted trees returned
+  *added 3, removed 0, changed 0, unchanged 8*.
+
+  **"And nothing else" was tested, not assumed.** Four distinct ungranted trees
+  were refused across `map`, `trace` and `diff`, and **both** cross-repository
+  `diff` directions were refused. `trace` against an ungranted tree refused on
+  authorization rather than reporting an unknown symbol — so authorization
+  precedes analysis at the client boundary too.
+
+  **Privacy held.** No response carried an absolute path, a parent path, the
+  opaque identity or a token, and the refusal echoes none of its input. An
+  ungranted tree that *exists* and an ungranted path that does *not* produced
+  byte-identical refusals, so existence is not disclosed either.
+
+  **Not delivered:** no Rust grammar — the workspace compiles only the
+  TypeScript and Python tree-sitter grammars, so a Rust repository maps empty
+  and no Rust symbol can be traced; no desktop consumer of MCP; no reusable
+  packaging for a third party; and analysis latency on a large repository
+  remains a follow-up concern rather than a solved one.
 
 - **M14: ACCEPTED** — GitHub PR integration, delivered as two reviewed slices
   through the fork (PRs #33, #34), a correction the first live run forced (#36),
