@@ -490,6 +490,15 @@ body {
   color: var(--muted);
 }
 
+/* The per-repository AI opt-in. Off by default, and the caveat sits beside it
+   rather than in a settings screen — non-goal 05 rules out a settings panel. */
+.ask-optin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .evidence-prompt {
   font-style: italic;
 }

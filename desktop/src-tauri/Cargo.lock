@@ -283,6 +283,7 @@ dependencies = [
  "cartograph-graph",
  "cartograph-pipeline",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

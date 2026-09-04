@@ -212,6 +212,9 @@ function Result({ payload }: { payload: AnalysisPayload }) {
   const [blast, setBlast] = useState<BlastResult | null>(null);
   const [blastPending, setBlastPending] = useState(false);
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
+  // The only thing the window is told about the grant: a boolean.
+  // The repository identity stays in Rust (ADR-0020 Amendment 3).
+  const [askEnabled, setAskEnabled] = useState(false);
   const [askPending, setAskPending] = useState(false);
   const largest = useMemo(() => clusterSummary(scene).slice(0, 8), [scene]);
 
@@ -224,6 +227,12 @@ function Result({ payload }: { payload: AnalysisPayload }) {
     askRequest.current += 1;
     setSelected(null);
     setSelectionError(null);
+    // Off until Rust says otherwise, so a failed read shows "off" rather than
+    // the previous repository's answer.
+    setAskEnabled(false);
+    void invoke<boolean>("ask_enabled")
+      .then(setAskEnabled)
+      .catch(() => setAskEnabled(false));
     setBlast(null);
     setBlastPending(false);
     setAnswer(null);
@@ -425,6 +434,28 @@ function Result({ payload }: { payload: AnalysisPayload }) {
           Computing what depends on that artefact…
         </p>
       )}
+
+      <p className="note ask-optin">
+        <label>
+          <input
+            type="checkbox"
+            checked={askEnabled}
+            onChange={(event) => {
+              const wanted = event.target.checked;
+              void invoke<boolean>("set_ask_enabled", { enabled: wanted })
+                .then(setAskEnabled)
+                .catch(() => setAskEnabled(false));
+            }}
+          />{" "}
+          Allow AI explanations for this repository
+        </label>{" "}
+        <span className="evidence-kind">
+          {askEnabled ? "on" : "off"}
+        </span>
+        <span className="evidence-caveat">
+          answers are derived evidence until a model is configured
+        </span>
+      </p>
 
       {askPending && (
         <p className="note" role="status">

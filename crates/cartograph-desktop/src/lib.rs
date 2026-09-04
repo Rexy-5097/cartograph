@@ -47,8 +47,10 @@
 
 pub mod ask;
 pub mod blast;
+pub mod credential;
 pub mod error;
 pub mod evidence;
+pub mod optin;
 pub mod repository;
 pub mod scene;
 pub mod session;
