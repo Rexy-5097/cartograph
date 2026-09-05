@@ -27,53 +27,31 @@
 //! — *"fully useful with no API key"* — is the behaviour that ships and is
 //! tested. A backend can be added behind this trait without any caller changing.
 //!
-//! # The secret never becomes text
+//! # The secret never becomes text — and it no longer lives here
 //!
 //! [`Secret`] has no `Display`, no `Serialize`, and a `Debug` that prints a
 //! placeholder. It cannot be formatted into a log line, an error, a
 //! configuration file or an IPC payload by accident — the type refuses, rather
 //! than a reviewer remembering. `cartograph_pipeline::redaction` is the second
 //! line for anything that does reach tracing; this is the first.
+//!
+//! The type itself now lives in [`cartograph_core::secret`] and is re-exported
+//! below, so `cartograph_desktop::credential::Secret` still resolves and every
+//! caller here compiles unchanged. It moved because the AI provider crate
+//! takes a credential and may not depend on the desktop (ADR-0021 Amendment 3,
+//! decision C3).
+//!
+//! **The store did not follow it.** [`CredentialStore::get`] is keyed by
+//! [`RepositoryIdentity`], which lives in `cartograph-pipeline`; moving the
+//! trait into `cartograph-core` would make the domain model depend on another
+//! Cartograph crate, which is the dependency direction QG-006 checks by name.
+//! So the value went down to where every crate can see it, and the store —
+//! which needs a repository identity — stayed up here with the client that has
+//! one.
 
 use cartograph_pipeline::authorization::RepositoryIdentity;
 
-/// An API credential.
-///
-/// Deliberately hard to spill. There is no `Display`, no `Serialize` and no
-/// accessor that hands out an owned `String`; a caller that genuinely needs the
-/// bytes borrows them for as long as the call, through [`Secret::expose`].
-#[derive(Clone, PartialEq, Eq)]
-pub struct Secret(String);
-
-impl Secret {
-    /// Wraps a credential value.
-    #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    /// Borrows the credential, for the one place that must send it.
-    ///
-    /// Named so that a reader of the call site sees what is happening. It is
-    /// the only way out of this type, and it yields a borrow rather than an
-    /// owned `String` so the value is harder to accumulate somewhere it should
-    /// not be.
-    #[must_use]
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for Secret {
-    /// Never the value.
-    ///
-    /// The same treatment `RepositoryIdentity` gives itself, and the same
-    /// placeholder `cartograph_core::sensitive` uses, so one vocabulary means
-    /// "something was removed here".
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Secret(<redacted>)")
-    }
-}
+pub use cartograph_core::secret::Secret;
 
 /// Why a credential could not be reached.
 ///
@@ -164,32 +142,18 @@ mod tests {
         RepositoryIdentity::from_grant(value).expect("non-empty")
     }
 
+    /// The type's own behaviour is tested where it now lives, in
+    /// `cartograph_core::secret`. What is tested here is what this module still
+    /// owns: that the re-export resolves, and that the store built on it keeps
+    /// its guarantees.
     #[test]
-    fn a_secret_never_prints_its_value() {
+    fn the_re_export_resolves_and_still_refuses_to_print_its_value() {
         let secret = Secret::new("not-a-real-key-0123456789");
 
         let debugged = format!("{secret:?}");
 
         assert_eq!(debugged, "Secret(<redacted>)");
-        assert!(!debugged.contains("0123456789"));
-    }
-
-    #[test]
-    fn a_secret_inside_a_larger_structure_still_never_prints() {
-        // The realistic leak: nobody formats the secret directly, they format
-        // the thing holding it.
-        let held = Some(vec![Secret::new("not-a-real-key-0123456789")]);
-
-        let debugged = format!("{held:?}");
-
-        assert!(!debugged.contains("0123456789"), "leaked: {debugged}");
-        assert!(debugged.contains("<redacted>"));
-    }
-
-    #[test]
-    fn the_value_is_reachable_only_through_expose() {
-        let secret = Secret::new("value");
-        assert_eq!(secret.expose(), "value");
+        assert_eq!(secret.expose(), "not-a-real-key-0123456789");
     }
 
     #[test]
