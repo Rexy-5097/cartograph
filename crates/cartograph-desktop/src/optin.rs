@@ -15,13 +15,13 @@
 //! against, or **mints a fresh opaque one** and records the association.
 //!
 //! That association is a **persisted fact, not a derivation**. No function here
-//! maps a path to an identity: [`mint`] does not read the locator, and two runs
-//! over the same path produce different tokens unless one was written down. The
-//! distinction is load-bearing — a derivation would make two spellings of one
-//! path agree, and a recorded mapping does not pretend to. The consequences
-//! Amendment 3 accepted follow from exactly that: a moved or renamed repository
-//! does not carry its opt-in, and one tree reached through two locators may hold
-//! two identities.
+//! maps a path to an identity: the private `mint` does not read the locator, and
+//! two runs over the same path produce different tokens unless one was written
+//! down. The distinction is load-bearing — a derivation would make two spellings
+//! of one path agree, and a recorded mapping does not pretend to. The
+//! consequences Amendment 3 accepted follow from exactly that: a moved or
+//! renamed repository does not carry its opt-in, and one tree reached through
+//! two locators may hold two identities.
 //!
 //! # What this file may hold, and what it may not
 //!

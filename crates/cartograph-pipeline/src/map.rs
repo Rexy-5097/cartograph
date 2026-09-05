@@ -142,9 +142,9 @@ pub struct SystemMap {
 /// What a bounded list left out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Truncation {
-    /// Areas beyond [`MAX_AREAS`].
+    /// Areas beyond the internal `MAX_AREAS` cap.
     pub areas_omitted: usize,
-    /// Hubs beyond [`MAX_HUBS`].
+    /// Hubs beyond the internal `MAX_HUBS` cap.
     pub hubs_omitted: usize,
 }
 

@@ -1,11 +1,12 @@
 //! Canonical graph equality — the relation `incremental == clean` is stated in.
 //!
-//! Comparing two [`ArchitectureGraph`] values directly is wrong. `NodeId` and
-//! `EdgeId` are insertion-ordered and graph-local (ADR-0011), so two runs that
-//! recover exactly the same architecture can number their nodes differently
-//! and compare unequal. A test written that way fails for a reason that is not
-//! a defect, and the usual repair — comparing counts instead — passes for a
-//! graph that is wrong in every detail.
+//! Comparing two [`ArchitectureGraph`](cartograph_graph::ArchitectureGraph)
+//! values directly is wrong. `NodeId` and `EdgeId` are insertion-ordered and
+//! graph-local (ADR-0011), so two runs that recover exactly the same
+//! architecture can number their nodes differently and compare unequal. A test
+//! written that way fails for a reason that is not a defect, and the usual
+//! repair — comparing counts instead — passes for a graph that is wrong in
+//! every detail.
 //!
 //! So equality is defined over what the graph *claims*, not how it is stored:
 //! a node is its kind, name and location; an edge is its endpoints' identities

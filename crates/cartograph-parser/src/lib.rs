@@ -18,8 +18,8 @@
 //! source text ──► Analyzer ──► FileAnalysis (facts + diagnostics)
 //! ```
 //!
-//! tree-sitter is an implementation detail of [`typescript`] (private) and
-//! appears nowhere in this crate's public API, so adding Python at M02 — or
+//! tree-sitter is an implementation detail of the private `typescript` module
+//! and appears nowhere in this crate's public API, so adding Python at M02 — or
 //! changing the parsing runtime — cannot ripple outward.
 //!
 //! # Error tolerance
@@ -32,8 +32,8 @@
 //! unsupported extension) and environment failures (grammar load).
 //!
 //! Languages: TypeScript and TSX (M01), Python (M02). Each language has its
-//! own private extractor module; [`Analyzer::dispatch`] is the single place
-//! files are routed to one.
+//! own private extractor module; [`Analyzer`]'s private `dispatch` is the
+//! single place files are routed to one.
 
 pub mod diagnostics;
 pub mod error;
