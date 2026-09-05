@@ -13,17 +13,48 @@
 //! # Why this is hand-written rather than derived
 //!
 //! `cartograph-core` and `cartograph-graph` use `thiserror` for exactly this
-//! job, and this crate would too if it had any dependency at all. It has none:
-//! at this step `cartograph-ask` depends on nothing outside the workspace, so
-//! that the boundary it exists to establish can be reviewed without also
-//! reviewing what came with it. `cartograph_desktop::credential::CredentialError`
-//! is hand-written for the same reason and reads the same way.
+//! job. This crate does not, and the reason is the workspace's own dependency
+//! policy: every entry must answer *"what concrete Cartograph problem does this
+//! solve right now?"*, and `thiserror`'s honest answer here is "it saves twenty
+//! lines". `serde` earns its place because the wire format cannot be built
+//! without it; a derive macro for two `impl` blocks does not.
+//! `cartograph_desktop::credential::CredentialError` is hand-written for the
+//! same reason and reads the same way.
 //!
 //! [`EdgeId`]: cartograph_core::EdgeId
 
 use std::fmt;
 
 use cartograph_graph::bundle::CitationError;
+
+/// What was wrong with a reply, at the coarsest useful grain.
+///
+/// Deliberately coarse. The obvious richer design wraps the `serde_json` error,
+/// and that error quotes the input it choked on — *"invalid type: integer `3`,
+/// expected a string at line 1 column 42"*. A response body must never reach a
+/// log (ADR-0021 Amendment 3, decision C8), and the surest way to keep one out
+/// is to never hold it. The cost is a coarser diagnostic; that is the trade.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResponseFault {
+    /// The body was not JSON, or not the chat-completions envelope.
+    NotJson,
+    /// The envelope carried no choice to read.
+    NoChoices,
+    /// The document was not the schema that was asked for: a missing field, a
+    /// field of the wrong type, or a field the schema does not define.
+    NotTheSchema,
+}
+
+impl fmt::Display for ResponseFault {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::NotJson => "it was not the expected JSON document",
+            Self::NoChoices => "it carried no completion",
+            Self::NotTheSchema => "it did not match the requested schema",
+        })
+    }
+}
 
 /// Why an answer was refused.
 ///
@@ -70,6 +101,20 @@ pub enum ProviderError {
     /// for every analysis, so a citation that outlives its bundle almost
     /// certainly resolves — as a completely different relationship.
     ScopeMismatch,
+    /// The request could not be serialised.
+    ///
+    /// Not reachable in practice — every field of the wire request is a
+    /// string, a number or a fieldless enum — and returned rather than
+    /// panicked because a library that panics on a serialiser bug takes its
+    /// caller down with it.
+    MalformedRequest,
+    /// The provider replied with something that could not be read.
+    ///
+    /// Carries only the classification. Never the body.
+    InvalidResponse {
+        /// Which of the three ways it failed to be a reply.
+        fault: ResponseFault,
+    },
     /// The provider could not be reached, or failed.
     ///
     /// Deliberately shapeless at this step. There is no transport yet, and an
@@ -97,6 +142,10 @@ impl fmt::Display for ProviderError {
                 "citation {citation} of explanation item {item} was refused: {cause}"
             ),
             Self::ScopeMismatch => f.write_str("that answer belongs to a different analysis"),
+            Self::MalformedRequest => f.write_str("the request could not be prepared"),
+            Self::InvalidResponse { fault } => {
+                write!(f, "the provider's reply could not be read: {fault}")
+            }
             Self::Unavailable => f.write_str("the provider could not be reached"),
         }
     }

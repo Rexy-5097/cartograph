@@ -56,10 +56,12 @@
 //!
 //! # What is deliberately absent
 //!
-//! No HTTP client, no TLS, no provider, no credential store, no JSON. This
-//! crate has **zero external dependencies** at this step, and everything in it
-//! runs offline. Groq, `ureq` and `rustls` arrive in later steps, behind
-//! [`Provider`], and cannot change any rule stated here.
+//! No HTTP client, no TLS, no transport, no credential store and no provider
+//! implementation. Everything in this crate runs offline, and its only
+//! dependencies outside the workspace are `serde` and `serde_json` — both
+//! already workspace dependencies — which build the Groq request bytes in
+//! [`groq`]. `ureq` and `rustls` arrive in a later step, behind [`Provider`],
+//! and cannot change any rule stated here.
 //!
 //! [`Evidence`]: cartograph_core::Evidence
 //! [`SourceLocation`]: cartograph_core::SourceLocation
@@ -68,12 +70,13 @@
 
 pub mod answer;
 pub mod error;
+pub mod groq;
 pub mod provider;
 pub mod question;
 
 pub use answer::{
     Answer, ClaimedAnswer, ClaimedCitation, ClaimedItem, ExplanationItem, revalidate, validate,
 };
-pub use error::ProviderError;
+pub use error::{ProviderError, ResponseFault};
 pub use provider::Provider;
 pub use question::{Question, QuestionError};

@@ -22,6 +22,15 @@ cartograph-core.workspace = true
 # EvidenceBundle and Citation -- the citation contract, already built by M16
 # Slice 1. This crate checks against it; it does not restate it.
 cartograph-graph.workspace = true
+# M16 Slice 5 step 3: the Groq wire format. Both are already workspace
+# dependencies, so neither adds a package to the lockfile.
+#
+# The request is serialised here rather than by an HTTP client, deliberately:
+# ADR-0021 Amendment 3 decision C2 leaves ureq's `json` feature off so that a
+# test can inspect the exact bytes that will be sent. That test cannot check
+# bytes it did not see.
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true
