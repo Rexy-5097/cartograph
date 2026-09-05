@@ -27,6 +27,8 @@ use std::fmt;
 
 use cartograph_graph::bundle::CitationError;
 
+use crate::transport::TransportError;
+
 /// What was wrong with a reply, at the coarsest useful grain.
 ///
 /// Deliberately coarse. The obvious richer design wraps the `serde_json` error,
@@ -115,14 +117,35 @@ pub enum ProviderError {
         /// Which of the three ways it failed to be a reply.
         fault: ResponseFault,
     },
-    /// The provider could not be reached, or failed.
+    /// The provider could not be reached, or failed, with no more to say.
     ///
-    /// Deliberately shapeless at this step. There is no transport yet, and an
-    /// error type that anticipated one would be guessing at its failure modes;
-    /// this enum is `#[non_exhaustive]` so a later step can distinguish them
-    /// without breaking a caller. What will never be added is a field carrying
-    /// a body, a header or a URL.
+    /// For an implementation that has no transport to report on — a mock, or
+    /// a future local model. An HTTP provider reports
+    /// [`Transport`](Self::Transport) instead, which says which way it failed.
     Unavailable,
+    /// The exchange itself failed: no reply, or none that could be read.
+    ///
+    /// Carries [`TransportError`], which is a category and at most a status
+    /// code. It has no field that could hold a body, a header or a URL, so
+    /// this variant inherits that guarantee rather than restating it.
+    Transport {
+        /// How the exchange failed.
+        cause: TransportError,
+    },
+    /// The provider answered, and refused.
+    ///
+    /// Carries the HTTP status, and the provider's own classification when it
+    /// supplied a plausible one — never its message, and never its body.
+    Refused {
+        /// The HTTP status code.
+        status: u16,
+        /// The provider's classification, e.g. `invalid_request_error`.
+        ///
+        /// `None` when the body was not an error document, or when what it
+        /// offered did not look like a classification. See
+        /// `crate::groq::ApiError::kind` for why that check exists.
+        kind: Option<String>,
+    },
 }
 
 impl fmt::Display for ProviderError {
@@ -147,6 +170,11 @@ impl fmt::Display for ProviderError {
                 write!(f, "the provider's reply could not be read: {fault}")
             }
             Self::Unavailable => f.write_str("the provider could not be reached"),
+            Self::Transport { cause } => write!(f, "{cause}"),
+            Self::Refused { status, kind } => match kind {
+                Some(kind) => write!(f, "the provider refused the request ({status}, {kind})"),
+                None => write!(f, "the provider refused the request ({status})"),
+            },
         }
     }
 }
@@ -155,6 +183,7 @@ impl std::error::Error for ProviderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidCitation { cause, .. } => Some(cause),
+            Self::Transport { cause } => Some(cause),
             _ => None,
         }
     }

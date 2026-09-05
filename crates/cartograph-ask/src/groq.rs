@@ -64,13 +64,15 @@
 //! [`ClaimedAnswer`]: crate::ClaimedAnswer
 //! [`validate`]: crate::validate
 
-use cartograph_core::{Confidence, EdgeId, EdgeKind, Provenance, SourceLocation};
+use cartograph_core::{Confidence, EdgeId, EdgeKind, Provenance, Secret, SourceLocation};
 use cartograph_graph::bundle::{BundledEdge, EvidenceBundle};
 use serde::{Deserialize, Serialize};
 
-use crate::answer::{ClaimedAnswer, ClaimedCitation, ClaimedItem};
+use crate::answer::{Answer, ClaimedAnswer, ClaimedCitation, ClaimedItem, validate};
 use crate::error::{ProviderError, ResponseFault};
+use crate::provider::Provider;
 use crate::question::Question;
+use crate::transport::{Header, HttpResponse, Transport};
 
 /// The model this repository sends to.
 ///
@@ -97,7 +99,7 @@ pub const MAX_COMPLETION_TOKENS: u32 = 2048;
 /// for no benefit. It is version-controlled here and changes only by a commit.
 ///
 /// It states the rules; it does not enforce them. Every one of them is enforced
-/// again locally by [`validate`](crate::validate), because an instruction is a
+/// again locally by [`validate`], because an instruction is a
 /// request and a check is a guarantee.
 pub const SYSTEM_INSTRUCTION: &str = "\
 You are given evidence that Cartograph already derived by static analysis of a \
@@ -401,10 +403,35 @@ struct ApiErrorBody {
 }
 
 impl ApiError {
-    /// The API's own classification, e.g. `invalid_request_error`.
+    /// The API's own classification, exactly as it arrived.
+    ///
+    /// Server-controlled text. Prefer [`safe_kind`](Self::safe_kind) anywhere
+    /// the value might reach an error or a log.
     #[must_use]
     pub fn kind(&self) -> &str {
         &self.error.kind
+    }
+
+    /// The classification, but only if it looks like one.
+    ///
+    /// `type` is chosen by whoever answered, and an error built from it can
+    /// reach a log — so a server that put a paragraph, a credential or a
+    /// machine path there would have turned a classification field into the
+    /// response-body channel decision C8 exists to close. Anything longer than
+    /// [`MAX_ERROR_KIND_BYTES`] or outside `[a-z0-9_]` is therefore dropped
+    /// rather than trusted.
+    ///
+    /// Groq's own values — `invalid_request_error` and its siblings — pass
+    /// unchanged.
+    #[must_use]
+    pub fn safe_kind(&self) -> Option<&str> {
+        let kind = self.error.kind.as_str();
+        let plausible = !kind.is_empty()
+            && kind.len() <= MAX_ERROR_KIND_BYTES
+            && kind
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        plausible.then_some(kind)
     }
 }
 
@@ -421,8 +448,8 @@ pub fn parse_error(body: &[u8]) -> Result<ApiError, ProviderError> {
 
 /// Reads a successful reply into the **unvalidated** claim it contains.
 ///
-/// Returns a [`ClaimedAnswer`] and never an [`Answer`](crate::Answer): parsing
-/// establishes shape, and [`validate`](crate::validate) establishes truth. The
+/// Returns a [`ClaimedAnswer`] and never an [`Answer`]: parsing establishes
+/// shape, and [`validate`] establishes truth. The
 /// two are separate on purpose, and a test proves a reply can parse cleanly and
 /// still be rejected.
 ///
@@ -482,4 +509,127 @@ pub fn parse_answer_content(content: &str) -> Result<ClaimedAnswer, ProviderErro
             })
             .collect(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// The provider
+// ---------------------------------------------------------------------------
+
+/// Where the request goes. Owned by this module, and not configurable.
+///
+/// There is deliberately no way for a caller to change the endpoint, the model,
+/// the schema or the streaming flag: those are the decision ADR-0021 Amendment
+/// 3 recorded, not a preference a caller expresses. A configurable endpoint on
+/// an authenticated request is also a credential-forwarding hazard — point it
+/// somewhere else and the key goes with it.
+pub const ENDPOINT: &str = "https://api.groq.com/openai/v1/chat/completions";
+
+/// How much of a provider's error classification is worth keeping.
+///
+/// Groq's `type` values are short `snake_case` identifiers. A cap plus a shape
+/// check means a server cannot use the field as a channel for arbitrary text
+/// that would then reach a log — see [`ApiError::safe_kind`].
+///
+/// Public because it is part of that method's observable behaviour: a caller
+/// deciding whether to trust a classification should be able to see the bound
+/// it was checked against.
+pub const MAX_ERROR_KIND_BYTES: usize = 64;
+
+/// Explains derived evidence by asking Groq, and checks every word of the
+/// answer before returning it.
+///
+/// # What it owns, and what it borrows
+///
+/// It owns a [`Transport`] and **nothing else**. In particular it never holds a
+/// credential: [`Provider::explain`] takes one by reference, the header value
+/// is built inside the smallest possible block, and that block ends before the
+/// reply is even parsed. There is no field a key could be stored in, so
+/// "forgot to clear the key" is not a mistake this type can make.
+///
+/// # The whole flow
+///
+/// ```text
+/// bundle + question  → request_body → exact bytes
+///                                   ↓
+///                    Authorization: Bearer <secret>   (built, used, dropped)
+///                                   ↓
+///                          Transport::post_json
+///                                   ↓
+///          2xx → parse_answer → ClaimedAnswer → validate → Answer
+///        non-2xx → parse_error → status + classification only
+/// ```
+///
+/// The last line of that diagram is the point: **nothing produces an [`Answer`]
+/// except [`validate`], against the bundle that was actually sent.** A model
+/// that returns beautifully-formed JSON quoting text no edge contains gets a
+/// refusal, not a rendering.
+#[derive(Debug, Clone, Copy)]
+pub struct GroqProvider<T> {
+    transport: T,
+}
+
+impl<T: Transport> GroqProvider<T> {
+    /// Wraps a transport.
+    ///
+    /// No credential, no configuration, no options. Everything else this
+    /// provider needs is a constant in this module.
+    pub const fn new(transport: T) -> Self {
+        Self { transport }
+    }
+
+    /// The transport, for a caller that needs to inspect it after a call.
+    pub const fn transport(&self) -> &T {
+        &self.transport
+    }
+}
+
+/// Turns a refusal into an error that remembers only what is safe.
+///
+/// The status always; the provider's classification when the body offered a
+/// plausible one. **Never the message, never the body.**
+fn refusal(response: &HttpResponse) -> ProviderError {
+    ProviderError::Refused {
+        status: response.status(),
+        kind: parse_error(response.body())
+            .ok()
+            .and_then(|error| error.safe_kind().map(ToOwned::to_owned)),
+    }
+}
+
+impl<T: Transport> Provider for GroqProvider<T> {
+    fn explain(
+        &self,
+        bundle: &EvidenceBundle,
+        question: &Question,
+        credential: &Secret,
+    ) -> Result<Answer, ProviderError> {
+        let body = request_body(bundle, question)?;
+
+        // The credential exists inside this block and nowhere else. It is built
+        // after the body (so a serialisation failure never constructs one) and
+        // dropped before the reply is parsed, so no code that handles a
+        // provider's output is in scope with a key.
+        //
+        // Rust does not zero the buffer on drop, and this does not pretend
+        // otherwise; what it does buy is that the value has no path out of this
+        // block -- no field holds it, and nothing returned from here borrows it.
+        let response = {
+            let authorization = format!("Bearer {}", credential.expose());
+            let headers = [
+                Header::new("Authorization", &authorization),
+                Header::new("Content-Type", "application/json"),
+            ];
+            self.transport.post_json(ENDPOINT, &headers, &body)
+        }
+        .map_err(|cause| ProviderError::Transport { cause })?;
+
+        if !response.is_success() {
+            return Err(refusal(&response));
+        }
+
+        // Parsed, then checked. The two are separate on purpose: a reply that
+        // parses has the right shape, and shape is not truth.
+        let claimed = parse_answer(response.body())?;
+        validate(bundle, claimed)
+    }
 }
