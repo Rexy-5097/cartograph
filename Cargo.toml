@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/cartograph-core",
     "crates/cartograph-graph",
+    "crates/cartograph-ask",
     "crates/cartograph-pipeline",
     "crates/cartograph-desktop",
     "crates/cartograph-parser",
@@ -78,6 +79,10 @@ cartograph-parser = { path = "crates/cartograph-parser", version = "0.1.0" }
 cartograph-resolver = { path = "crates/cartograph-resolver", version = "0.1.0" }
 cartograph-testkit = { path = "crates/cartograph-testkit", version = "0.1.0" }
 cartograph-mcp = { path = "crates/cartograph-mcp" }
+# M16 Slice 5: the ASK provider boundary. Sits beside the pipeline rather than
+# inside it, so the HTTP client it gains in a later step reaches this crate and
+# no other (ADR-0021 Amendment 3, decision C3).
+cartograph-ask = { path = "crates/cartograph-ask" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
