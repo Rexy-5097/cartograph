@@ -1,0 +1,27 @@
+[package]
+name = "cartograph-ask"
+description = "The provider-independent ASK boundary: a question, derived evidence, and citations checked against it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# This crate is where the AI provider will live (ADR-0021 Amendment 3, decision
+# C3), and its dependency list is the security boundary. It may see the domain
+# model and the evidence bundle. It may not see the analyser, the authorization
+# guard, or any client.
+#
+# Nothing else may depend on the HTTP client that arrives here in a later step,
+# so the CLI and the MCP server stay incapable of network egress by the shape of
+# this graph rather than by anyone remembering.
+[dependencies]
+# Evidence, EdgeId and Secret.
+cartograph-core.workspace = true
+# EvidenceBundle and Citation -- the citation contract, already built by M16
+# Slice 1. This crate checks against it; it does not restate it.
+cartograph-graph.workspace = true
+
+[lints]
+workspace = true
