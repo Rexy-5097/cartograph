@@ -12,9 +12,9 @@
 >
 > **Amended 2026-09-05 — two amendments.** ***Amendment 1***: the
 > specification is now available and has been read; it names no crate for C
-> or D. ***Amendment 2*** proposes the crate for **D**, as an implementation
-> choice this repository makes rather than frozen-stack content. **C remains
-> deferred.**
+> or D. ***Amendment 2*** chooses the crate for **D** and is **Accepted**, as
+> an implementation choice this repository makes rather than frozen-stack
+> content. **C remains deferred.**
 
 ## Context
 
@@ -180,7 +180,7 @@ Not settled by this ADR. An implementation may not treat them as settled.
 | Deferred | Why it is still open |
 |---|---|
 | **C — AI provider and HTTP client** | **Superseded by Amendment 1**, and still open. The specification is available; §10 names no HTTP client and no AI provider SDK. Its only network-adjacent entries, `async-lsp` and `tokio`, are for LSP transport |
-| **D — Keychain crate** | **Proposed by Amendment 2**, awaiting acceptance. §13 requires the OS keychain; §10 names no crate, so the choice is the repository's own. Slice 4 ships the boundary with no backend until it is accepted |
+| **D — Keychain crate** | **Closed by Amendment 2**, accepted 2026-09-05. §13 requires the OS keychain; §10 names no crate, so the choice was the repository's own. Slice 4's boundary ships unchanged; a backend plugs in behind it |
 | **The configuration file's path** | Decided as a *kind* of thing (B); the platform-specific location needs platform evidence |
 | **The redaction layer's implementation** | Placement and ordering are decided (F); the mechanism is its slice's work |
 | **Whether MCP ASK ships in M16 or after the desktop surface** | A sequencing question the slice plan may answer with evidence |
@@ -268,10 +268,15 @@ their reason restated: the specification is available and does not name a crate
 for either.
 ## Amendment 2 — the keychain implementation choice (D)
 
-**Status: Proposed, 2026-09-05.** Amendment 1 established that §13 requires the
-OS keychain and §10 names no crate for it. This proposes the crate. It is an
+**Status: Accepted, 2026-09-05.** Amendment 1 established that §13 requires the
+OS keychain and §10 names no crate for it. This chooses the crate. It is an
 **implementation choice this repository makes**, and it is **not** claimed to be
 part of Frozen Engineering Specification V3.
+
+Accepted by owner decision, with every crate claim below re-verified against
+crates.io on the day of acceptance rather than carried forward from the draft.
+What that check changed is recorded in *Verified at acceptance*; the decision
+itself is unchanged.
 
 The distinction is the point of this amendment, so it is stated before anything
 else:
@@ -368,11 +373,47 @@ reopenable by its own terms; and QG-006 already provides the mechanism —
 *"new dependencies not named in the frozen stack need an ADR reference in the
 PR."* This amendment is that reference.
 
+### Verified at acceptance
+
+Every crate named above was re-checked against crates.io on 2026-09-05. The
+decision stands; three things it left implicit are now written down.
+
+| Crate | Version | Features | Licence | MSRV | Platform |
+|---|---|---|---|---|---|
+| `keyring-core` | **1.0.0** | none — `sample` is off by default and stays off | MIT OR Apache-2.0 | **1.85** | all |
+| `windows-native-keyring-store` | **1.1.0** | default | MIT OR Apache-2.0 | **1.88** | Windows Credential Manager |
+| `apple-native-keyring-store` | **1.0.2** | default | MIT OR Apache-2.0 | **1.85** | macOS Keychain |
+| `zbus-secret-service-keyring-store` | **1.0.1** | default | MIT OR Apache-2.0 | **1.88** | Linux Secret Service |
+
+**The Linux crate is now named.** The draft said only *"a Secret Service store,
+pure-Rust transport preferred"*. The store that satisfies that is
+**`zbus-secret-service-keyring-store`**, and naming it is part of accepting the
+decision rather than leaving the implementation to re-derive it.
+
+The two alternatives are recorded so they are visibly rejected rather than
+unconsidered:
+
+| Linux alternative | Version | Why not |
+|---|---|---|
+| `dbus-secret-service-keyring-store` | 1.0.0 | Transports over `libdbus`, a C library. §10 chose pure Rust twice and said why both times — *"redb — Pure Rust, embedded, no C dependency"*, *"gix — Pure Rust; libgit2 breaks five-platform cross-compilation"*. Cartograph ships prebuilt binaries for three desktop targets (§14) |
+| `linux-keyutils-keyring-store` | 1.0.0 | Needs no session daemon, but its credentials are session-scoped rather than durable. Wrong shape for a key a user sets once |
+
+**An MSRV discrepancy, recorded rather than discovered later.** Two of these
+stores declare `rust-version = 1.88`, and this workspace declares
+`rust-version = "1.85"`. That gap is **not introduced here**: `rmcp` has
+declared 1.88 since M15 and the workspace has built and passed its gates
+throughout. The pinned toolchain is 1.97.1, so nothing fails to compile. What
+is true is narrower and worth saying plainly: **the workspace's declared
+`rust-version` understates its real floor, and has since M15.** Correcting it
+is a one-line change that belongs to whoever next touches the manifest with a
+reason to — not to this amendment, which adds no dependency and changes no
+manifest.
+
 ### What this amendment does not do
 
 - It **adds no dependency**. No manifest or lockfile changes with it; the crates
-  named here arrive in the implementation PR that cites this amendment, and only
-  if it is accepted.
+  named here arrive in the implementation PR that cites this amendment, which
+  may now proceed.
 - It does **not** settle **C** — the AI provider and HTTP client. §10 names
   neither, and that decision has its own evidence and its own amendment.
 - It does **not** claim `keyring-core` is frozen-stack content. It is not.
