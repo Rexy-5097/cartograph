@@ -4,9 +4,9 @@
 //!
 //! Two branches are two separate analyses, so nothing about a handle survives
 //! between them: `NodeId` restarts at zero in each graph and names different
-//! artefacts on each side. Correspondence is therefore by
-//! [`NodeIdentity`](cartograph_core::NodeIdentity) — the stable
-//! `(kind, name, file)` value from M13's identity slice — and never by id.
+//! artefacts on each side. Correspondence is therefore by [`NodeIdentity`] —
+//! the stable `(kind, name, file)` value from M13's identity slice — and never
+//! by id.
 //!
 //! An edge corresponds to an edge when **source identity, target identity and
 //! kind** all match. That triple is the edge's identity here; everything else

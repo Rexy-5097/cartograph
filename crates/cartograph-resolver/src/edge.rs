@@ -9,9 +9,10 @@
 //!
 //! # Edges are built only from accepted matches
 //!
-//! [`MatchStatus::is_accepted`] gates every edge. An ambiguous result produces
-//! no edge no matter how strong its candidates look, because the question of
-//! *which* route was reached is unanswered — and an edge is an answer.
+//! [`MatchStatus::is_accepted`](crate::matching::MatchStatus::is_accepted) gates
+//! every edge. An ambiguous result produces no edge no matter how strong its
+//! candidates look, because the question of *which* route was reached is
+//! unanswered — and an edge is an answer.
 //!
 //! # Every edge explains itself
 //!
