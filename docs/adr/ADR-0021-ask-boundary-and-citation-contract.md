@@ -1,20 +1,25 @@
 # ADR-0021 — The ASK boundary: surfaces, citation contract, and the first network edge
 
-**Status:** Proposed · 2026-09-05 · Governs M16 · Proposed with M16 Slice 1 · Enforces
+**Status:** Accepted · 2026-09-05 · Governs M16 · Proposed with M16 Slice 1 · Enforces
 [ADR-0007](ADR-0007-no-llm-graph-construction.md) and
 [ADR-0005](ADR-0005-local-first-privacy.md) · Follows
 [ADR-0020](ADR-0020-mcp-boundary-and-authorization.md)
 
-> **Not accepted.** Two decisions in it are deliberately left open — **C**
-> (AI provider and HTTP client) and **D** (keychain crate) — because the
-> document that authorises dependencies is not in this repository. See
-> *Deferred, deliberately*. An implementation may not treat C or D as settled.
+> **Accepted 2026-09-05, after both open decisions were closed.** This ADR
+> shipped as *Proposed* because two decisions in it were deliberately left
+> open — **C** (AI provider and HTTP client) and **D** (keychain crate) —
+> since the document that authorises dependencies was not in this repository.
+> Both are now closed, so the ADR is Accepted.
 >
-> **Amended 2026-09-05 — two amendments.** ***Amendment 1***: the
-> specification is now available and has been read; it names no crate for C
-> or D. ***Amendment 2*** chooses the crate for **D** and is **Accepted**, as
-> an implementation choice this repository makes rather than frozen-stack
-> content. **C remains deferred.**
+> **Amended 2026-09-05 — three amendments.** ***Amendment 1***: the
+> specification is available and has been read; it names no crate for C or D.
+> ***Amendment 2*** closes **D** — `keyring-core` with one native store per
+> target. ***Amendment 3*** closes **C** — Groq over its OpenAI-compatible
+> HTTP endpoint, called through `ureq` with `rustls`, from a new
+> `cartograph-ask` crate.
+>
+> **Amendments 2 and 3 record implementation choices this repository makes.
+> Neither is claimed to be frozen-stack content, because neither is.**
 
 ## Context
 
@@ -175,11 +180,13 @@ not retrieved by similarity.
 
 ## Deferred, deliberately
 
-Not settled by this ADR. An implementation may not treat them as settled.
+Not settled when this ADR was written. **C and D are now closed** — by
+Amendments 3 and 2 respectively, both accepted 2026-09-05. The rest of the
+table stands, and an implementation may not treat those rows as settled.
 
-| Deferred | Why it is still open |
+| Deferred | Status |
 |---|---|
-| **C — AI provider and HTTP client** | **Superseded by Amendment 1**, and still open. The specification is available; §10 names no HTTP client and no AI provider SDK. Its only network-adjacent entries, `async-lsp` and `tokio`, are for LSP transport |
+| **C — AI provider and HTTP client** | **Closed by Amendment 3**, accepted 2026-09-05. §10 names no HTTP client and no AI provider SDK — its only network-adjacent entries, `async-lsp` and `tokio`, are for LSP transport — so the choice was the repository's own |
 | **D — Keychain crate** | **Closed by Amendment 2**, accepted 2026-09-05. §13 requires the OS keychain; §10 names no crate, so the choice was the repository's own. Slice 4's boundary ships unchanged; a backend plugs in behind it |
 | **The configuration file's path** | Decided as a *kind* of thing (B); the platform-specific location needs platform evidence |
 | **The redaction layer's implementation** | Placement and ordering are decided (F); the mechanism is its slice's work |
@@ -495,4 +502,566 @@ check, and Cartograph's claim is that its output is checkable.
 Redaction arrives as infrastructure that later milestones inherit rather than
 re-argue.
 
-Two decisions remain open, and M16 cannot be completed without closing them.
+Two decisions remained open when this was written, and M16 could not be
+completed without closing them. Amendments 2 and 3 close them.
+
+## Amendment 3 — the AI provider and the HTTP client (C)
+
+**Status: Accepted, 2026-09-05.** Amendment 1 established that Frozen
+Engineering Specification V3 §10 names **no HTTP client and no AI provider
+SDK**, and left **C** deferred. This closes it.
+
+Accepted by owner decision. Every external fact below was verified against the
+provider's and the crates' current documentation on the day of acceptance, and
+re-verified before it; what that check found is in *Verified at acceptance*.
+
+Everything below is an **implementation choice this repository makes**. The
+distinction Amendment 2 drew for the keychain is drawn again here, because it
+is the part most easily lost:
+
+| | |
+|---|---|
+| **Frozen requirement (§13)** | *AI is opt-in, per repository, off by default.* *The product is fully useful with no API key and no network.* *Credentials live in the OS keychain, never in configuration files.* *Never log source contents, tokens, or environment variables.* |
+| **Frozen requirement (ADR-0007, immutable)** | The model interprets already-derived evidence and cites it. It never constructs, and its output never re-enters the graph. |
+| **Frozen requirement (ADR-0005 / SECURITY.md)** | No source leaves the machine. |
+| **Owner decision (this amendment)** | **Groq**, called over its OpenAI-compatible HTTP API, with **`openai/gpt-oss-120b`**. |
+| **Owner decision (this amendment)** | **`ureq`**, blocking, with **`rustls`**. |
+| **This repository's own choice (this amendment)** | A new `cartograph-ask` crate; a `Transport` seam; the wire schema; the validation shape. |
+
+**Groq is not claimed to be named by Frozen Engineering Specification V3. It is
+not.** §10 names no AI provider at all. **`ureq` is not claimed to be in the
+frozen stack. It is not.** Neither is `rustls`. The route is the one §10 and
+QG-006 already provide: §10 reads *"Frozen. Not reopened until M9 ships"* and
+M09 shipped, and QG-006 says *"new dependencies not named in the frozen stack
+need an ADR reference in the PR."* This amendment is that reference.
+
+### Decision C1 — the provider is Groq, over direct HTTPS
+
+| | |
+|---|---|
+| Provider | Groq |
+| Base URL | `https://api.groq.com/openai/v1` |
+| Endpoint | `POST /openai/v1/chat/completions` |
+| Authentication | `Authorization: Bearer <key>` |
+| Model | `openai/gpt-oss-120b` |
+| Structured output | `response_format: {"type":"json_schema", ..., "strict": true}` |
+| SDK | **None.** The request is a JSON document this repository builds. |
+
+**No SDK, including Groq's own.** The request is four fields and the response
+is one string to parse; an SDK would add a dependency tree, a second
+serialisation path, and — decisively — a body this repository did not construct
+byte for byte. The privacy test in **C6** checks *the exact bytes sent*, and it
+can only do that if this repository produced them.
+
+**Why the OpenAI-compatible endpoint rather than a Groq-native one.** It is the
+documented surface (*"Groq API to be mostly compatible with OpenAI's client
+libraries"*), and it keeps the `Provider` trait's shape provider-shaped rather
+than Groq-shaped. Substituting a different provider later is then a new
+implementation of one trait, not a rewrite of `cartograph-ask`.
+
+**Verified against current documentation, 2026-09-05**, not from memory:
+
+| Property | Verified value | Source |
+|---|---|---|
+| `openai/gpt-oss-120b` availability | Listed under **Production Models**, not preview | Groq model list |
+| Context window | **131,072** tokens | Groq model list |
+| Max completion tokens | **65,536** | Groq model list |
+| Strict structured output | **Supported** (`strict: true` list) | Groq structured-outputs docs |
+| Best-effort structured output | **Supported** | Groq structured-outputs docs |
+| Streaming with structured output | **Not supported** — *"Streaming and tool use are not currently supported with Structured Outputs"* | Groq structured-outputs docs |
+| Strict-mode schema constraints | Every field `required`; every object `additionalProperties: false` | Groq structured-outputs docs |
+| Error body | `{"error": {"message": "...", "type": "invalid_request_error"}}` | Groq error docs |
+| Rate limiting | HTTP **429**, with `retry-after` and `x-ratelimit-*` headers | Groq rate-limit docs |
+| Transport | HTTPS only | base URL scheme |
+| `temperature: 0` | Converted server-side to `1e-8` | Groq OpenAI-compatibility docs |
+
+The last row is recorded because it is a claim this project must **not** make:
+Groq does not accept a temperature of exactly zero, so **ASK answers are not
+deterministic and this repository will not describe them as such.** Determinism
+is a property of the analysis, not of the explanation over it. The bundle, the
+scope and the citation check are deterministic; the sentences are not.
+
+`gpt-oss-120b` is available, supported, has sufficient context for any bundle
+this design permits (**C5** caps the request far below 131,072 tokens), and
+supports the required structured response format. No substitution is proposed
+and none is needed.
+
+### Decision C2 — the HTTP client is `ureq` 3.4, blocking, over `rustls`
+
+| | |
+|---|---|
+| Crate | `ureq` **3.4.0** |
+| Features | **Defaults**, plus nothing. `json` is deliberately **off** — see below |
+| What the defaults are | `gzip`, `rustls` (which enables `_ring`, `rustls-no-provider`, `rustls-webpki-roots`) |
+| Licence | MIT OR Apache-2.0 |
+| MSRV | **1.85** — exactly this workspace's `rust-version` |
+| I/O model | **Blocking.** *"It uses blocking I/O instead of async I/O, because that keeps the API simple and keeps dependencies to a minimum."* |
+| TLS | `rustls` **0.23.43**, Apache-2.0 OR ISC OR MIT |
+| Crypto provider | `ring` **0.17**, Apache-2.0 AND ISC |
+| Root store | `webpki-roots` — bundled Mozilla trust anchors |
+
+**Why blocking, stated as architecture rather than taste.** The desktop and the
+whole synchronous core path — `cartograph-core`, `-graph`, `-pipeline`,
+`-desktop` — use no async Rust. Tokio exists in exactly one crate,
+`cartograph-mcp`, because `rmcp` requires it. An async HTTP client would push a
+runtime into the synchronous path to serve one request per user gesture. ASK is
+a person pressing a button and waiting for a sentence; there is no concurrency
+to win.
+
+**What is claimed about `rustls`, precisely.** `rustls` is **not** described
+here as literally pure Rust, because with its default provider it is not:
+`ring` contains C and assembly. The accurate claim, and the only one this
+amendment makes, is that **`rustls` avoids reliance on the system TLS library**
+— no `schannel` on Windows, no Secure Transport on macOS, no OpenSSL on Linux.
+That matters for the same reason §10 gave twice, for `redb` (*"no C
+dependency"*) and `gix` (*"libgit2 breaks five-platform cross-compilation"*):
+Cartograph ships prebuilt binaries for three desktop targets (§14), and one TLS
+stack that behaves identically on all three is worth more than one that
+inherits three different platform policies.
+
+The cost is recorded rather than hidden: `rustls-webpki-roots` means the trust
+anchors **ship with the binary** and are updated by a release rather than by
+the operating system. `ureq`'s `platform-verifier` feature is the alternative,
+and it is the thing being declined — deliberately, for the cross-platform
+consistency above. If a release cadence ever makes bundled roots the wrong
+trade, that is a decision to revisit here, with evidence.
+
+**Why `json` is off.** `ureq`'s `json` feature would serialise the request
+body inside the client. **C6** requires a test over the exact bytes sent, and a
+test cannot check bytes it did not see. So `cartograph-ask` serialises with
+`serde_json` — already a workspace dependency — inspects that `String`, and
+sends *it*. One serialisation, one artefact, one thing to test.
+
+**Configuration set explicitly, not by default:** `https_only(true)`, a global
+timeout, and `max_redirects(0)` — a redirect on an authenticated request is a
+credential-forwarding hazard, and there is no legitimate redirect on this
+endpoint.
+
+**Rejected alternatives**
+
+| Alternative | Why not |
+|---|---|
+| `reqwest` | Async-first; brings Tokio into the desktop path, which is the thing being avoided. Its blocking mode is a runtime in a thread — the same cost, less visibly |
+| `hyper` | A protocol implementation, not a client. TLS, redirects, timeouts and pooling would all be written here |
+| Groq SDK / OpenAI SDK | See C1. A body this repository did not construct cannot be byte-checked |
+| `native-tls` / system TLS | Three platform behaviours to support and cross-compile against, for one endpoint |
+| `curl` via `Command` | Shelling out. Rejected outright: it puts a credential on a command line |
+
+### Decision C3 — the boundary: `cartograph-ask`, and what crosses it
+
+A **new crate, `cartograph-ask`**, holds the `Provider` trait, the Groq
+implementation, the wire types, citation validation and the provider errors.
+
+**The HTTP client is a dependency of this crate and of nothing else.** Not
+`cartograph-pipeline`, not `-core`, not `-graph`, not `-cli`. This is the same
+containment argument QG-006 already enforces for `petgraph`: capability that
+lives in a shared crate is capability every client acquires. The CLI and the
+MCP server must remain incapable of network egress **by their dependency
+graph**, not by their authors' restraint.
+
+```
+core ──► graph ──► ask ─────────┐
+                                ├──► desktop
+core ──► graph ──► pipeline ────┴──► cli, mcp
+```
+
+`cartograph-ask` depends on `cartograph-core` and `cartograph-graph`. It does
+**not** depend on `cartograph-pipeline`, and therefore cannot reach
+`RepositoryIdentity`, `AuthorizedTree` or the analyser. It cannot name a
+repository even if it wanted to.
+
+**The trait is blocking and takes three things:**
+
+```rust
+pub trait Provider {
+    fn explain(
+        &self,
+        bundle: &EvidenceBundle,
+        question: &Question,
+        credential: &Secret,
+    ) -> Result<Answer, ProviderError>;
+}
+```
+
+**`Secret` moves from `cartograph_desktop::credential` to `cartograph-core`,
+re-exported from its old path so no caller changes.** It is needed below the
+desktop now, and its redacting `Debug` is exactly the property that must travel
+with it. This is the only refactor Slice 5 requires of merged code.
+
+**It needs no ADR of its own**, and the reason is measurable rather than
+asserted. `Secret` is a `String` newtype with **no dependencies at all** — its
+only import is the module's, not its own — so nothing travels with it. Outside
+its defining file it has exactly **one** caller in the workspace,
+`crates/cartograph-desktop/tests/optin.rs`, and a `pub use` at the old path
+keeps even that unchanged. No behaviour changes, no dependency is added, and no
+boundary moves: the move *serves* the boundary this amendment already decided,
+rather than proposing a new one. RULE 019 asks for an ADR for a significant
+architecture change; relocating a dependency-free type one layer down, behind a
+re-export, is an ownership correction.
+
+**`CredentialStore`, `CredentialError` and `NoCredentials` stay in the
+desktop.** They cannot follow `Secret` down: `CredentialStore::get` takes
+`&RepositoryIdentity`, which lives in `cartograph-pipeline`, so moving the
+trait into `cartograph-core` would make core depend on another Cartograph crate
+— the one thing QG-006 checks by name. The split is therefore not a compromise
+but the only shape that holds: the *value* goes down to where both the desktop
+and `cartograph-ask` can see it; the *store*, which needs a repository
+identity, stays up with the client that has one.
+
+**The secret type is not weakened by the move.** No `Display`, no `Serialize`,
+no owned accessor, and a `Debug` that prints `Secret(<redacted>)`. `expose()`
+remains the only way out and still yields a borrow.
+
+| The provider receives | The provider is structurally denied |
+|---|---|
+| the user's question | source files — nothing in a bundle is source (`Evidence` may not quote a file) |
+| the `EvidenceBundle` — already-derived claims | the `ArchitectureGraph` — the trait takes a bundle, and a bundle is a copy |
+| the credential, borrowed for the call | `RepositoryIdentity` — not in the crate's dependency graph |
+| | absolute paths — `SourceLocation` refuses them at construction |
+| | environment variable values — `NodeKind::EnvVar` has no field for one |
+| | any other secret |
+
+**What the model may produce: explanation text and structured citations.
+Nothing else.** It cannot construct or modify graph structure, alter
+`Evidence`, authorize or select a repository, or invent a citation, because
+nothing in `cartograph-ask` can do those things — there is no graph to mutate
+and no authorization to reach. ADR-0007 is enforced by the dependency graph,
+not by a prompt.
+
+### Decision C4 — one honest exception, stated rather than glossed
+
+The instruction for M16 is that no filesystem path is sent. **Repository-relative
+paths are sent, and cannot not be**, so it is written down here rather than
+discovered later.
+
+`NodeIdentity` is `kind|name|file` (`cartograph_core::identity_of`), and
+`BundledEdge` carries `location`. Both take the file from `SourceLocation`,
+which **refuses absolute paths and `..` traversal at construction**. Further,
+evidence text itself frequently names a file — and evidence must be transmitted
+byte for byte or a verbatim citation cannot be checked against it.
+
+So the rule is stated at the precision the code can actually hold:
+
+> **No absolute path, and nothing identifying this machine, ever leaves it.
+> Repository-relative paths do, because they are part of the derived evidence
+> the answer must cite.**
+
+The frozen requirement — *no source leaves the machine* — is untouched: a path
+is not source. `src/api/client.ts` is sent; its contents never are.
+
+This is flagged for the owner explicitly. If repository-relative paths must
+also be withheld, the mechanism is per-request opaque aliases (`artefact 3`)
+mapped back locally — which costs explanation quality and cannot redact paths
+that occur inside evidence text without breaking verbatim citation. That
+trade-off is not taken unilaterally.
+
+### Decision C5 — the request
+
+One system message stating the contract, one user message carrying the question
+and the evidence. Nothing else.
+
+```json
+{
+  "model": "openai/gpt-oss-120b",
+  "messages": [
+    { "role": "system", "content": "<fixed contract text>" },
+    { "role": "user",   "content": "<question>\n\n<rendered evidence>" }
+  ],
+  "temperature": 0,
+  "max_completion_tokens": 2048,
+  "stream": false,
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "cartograph_answer",
+      "strict": true,
+      "schema": { "...": "the shape in C6" }
+    }
+  }
+}
+```
+
+The system message is a **compile-time constant**, not built from user input.
+It states: every claim must cite; a citation quotes an edge's evidence exactly;
+do not invent an edge; do not describe anything not in the evidence; unknown
+stays unknown (RULE 009).
+
+Each bundled edge renders as its `edge`, `from`, `to`, `kind`, `evidence`,
+`provenance`, `confidence` and `location`. **Nothing else.** No repository
+name, no analysis timestamp, no tool version, no counts, no identity.
+
+**Size.** The bundle is capped by *serialised bytes* before the request is
+built, truncating in the bundle's own deterministic order and reporting
+`truncated` in the `Answer` so the panel can say so — the treatment
+`cartograph_pipeline::map` already gives `Truncation`. Silent truncation is
+forbidden: an answer that cites less than the user believes it saw is the same
+failure as an uncited claim. The cap sits far below the model's 131,072-token
+context, so context is never the binding constraint.
+
+`stream: false` is required, not chosen: Groq does not support streaming with
+structured outputs.
+
+### Decision C6 — the response, and validation as the gate
+
+The model must return exactly:
+
+```json
+{
+  "items": [
+    { "text": "...", "citations": [ { "edge": "...", "text": "..." } ] }
+  ]
+}
+```
+
+`strict: true` requires every field `required` and every object
+`additionalProperties: false`. The schema is written that way.
+
+**Schema compliance is not trusted.** It constrains shape, never truth: a model
+can emit a perfectly-shaped citation quoting text no edge contains. So every
+citation is re-checked locally, against the bundle that was actually sent,
+by machinery that already exists and already ships —
+`EvidenceBundle::cite` and `EvidenceBundle::verify` (Slice 1):
+
+| Check | Enforced by | Failure |
+|---|---|---|
+| citation belongs to the bundle that was sent | `BundleScope` equality | `CitationError::ForeignBundle` |
+| the cited edge is in that bundle | membership | `CitationError::UnknownEdge` |
+| the quoted text is a byte-for-byte substring of that edge's `Evidence` | substring | `CitationError::NotVerbatim` |
+| the quotation is non-empty | length | `CitationError::Empty` |
+| every item has at least one citation | `cartograph-ask` | `ProviderError::UncitedItem` |
+| every item has non-empty text | `cartograph-ask` | `ProviderError::EmptyItem` |
+
+**Any failure rejects the entire answer.** Not the item — the answer. A partially
+valid answer is the most dangerous output this feature can produce, because it
+looks checked. `Answer` has private fields and no public constructor: **the only
+way to obtain one is to pass validation**, so "render an unvalidated answer" is
+not an expressible program.
+
+On rejection ASK falls back to the degraded raw-evidence path of Slice 2 and
+says the explanation was refused. The user is never worse off than with AI
+switched off.
+
+### Decision C7 — the credential
+
+```
+ASK request
+  -> opt-in confirmed for this repository   (cartograph_desktop::optin)
+  -> CredentialStore::get(&RepositoryIdentity) -> Option<Secret>
+  -> Secret::expose() at the moment the header is written
+  -> request sent
+  -> the borrow ends
+```
+
+`RepositoryIdentity` is used **only** to look the credential up, in the
+desktop. It is never passed to `cartograph-ask` and never appears in a request.
+
+The key is **never** placed in: the `Provider` struct, the `Answer`, the
+`EvidenceBundle`, any frontend or IPC payload, configuration, a log, an error,
+or an MCP response. Structurally: `Secret` keeps its redacting `Debug`;
+`ProviderError` variants carry status codes and fixed strings and have no field
+that could hold one; the provider is constructed without a credential and
+receives it per call as a borrow.
+
+### Decision C8 — logging: provider bodies are never logged
+
+Not redacted. **Never logged.** Redaction is defence in depth for values that
+reach a log by accident; a request body is not an accident, and a rule that
+depends on a redactor recognising evidence text would fail the first time
+evidence looked ordinary.
+
+Made structural, four ways:
+
+1. `GroqRequest` and `GroqResponse` have hand-written `Debug` that print
+   neither body nor header — the treatment `Secret` and `RepositoryIdentity`
+   already receive.
+2. `ProviderError` carries an HTTP status, a Groq error `type`, and fixed
+   strings. It never carries a body, a header, a URL with a query, or a
+   credential.
+3. A test asserts that `format!("{err:?}")` and `format!("{err}")` over every
+   error variant contain neither the fixture key nor the evidence text.
+4. A source-level check over `crates/cartograph-ask/src`: no `tracing` macro
+   call may name a body, header, payload or credential binding.
+
+`cartograph_pipeline::redaction::Redacting` (Slice 3) sits underneath all of
+this and is a prerequisite, per **F** — no provider request may be issued
+before it is installed.
+
+**MCP's `eprintln!` diagnostics are resolved by C9, not by redaction.** They
+print a grant error, a tree count and transport states. They cannot print a
+credential because — by C9 — the MCP server never receives one. The isolation is
+the dependency graph: `cartograph-mcp` does not depend on `cartograph-ask`.
+
+Every `println!` in `cartograph-pipeline::incremental` was confirmed to sit
+inside `#[cfg(test)]`; no production path in the analyser prints.
+
+### Decision C9 — MCP stays evidence-only in M16
+
+`cartograph-mcp` gains **no provider, no credential and no egress.** Its four
+tools, its authorization guard and its stdio protocol are untouched.
+
+ADR-0021 already recorded the reason as a consequence to weigh: an MCP client
+*is* a model, so an ASK tool there would be an AI calling an AI — a second
+credential path and a second egress path, added to a process that already holds
+a repository grant, to serve a client that can already explain what it is
+given. Cartograph's job there is to hand it checked evidence.
+
+The MCP `ask` surface described in decision **A** therefore lands, if at all,
+after the desktop surface and with its own evidence. Decision **A** is not
+revoked; its second half is deferred past M16.
+
+### Decision C10 — degraded mode is a permanent regression test
+
+| Condition | Behaviour | Network |
+|---|---|---|
+| No opt-in | raw evidence | **none** |
+| Opt-in, no credential | raw evidence | **none** |
+| Opt-in, credential store unavailable or denied | raw evidence | **none** |
+| Opt-in alone, no explicit ASK-with-AI request | raw evidence | **none** |
+| Opt-in **and** credential **and** an ASK request | provider call | **one** |
+| Provider fails, times out, or returns an invalid answer | raw evidence, plus "the explanation was refused" | attempted |
+
+Proved rather than asserted: every degraded-path test is wired with a
+`Transport` implementation that **panics if it is called**. "No network when AI
+is disabled" then fails as a test failure rather than as a review oversight.
+
+### Testing (no live call in CI, ever)
+
+The seam is a `Transport` trait —
+`post_json(url, headers, body) -> Result<HttpResponse, TransportError>` —
+with `UreqTransport` in production and `MockTransport` in tests. It exists so
+the Groq provider's *request construction* is testable without a network, which
+is the part that carries the privacy and credential guarantees.
+
+Request: correct endpoint · `Authorization: Bearer <key>` header shape, asserted
+against a **runtime-generated fixture key** so no literal secret is ever a
+tracked file (QG-005) · `response_format` present and strict · system message is
+the constant · body contains no source, no absolute path, no
+`RepositoryIdentity`, no credential.
+
+Response: success · malformed JSON · valid JSON of the wrong shape · missing
+`items` · item with no citation · item with empty text · citation naming a
+foreign bundle · citation naming an edge outside the bundle · non-verbatim
+citation · empty citation · multiple citations on one item · valid multi-item
+answer.
+
+Transport: timeout · connection failure · 400 · 401 · 413 · 422 · 429 with
+`retry-after` · 500 · 502 · 503 · a body that is not JSON at all.
+
+Credential and mode: credential missing · store unavailable · store denies
+permission · AI disabled · no opt-in · **no network when AI is disabled**
+(panicking transport) · credential never appears in any log, error or `Debug`.
+
+**No test requires a key, a network, or a live provider.** A suite that fails on
+an aeroplane would make QG-004 and QG-009 report the weather.
+
+### Real validation, done once, locally
+
+Per RULE 026 the citation contract is also inspected by hand on a real answer.
+That run reads the key **only from the OS keychain** — never pasted into
+source, never written to disk, never logged, never committed — against an
+authorized repository with opt-in enabled, and confirms a real Groq answer,
+real citations that validate, and a controlled invalid citation that is
+rejected. No source code is sent.
+
+### Verified at acceptance
+
+Re-checked on 2026-09-05, against the provider's own documentation and
+crates.io, before acceptance rather than after.
+
+**The model.** `openai/gpt-oss-120b` is current, production, and **not
+deprecated**. It appears on Groq's deprecation page only as the **recommended
+replacement** for models that were retired — among them `llama-3.3-70b-versatile`,
+`qwen/qwen3-32b`, `meta-llama/llama-4-scout-17b-16e-instruct` and
+`moonshotai/kimi-k2-instruct-0905`. Being the destination of other models'
+deprecations is a better longevity signal than mere presence on a list, and it
+is the reason no fallback model is specified here.
+
+**The client.** `ureq` **3.4.0**, MIT OR Apache-2.0, blocking, MSRV **1.85**.
+Defaults are `gzip` and `rustls`; `rustls` itself enables `_ring`,
+`rustls-no-provider` and `rustls-webpki-roots`. `json` is **not** default and is
+**not** enabled — see C2. `native-tls`, `platform-verifier`, `brotli` and
+`socks-proxy` are not default and are not enabled. **No async runtime is
+reachable through this dependency**, which is the property that keeps Tokio out
+of the desktop path.
+
+**The TLS stack.** `rustls` **0.23.43**, Apache-2.0 OR ISC OR MIT, MSRV 1.71.
+Its default provider is `ring` **0.17**, Apache-2.0 AND ISC, which **contains C
+and assembly**. That is recorded here, not glossed, and it is why this
+amendment says `rustls` *avoids reliance on the system TLS library* rather than
+that it is pure Rust.
+
+**MSRV.** `ureq`'s 1.85 matches this workspace's declared `rust-version`
+exactly, so **C adds no MSRV pressure**. The gap noted in Amendment 2 — two
+keychain stores declaring 1.88 — is unrelated to this amendment and predates
+both, since `rmcp` has declared 1.88 since M15.
+
+### Dependency matrix (QG-006)
+
+QG-006 requires *"new dependencies not named in the frozen stack need an ADR
+reference in the PR."* This is that reference; the table is the review.
+
+| Crate | Version | Features | Licence | Platforms | Why, concretely | Alternative rejected |
+|---|---|---|---|---|---|---|
+| `ureq` | 3.4.0 | defaults (`gzip`, `rustls`); **`json` off** | MIT OR Apache-2.0 | Windows, macOS, Linux — all three §14 targets | The one HTTPS POST ASK makes. Blocking, so no runtime enters the desktop path. MSRV 1.85 equals this workspace's | `reqwest` (async, so Tokio in desktop); `hyper` (not a client); shelling to `curl` (credential on a command line) |
+| `rustls` | 0.23.43 | via `ureq`'s `rustls` | Apache-2.0 OR ISC OR MIT | same | One TLS behaviour across three prebuilt targets; no system TLS library. **Not claimed to be literally pure Rust** | `native-tls` (three platform behaviours, cross-compilation cost) |
+| `ring` | 0.17 | via `rustls`'s default provider | Apache-2.0 AND ISC | same | `rustls`'s default crypto provider. **Contains C and assembly** — recorded, not hidden | `aws-lc-rs` (more C, larger build); a pure-Rust provider (less scrutinised, slower) |
+| `webpki-roots` | via `ureq` default | — | MPL-2.0 (Mozilla trust anchors) | same | Bundled trust anchors, identical on every target | `platform-verifier` — declined for cross-platform consistency; cost recorded above |
+
+Direct additions: **`ureq` only.** `rustls`, `ring` and `webpki-roots` arrive
+through it and are listed because a review of "one dependency" that is really
+four is not a review. The implementation PR must attach
+`cargo tree -p cartograph-ask` so the full transitive set is on the record
+rather than summarised here.
+
+No prohibited-for-v1 dependency is added: QG-006's list — neo4j, sqlx, diesel,
+postgres, redis, aws-sdk, rusoto, kafka, rdkafka, kube, **langchain**, qdrant,
+milvus, pinecone — is untouched, and no RAG, vector store or agent framework
+appears. QG-008's future-milestone list (`async-lsp`, `lsp-types`, `redb`,
+`gix`, `notify`, `regex`, `url`, `salsa`) is untouched. `petgraph` containment
+and the dependency direction are unaffected: `cartograph-ask` sits beside
+`cartograph-pipeline`, and nothing depends on `cartograph-cli`.
+
+### Consequences
+
+- The Rust workspace makes its **first outbound network connection**, in exactly
+  one crate, reachable from exactly one client, on exactly one condition.
+- The desktop gains a dependency on `cartograph-ask`. The CLI and MCP server
+  gain nothing and remain incapable of egress by construction.
+- `Secret` moves to `cartograph-core` and is re-exported. One refactor, no
+  caller changes.
+- ASK answers are **not deterministic**, and this project will not claim they
+  are. Determinism belongs to the analysis; the explanation is checked, not
+  reproduced.
+- Bundled trust anchors are updated by a Cartograph release rather than by the
+  operating system.
+- Groq is a third party outside this machine. What reaches it is a question and
+  derived evidence, on explicit per-repository opt-in, with a key the user
+  supplied. That is the trade the opt-in exists to let a user make knowingly.
+
+### What this amendment does not do
+
+- It **adds no dependency**. No manifest or lockfile changes with it. `ureq`
+  arrives in the Slice 5 PR that cites this amendment, which may now proceed.
+- It does **not** claim Groq, `ureq`, `rustls` or `ring` are frozen-stack
+  content. None of them are.
+- It does **not** re-open **D**. Amendment 2 closed the keychain choice and is
+  accepted; nothing here changes it.
+- It does **not** widen MCP. `cartograph-mcp` gains no provider, no credential
+  and no egress, and its tools are untouched.
+- It does **not** accept M16, move the ledger, advance the version, or create a
+  tag. M16 remains `next_allowed_milestone`, and `cartograph-m16` does not
+  exist.
+
+### Status of ADR-0021 after this amendment
+
+**C** is closed here; **D** was closed by Amendment 2. Both are accepted, so
+**ADR-0021 itself moves from Proposed to Accepted** and its opening note now
+records how they were closed rather than that they were open.
+
+Nothing in decisions **A**, **B**, **E** or **F** changes, with one sequencing
+exception stated in C9: **A**'s second surface, an MCP `ask` tool, is deferred
+past M16. It is not revoked.
+
+M16 Slice 5 may now begin, in the order its plan sets out. It may not begin
+before it: a dependency added ahead of the decision that authorises it is a
+dependency that shipped without review.
