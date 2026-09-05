@@ -106,6 +106,8 @@ version = "0.1.0"
 dependencies = [
  "cartograph-core",
  "cartograph-graph",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
