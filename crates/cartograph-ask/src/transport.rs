@@ -260,8 +260,10 @@ impl std::error::Error for TransportError {}
 /// - **Send `body` unchanged.** Do not parse it, re-serialise it, reformat it
 ///   or convert it through `String`. The caller has already checked those exact
 ///   bytes.
-/// - **Set `Content-Type: application/json`**, which is what `post_json` means.
-///   Every other header comes from `headers`.
+/// - **Add no header of your own.** Every header the request carries is in
+///   `headers`, `Content-Type: application/json` included. An implementation
+///   that helpfully supplied one would be a header a caller's test never saw,
+///   and the caller is the one that has to prove what it sent.
 /// - **Return `Ok` for any reply**, including 4xx and 5xx. With `ureq` that
 ///   means configuring `http_status_as_error(false)`.
 /// - **Never log** the body, the reply, or any header.
