@@ -188,7 +188,10 @@ fn platform_store() -> Result<Arc<KeyringStore>, KeyringError> {
 
 #[cfg(target_os = "macos")]
 fn platform_store() -> Result<Arc<KeyringStore>, KeyringError> {
-    apple_native_keyring_store::Store::new().map(|store| store as Arc<KeyringStore>)
+    // `keychain` and `protected` are two different stores in two modules, not
+    // one store with a switch, so the path names the module (ADR-0021
+    // Amendment 5 chose `keychain`).
+    apple_native_keyring_store::keychain::Store::new().map(|store| store as Arc<KeyringStore>)
 }
 
 #[cfg(target_os = "linux")]
