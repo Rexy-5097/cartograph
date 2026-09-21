@@ -23,8 +23,14 @@
 > addressed. Service `"cartograph-ask"`, account the opaque grant token read
 > through one dedicated accessor. It adds no dependency and no persisted state.
 >
-> **Amendments 2, 3 and 4 record implementation choices this repository makes.
-> None is claimed to be frozen-stack content, because none is.**
+> **Corrected 2026-09-22.** ***Amendment 5*** fixes the feature column Amendment
+> 2 recorded as "default" for two crates that have no default feature set and
+> refuse to compile without a choice. Windows none, macOS `keychain`, Linux
+> `rt-async-io-crypto-rust`. It changes no dependency, and Amendment 2's text is
+> left as it was written.
+>
+> **Amendments 2, 3, 4 and 5 record implementation choices this repository
+> makes. None is claimed to be frozen-stack content, because none is.**
 
 ## Context
 
@@ -1304,3 +1310,140 @@ reason it is written down here instead of decided in a pull request.
 M16 Slice 5 Step 7 may now proceed, in this order: the accessor on
 `RepositoryIdentity`, then the backend behind the existing `CredentialStore`,
 then the platform selection, then the tests above.
+
+## Amendment 5 — the keychain feature matrix, corrected
+
+**Status: Accepted, 2026-09-22.** Amendment 2 chose the keychain crates and
+recorded **"default"** in the features column for all four. For two of them that
+is not a description of anything: they have **no default feature set**, and both
+stop the build with a `compile_error!` until one is chosen. Step 7's
+implementation compiled on Windows and failed on Linux and macOS, which is how
+this was found.
+
+This amendment supplies the missing choices. **It changes no dependency.** The
+crates, versions and licences Amendment 2 accepted stand exactly as accepted,
+and its text is not edited — a decision that was right about the crate and
+imprecise about a feature is corrected by a later amendment, not by rewriting
+what was decided.
+
+### Decision
+
+| Target | Crate | Version | Features |
+|---|---|---|---|
+| Windows | `windows-native-keyring-store` | 1.1.0 | **none** — `default-features = false` |
+| macOS | `apple-native-keyring-store` | 1.0.2 | **`keychain`** |
+| Linux | `zbus-secret-service-keyring-store` | 1.0.1 | **`rt-async-io-crypto-rust`** |
+| all | `keyring-core` | 1.0.0 | none — `sample` stays off, as Amendment 2 said |
+
+**Two of these crates provide no default feature set, so their features must be
+named explicitly.** That is the correction. Windows is the exception and is
+stated separately below, because generalising across all three is the mistake
+this amendment exists to fix.
+
+### Linux — `rt-async-io-crypto-rust`
+
+The crate is explicit that a choice is compulsory: *"You must enable exactly one
+of the four (mutually-exclusive) features in order to declare which async
+runtime you are using and which cryptography utilities you want to use."* It has
+no features of its own; it passes them through to `secret-service`. With none
+enabled, `secret-service` halts the build with *"Please enable a feature to pick
+a runtime"*.
+
+The four are a runtime crossed with a crypto backend, and both halves follow
+reasoning this ADR has already used:
+
+- **Crypto: Rust, not OpenSSL.** §10 chose pure Rust twice and said why both
+  times — *"redb — Pure Rust, embedded, no C dependency"*, *"gix — Pure Rust;
+  libgit2 breaks five-platform cross-compilation"*. Amendment 2 rejected
+  `dbus-secret-service-keyring-store` on exactly this ground. Taking OpenSSL
+  here would reintroduce the native C dependency that reasoning was about, in
+  the same component, one amendment later.
+- **Runtime: `async-io`, not Tokio.** Amendment 3 kept an async runtime out of
+  the desktop path on purpose, and Tokio exists in this workspace in exactly one
+  crate, `cartograph-mcp`, because `rmcp` requires it. `rt-tokio-crypto-rust`
+  would put Tokio into the desktop's credential path to store one string.
+
+**The cost, recorded rather than implied.** `async-io` is still an async
+runtime: the Linux desktop build gains the smol family — `async-io`,
+`async-executor`, `blocking`, `polling` — through `zbus`. Windows and macOS gain
+none of them, and **no target gains Tokio.** Amendment 2 chose `zbus` over
+`libdbus` knowingly but did not discuss this closure, so it is written down
+here. The claim this amendment makes is the narrow one: *Linux uses the
+`async-io` runtime path and the Rust cryptography backend, and no target gains
+Tokio.* It is not that Linux is runtime-free.
+
+### macOS — `keychain`
+
+The crate states plainly: *"This crate has no default features."* It offers two,
+and they are different stores rather than two ways to reach one:
+
+- **`keychain`** — the macOS keychain, available to all applications.
+- **`protected`** — the protected-data store, requiring macOS 10.15 or later,
+  whose features are *"only available to applications with provisioning
+  profiles"*.
+
+Cartograph ships a desktop application from a public repository (§14). Choosing
+`protected` would make credential storage depend on provisioning, which is a
+distribution property this project has not decided and does not currently have.
+`keychain` is the ordinary macOS Keychain that §13 asks for, and it is what
+Amendment 2 named in prose — *"macOS: `apple-native-keyring-store` — macOS
+Keychain"* — before the features column contradicted it with "default".
+
+`keychain` enables `security-framework`. That is the Apple API for the Keychain
+and there is no reaching the Keychain without it. It is unrelated to Amendment
+3's decision to avoid `security-framework` **as a TLS backend**: that was about
+which TLS stack `ureq` uses, and `rustls` still holds there.
+
+### Windows — no features
+
+This one is genuinely different, and the difference is the reason this amendment
+does not state a single rule for all three. `windows-native-keyring-store` 1.1.0
+**does** have a default feature set: `default = ["search"]`, and `search` pulls
+`regex`.
+
+**No features are enabled — `default-features = false`.** Two reasons, both
+checkable:
+
+- `search` exists for `Entry::search`, which looks credentials up by pattern.
+  The credential store built on this reads, writes and deletes one entry
+  addressed by ADR-0021 Amendment 4's mapping. It never searches, so the feature
+  buys nothing.
+- Amendment 2's own argument for `keyring-core` was to keep the dependency
+  *"close to nothing"*, and it named `regex` among the crates it did not want.
+  Turning on a feature whose only effect is to pull one, for an API this
+  product does not call, would contradict that in the same breath as citing it.
+
+For completeness, because it is the kind of thing that should not be discovered
+later: `regex` is already in this workspace's lockfile through `tree-sitter`, so
+enabling `search` would add no package. The argument above is about the smallest
+correct shape, not about lockfile size, and it is recorded that way so nobody
+re-litigates it with a lockfile diff.
+
+### What this amendment does not do
+
+- It **changes no dependency**. Same four crates, same four versions, same
+  licences — all MIT OR Apache-2.0, re-verified against crates.io on
+  2026-09-22, none yanked.
+- It does **not** edit Amendment 2. That amendment's crate selection, its
+  reasoning, its rejected alternatives and its recorded MSRV gap all stand as
+  written, including the "default" that this corrects — the record of what was
+  decided stays intact, and this is the correction on top of it.
+- It does **not** touch Amendments 3 or 4. The provider, the HTTP client, the
+  transport and the keychain addressing are unchanged.
+- It does **not** change the MSRV position. Two of these stores declare 1.88 and
+  the workspace declares 1.85; Amendment 2 recorded that gap as predating both,
+  since `rmcp` has declared 1.88 since M15, and that is still where it stands.
+- It adds no code, no manifest change and no lockfile change. Those arrive in
+  the Step 7 implementation that cites this amendment.
+- It does **not** accept M16, move the ledger, advance the version, or create a
+  tag. M16 remains `next_allowed_milestone`, and `cartograph-m16` does not
+  exist.
+
+### A note on how this was found, because the method matters
+
+`cargo tree --target` resolved all three targets cleanly and showed one store
+per target with no cross-linking. It still missed this entirely: feature
+resolution builds a dependency graph, and a `compile_error!` only fires when
+something is compiled. **A cross-target `cargo check` is the check that catches
+a feature error; a dependency tree is not.** That belongs in the Step 7
+implementation's validation, before CI rather than from it.
