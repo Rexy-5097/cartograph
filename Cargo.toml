@@ -87,10 +87,32 @@ ureq = "3.4"
 # default and stays off: it is what would pull chrono, dashmap, regex, ron,
 # serde and uuid. The `mock` store is not behind it, which is why the tests
 # need nothing switched on.
-keyring-core = "1.0.0"
-windows-native-keyring-store = "1.1.0"
-apple-native-keyring-store = "1.0.2"
-zbus-secret-service-keyring-store = "1.0.1"
+# Features are named explicitly and defaults are off everywhere, per ADR-0021
+# Amendment 5. Two of these stores have no default feature set at all and stop
+# the build with a `compile_error!` until one is chosen; the third has a default
+# this product does not want. A dependency tree does not catch either, because a
+# `compile_error!` fires only when something compiles -- so Amendment 5 also
+# requires a cross-target `cargo check`.
+keyring-core = { version = "1.0.0", default-features = false }
+# `search` is the crate's default and pulls `regex` for `Entry::search`, which
+# this store never calls: it reads, writes and deletes one entry addressed by
+# Amendment 4's mapping.
+windows-native-keyring-store = { version = "1.1.0", default-features = false }
+# `keychain` is the macOS Keychain, available to every application. `protected`
+# is the other store, and its features are only available to applications with
+# provisioning profiles -- a distribution property this project has not decided.
+apple-native-keyring-store = { version = "1.0.2", default-features = false, features = [
+    "keychain",
+] }
+# Exactly one of four mutually exclusive features, a runtime crossed with a
+# crypto backend. Rust crypto rather than OpenSSL, because Amendment 2 rejected
+# the libdbus store to avoid a native C dependency. `async-io` rather than
+# Tokio, because Amendment 3 kept a runtime out of the desktop path and Tokio
+# lives in cartograph-mcp alone. `async-io` is still an async runtime; what is
+# claimed is that no target gains Tokio.
+zbus-secret-service-keyring-store = { version = "1.0.1", default-features = false, features = [
+    "rt-async-io-crypto-rust",
+] }
 
 cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
