@@ -68,6 +68,13 @@ pub enum DesktopErrorKind {
     UnknownNode,
     /// Evidence was requested before anything had been analysed.
     NoAnalysis,
+    /// The question cannot be sent as it is: empty, or longer than the ASK
+    /// boundary accepts.
+    ///
+    /// The caller's mistake rather than a failure of the analysis, and kept
+    /// distinct so a surface can put the message beside the box the text came
+    /// from instead of beside the map.
+    InvalidQuestion,
     /// A defect. Reaching this means Cartograph is wrong, not the user.
     Internal,
 }

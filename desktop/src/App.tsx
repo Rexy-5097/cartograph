@@ -23,6 +23,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import EvidencePanel from "./EvidencePanel";
 import GraphView from "./GraphView";
+import { canAsk } from "./ask";
 import { describeBlast } from "./blast";
 import { findNodes } from "./search";
 import { clusterColor, clusterSummary, type BuildDiagnostics } from "./graph";
@@ -216,6 +217,9 @@ function Result({ payload }: { payload: AnalysisPayload }) {
   // The repository identity stays in Rust (ADR-0020 Amendment 3).
   const [askEnabled, setAskEnabled] = useState(false);
   const [askPending, setAskPending] = useState(false);
+  // The question text. Held here rather than in the panel because the panel is
+  // unmounted between answers and a half-typed question should survive that.
+  const [askQuestion, setAskQuestion] = useState("");
   const largest = useMemo(() => clusterSummary(scene).slice(0, 8), [scene]);
 
   // A selection belongs to one analysis. When the payload is replaced the old
@@ -327,6 +331,47 @@ function Result({ payload }: { payload: AnalysisPayload }) {
         }
         // One panel, one subject: an explanation replaces a single-edge
         // selection rather than stacking on top of it.
+        setSelected(null);
+        setAnswer(result);
+      } catch (raw) {
+        if (askRequest.current !== token) {
+          return;
+        }
+        setAnswer(null);
+        setSelectionError(asDesktopError(raw));
+      } finally {
+        if (askRequest.current === token) {
+          setAskPending(false);
+        }
+      }
+    },
+    [payload.analysis],
+  );
+
+  /**
+   * Asks a model about one artefact, when the repository has opted in.
+   *
+   * Sends the question and the artefact. It does **not** send a key, an
+   * identity or a keychain subject: Rust holds all three and the window cannot
+   * reach them, which is what stops this surface widening its own
+   * authorization. What comes back says in `ai` whether a model contributed,
+   * and carries the derived evidence either way.
+   */
+  const explainNode = useCallback(
+    async (node: number, question: string) => {
+      const token = askRequest.current + 1;
+      askRequest.current = token;
+      setSelectionError(null);
+      setAskPending(true);
+      try {
+        const result = await invoke<AskAnswer>("ask_explain", {
+          analysis: payload.analysis,
+          node,
+          question,
+        });
+        if (askRequest.current !== token) {
+          return; // superseded; a later request owns the panel
+        }
         setSelected(null);
         setAnswer(result);
       } catch (raw) {
@@ -476,6 +521,33 @@ function Result({ payload }: { payload: AnalysisPayload }) {
           <button type="button" onClick={() => void askNode(blast.target)}>
             Explain this artefact
           </button>
+          {askEnabled && (
+            <form
+              className="ask-question"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const question = askQuestion.trim();
+                if (question.length > 0) {
+                  void explainNode(blast.target, question);
+                }
+              }}
+            >
+              <label htmlFor="ask-question">Ask about this artefact</label>
+              <input
+                id="ask-question"
+                type="text"
+                value={askQuestion}
+                onChange={(event) => setAskQuestion(event.target.value)}
+                placeholder="Why does this exist?"
+              />
+              <button
+                type="submit"
+                disabled={!canAsk(askEnabled, askPending) || askQuestion.trim().length === 0}
+              >
+                {askPending ? "Asking…" : "Ask"}
+              </button>
+            </form>
+          )}
           <button type="button" onClick={clearBlast}>
             Clear blast radius
           </button>

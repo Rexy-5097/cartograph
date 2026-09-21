@@ -23,7 +23,7 @@
  * which is the one mistake that would misdescribe where an answer came from.
  */
 
-import type { AskAnswer, EvidenceRecord } from "./session";
+import type { AskAnswer, EvidenceRecord, ExplanationRecord } from "./session";
 
 /**
  * How to describe the model's involvement.
@@ -35,14 +35,53 @@ export function aiWording(ai: string): string {
   switch (ai) {
     case "disabled":
       return "No model was consulted — this is the derived evidence.";
+    case "unavailable":
+      return "AI is on for this repository, but no key is available — this is the derived evidence.";
+    case "failed":
+      return "The model could not answer — this is the derived evidence.";
+    case "answered":
+      return "Explained by a model. Every claim below quotes the evidence it was given.";
     default:
       return ai;
   }
 }
 
-/** Whether the answer was produced without a model. */
+/**
+ * Whether the answer was produced without a model.
+ *
+ * The three states that mean "no model contributed" are listed rather than
+ * derived by negating `"answered"`. That is deliberate and it is RULE 009: a
+ * state this build has never heard of must not be silently reported as
+ * degraded, any more than `aiWording` may invent wording for it. Negation
+ * would claim knowledge about every future state, including ones that do
+ * carry a model's answer.
+ */
 export function isDegraded(answer: AskAnswer): boolean {
-  return answer.ai === "disabled";
+  return (
+    answer.ai === "disabled" ||
+    answer.ai === "unavailable" ||
+    answer.ai === "failed"
+  );
+}
+
+/**
+ * The model's explanation, or nothing.
+ *
+ * Absent and empty are the same thing to a reader, and collapsing them here
+ * means the panel has one condition to render rather than two.
+ */
+export function explanationOf(answer: AskAnswer): ExplanationRecord[] {
+  return answer.explanation ?? [];
+}
+
+/**
+ * Whether asking a model is worth offering.
+ *
+ * The opt-in alone decides this. Whether a key exists is not knowable here and
+ * must not be guessed at: Rust finds out, and says so in `ai` afterwards.
+ */
+export function canAsk(askEnabled: boolean, pending: boolean): boolean {
+  return askEnabled && !pending;
 }
 
 /**

@@ -20,6 +20,12 @@ serde.workspace = true
 # Promoted from dev-dependencies, so no package is added to the lockfile. The
 # frozen stack (§10) names no configuration-format crate, and none is needed.
 serde_json.workspace = true
+# M16 Slice 5: the ASK provider boundary and the citation contract. The desktop
+# is the only client that gains it, so the CLI and the MCP server stay
+# incapable of network egress by the shape of the dependency graph (ADR-0021
+# Amendment 3, decision C3, which records that "the desktop gains a dependency
+# on cartograph-ask").
+cartograph-ask.workspace = true
 # M16 Slice 5: credential storage (ADR-0021 Amendment 2). The interface only --
 # the store that talks to a real OS keychain is chosen per target below, so a
 # build links exactly one backend and never three.
