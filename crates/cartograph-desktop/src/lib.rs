@@ -50,6 +50,7 @@ pub mod blast;
 pub mod credential;
 pub mod error;
 pub mod evidence;
+pub mod keychain;
 pub mod optin;
 pub mod repository;
 pub mod scene;

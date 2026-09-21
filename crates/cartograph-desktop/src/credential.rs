@@ -12,20 +12,23 @@
 //! **having no credential at all is an ordinary, supported state** — not an
 //! error path bolted on afterwards.
 //!
-//! # Why there is no OS keychain backend here yet
+//! # Two stores, and why both exist
 //!
 //! §10 — the frozen tech stack — names thirteen crates for the Rust core, and
 //! **none of them stores credentials**. §13 states the requirement; §10 does not
 //! name a crate that satisfies it. QG-006 requires that *"new dependencies not
 //! named in the frozen stack need an ADR reference in the PR"*, so choosing one
-//! is a decision with its own evidence, not something to settle inside an
-//! implementation slice.
+//! was a decision with its own evidence rather than something settled inside an
+//! implementation slice. ADR-0021 Amendment 2 made it, and
+//! [`crate::keychain::KeychainStore`] is that choice implemented — the real OS
+//! keychain, behind this trait, with no caller changed.
 //!
-//! So this slice ships the **boundary** and no backend. That is not a stub for
-//! its own sake: with no backend, [`NoCredentials`] reports the credential as
-//! absent, ASK degrades to raw evidence, and the property §13 actually asks for
-//! — *"fully useful with no API key"* — is the behaviour that ships and is
-//! tested. A backend can be added behind this trait without any caller changing.
+//! [`NoCredentials`] did not go away, and is not a stub. A machine with no
+//! working keychain, a build with no backend for its target, and a repository
+//! that simply has no key all read the same way: absent. That is the state §13
+//! requires the product to be fully useful in, and keeping a store that always
+//! reports it keeps the degraded path reachable and testable rather than
+//! hypothetical.
 //!
 //! # The secret never becomes text — and it no longer lives here
 //!
@@ -112,11 +115,14 @@ pub trait CredentialStore {
     fn delete(&self, identity: &RepositoryIdentity) -> Result<(), CredentialError>;
 }
 
-/// The store this build ships with: there is no credential store.
+/// The store for when there is no credential store.
 ///
 /// Every repository reads as having no credential, which is exactly the state
-/// §13 requires the product to be fully useful in. When a keychain crate is
-/// authorised, it replaces this implementation and nothing else changes.
+/// §13 requires the product to be fully useful in. It is what a caller falls
+/// back to when [`crate::keychain::KeychainStore::open`] reports the platform
+/// keychain unavailable — a machine with no Secret Service running, or a target
+/// with no backend compiled in — so that "no keychain" degrades rather than
+/// fails.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoCredentials;
 

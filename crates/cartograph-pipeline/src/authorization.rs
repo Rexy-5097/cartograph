@@ -73,13 +73,18 @@ use crate::pipeline::{self, Analysis, Options};
 
 /// A repository identity, as supplied by the session grant.
 ///
-/// Opaque by construction. There is no accessor returning the inner value and
-/// no `Display`: the granter chooses what an identity *is*, and a value this
-/// crate never interprets is a value it cannot leak into a message or a log
-/// (RULE 015). `Debug` redacts for the same reason — the same discipline
-/// `NodeKind::EnvVar` applies by having no value field at all.
+/// Opaque by construction. There is no `Display`: the granter chooses what an
+/// identity *is*, and a value this crate never interprets is a value it cannot
+/// leak into a message or a log (RULE 015). `Debug` redacts for the same reason
+/// — the same discipline `NodeKind::EnvVar` applies by having no value field at
+/// all.
 ///
-/// Equality is what the boundary needs, and equality is all it exposes.
+/// Equality is what the boundary needs, and equality is all the boundary uses.
+/// There is exactly **one** accessor returning the inner value,
+/// [`RepositoryIdentity::keychain_subject`], added by ADR-0021 Amendment 4
+/// because an OS keychain entry is addressed by a string and nothing else here
+/// could supply one. It is not a general accessor, nothing in authorization
+/// calls it, and its contract is stated on the method.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct RepositoryIdentity(String);
 
@@ -100,6 +105,29 @@ impl RepositoryIdentity {
             return Err(AuthorizationError::EmptyIdentity);
         }
         Ok(Self(value))
+    }
+
+    /// The account name this repository's credential is stored under.
+    ///
+    /// **This is not a general identity accessor, and must not be used as one.**
+    /// It exists because an OS keychain entry is addressed by two strings and
+    /// this type is the only thing that can say which repository an entry
+    /// belongs to (ADR-0021 Amendment 4). Authorization is still decided by
+    /// equality on the typed value — never by comparing subjects.
+    ///
+    /// It computes nothing. It consults no filesystem, no Git, no source, no
+    /// opt-in table and no environment; it hashes nothing and canonicalises
+    /// nothing. It returns a borrow of the token the granter supplied, exactly
+    /// as supplied.
+    ///
+    /// The returned string must never reach `Debug`, `Display`, tracing, an
+    /// error, the frontend, IPC, MCP or a network request body. That is an
+    /// invariant of the callers and their tests, not of this signature — a
+    /// `&str` can be printed, and Amendment 4 records that limit rather than
+    /// claiming the type system closes it.
+    #[must_use]
+    pub fn keychain_subject(&self) -> &str {
+        &self.0
     }
 }
 
@@ -600,5 +628,60 @@ mod tests {
 
         let debugged = format!("{session:?}");
         assert!(!debugged.contains("s3cr3t-identity-value"), "{debugged}");
+    }
+
+    /// The Amendment 4 accessor returns the granter's token unchanged.
+    ///
+    /// Not hashed, not canonicalised, not prefixed. A keychain entry is found
+    /// again only if this is stable, and it is stable because it is the value
+    /// itself.
+    #[test]
+    fn the_keychain_subject_is_the_token_verbatim() {
+        for value in [
+            "desktop-18f2a-0",
+            "a",
+            "an identity with spaces",
+            "../not-a-path",
+        ] {
+            assert_eq!(identity(value).keychain_subject(), value);
+        }
+    }
+
+    /// The accessor is a read, and reads change nothing.
+    #[test]
+    fn the_keychain_subject_does_not_disturb_equality_or_hashing() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let one = identity("desktop-1-0");
+        let same = identity("desktop-1-0");
+        let other = identity("desktop-2-0");
+
+        let hash = |value: &RepositoryIdentity| {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        let before = hash(&one);
+        let _ = one.keychain_subject();
+
+        assert_eq!(one, same);
+        assert_ne!(one, other);
+        assert_eq!(hash(&one), before, "reading the subject changed the hash");
+        assert_eq!(hash(&one), hash(&same));
+    }
+
+    /// Reading the subject does not widen `Debug`.
+    ///
+    /// The subject is for a keychain account name and nothing else; ADR-0021
+    /// Amendment 4 is explicit that it must not reach a log or a message.
+    #[test]
+    fn reading_the_subject_does_not_make_the_identity_printable() {
+        let value = identity("desktop-deadbeef-0");
+
+        let _ = value.keychain_subject();
+
+        assert_eq!(format!("{value:?}"), "RepositoryIdentity(<redacted>)");
     }
 }

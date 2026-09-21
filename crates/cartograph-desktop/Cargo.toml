@@ -20,10 +20,26 @@ serde.workspace = true
 # Promoted from dev-dependencies, so no package is added to the lockfile. The
 # frozen stack (§10) names no configuration-format crate, and none is needed.
 serde_json.workspace = true
+# M16 Slice 5: credential storage (ADR-0021 Amendment 2). The interface only --
+# the store that talks to a real OS keychain is chosen per target below, so a
+# build links exactly one backend and never three.
+keyring-core.workspace = true
 
 [dev-dependencies]
 # Fixed clock, so a composed scene is byte-stable across runs.
 cartograph-testkit.workspace = true
+
+# One native store per target, per ADR-0021 Amendment 2. Compile-time selection:
+# nothing chooses a backend at runtime, and no target compiles a backend for an
+# operating system it is not running on.
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store.workspace = true
 
 [lints]
 workspace = true

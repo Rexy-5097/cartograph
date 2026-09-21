@@ -78,6 +78,20 @@ tokio = { version = "1.53", default-features = false }
 # built and checked in this repository.
 ureq = "3.4"
 
+# M16 Slice 5: credential storage, reachable only from cartograph-desktop
+# (ADR-0021 Amendment 2, accepted 2026-09-05). `keyring-core` is the interface;
+# the stores that talk to a real OS keychain are separate crates, one per
+# target, so no target links a backend it cannot use. The umbrella `keyring`
+# crate is deliberately not used — its `cli` feature pulls "a host of credential
+# stores they don't need". `keyring-core`'s only feature, `sample`, is off by
+# default and stays off: it is what would pull chrono, dashmap, regex, ron,
+# serde and uuid. The `mock` store is not behind it, which is why the tests
+# need nothing switched on.
+keyring-core = "1.0.0"
+windows-native-keyring-store = "1.1.0"
+apple-native-keyring-store = "1.0.2"
+zbus-secret-service-keyring-store = "1.0.1"
+
 cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
 cartograph-pipeline = { path = "crates/cartograph-pipeline" }
