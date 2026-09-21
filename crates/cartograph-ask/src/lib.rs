@@ -56,9 +56,11 @@
 //!
 //! # What is deliberately absent
 //!
-//! No HTTP client, no TLS and no credential store. [`GroqProvider`] is a
-//! complete provider that runs entirely over the [`transport`] seam, and that
-//! seam contains no client: nothing in this crate can open a socket.
+//! No credential store. [`UreqTransport`] is the workspace's **only** HTTP
+//! client, reachable from this crate and no other, so `cartograph-cli` and
+//! `cartograph-mcp` remain incapable of network egress by the shape of the
+//! dependency graph. [`GroqProvider`] runs over the [`transport`] seam and
+//! never names it.
 //! Everything here runs offline, and its only dependencies outside the
 //! workspace are `serde` and `serde_json` — both already workspace
 //! dependencies — which build the Groq request bytes in [`groq`]. `ureq` and
@@ -77,6 +79,7 @@ pub mod provider;
 pub mod question;
 pub mod testing;
 pub mod transport;
+pub mod ureq_transport;
 
 pub use answer::{
     Answer, ClaimedAnswer, ClaimedCitation, ClaimedItem, ExplanationItem, revalidate, validate,
@@ -86,3 +89,4 @@ pub use groq::GroqProvider;
 pub use provider::Provider;
 pub use question::{Question, QuestionError};
 pub use transport::{Header, HttpResponse, Transport, TransportError};
+pub use ureq_transport::UreqTransport;
