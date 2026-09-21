@@ -18,8 +18,13 @@
 > HTTP endpoint, called through `ureq` with `rustls`, from a new
 > `cartograph-ask` crate.
 >
-> **Amendments 2 and 3 record implementation choices this repository makes.
-> Neither is claimed to be frozen-stack content, because neither is.**
+> **Amended again 2026-09-21.** ***Amendment 4*** closes a question Amendment 2
+> left implicit and the implementation then hit: how a keychain entry is
+> addressed. Service `"cartograph-ask"`, account the opaque grant token read
+> through one dedicated accessor. It adds no dependency and no persisted state.
+>
+> **Amendments 2, 3 and 4 record implementation choices this repository makes.
+> None is claimed to be frozen-stack content, because none is.**
 
 ## Context
 
@@ -1065,3 +1070,237 @@ past M16. It is not revoked.
 M16 Slice 5 may now begin, in the order its plan sets out. It may not begin
 before it: a dependency added ahead of the decision that authorises it is a
 dependency that shipped without review.
+
+## Amendment 4 — how a keychain entry is addressed
+
+**Status: Accepted, 2026-09-21.** Amendment 2 chose the keychain crates. It did
+not say what a keychain entry is *called*, and the implementation discovered
+that gap rather than inventing an answer: `keyring_core::Entry::new(service,
+user)` needs two strings, and `RepositoryIdentity` is opaque by construction —
+private field, no accessor, no `Display`, equality and hashing only. Slice 5
+Step 7 stopped there. This amendment closes that question and nothing else.
+
+It is an **implementation choice this repository makes**, like Amendments 2 and
+3, and it is **not** claimed to be part of Frozen Engineering Specification V3.
+
+| | |
+|---|---|
+| **Frozen requirement (§13)** | *"Credentials live in the OS keychain, never in configuration files."* Not negotiable, not chosen here. |
+| **Implementation choice (this amendment)** | The service name, the account name, and the one narrow accessor that produces it. Chosen here, and reopenable like any other. |
+
+### Decision
+
+**A credential is addressed by a fixed service name and an opaque per-repository
+subject taken verbatim from the already-minted grant token. `RepositoryIdentity`
+gains one dedicated accessor for that purpose and no other.**
+
+| | |
+|---|---|
+| Service | `"cartograph-ask"` — a constant, identical on every machine and every repository |
+| Account / user | `RepositoryIdentity::keychain_subject()` — the opaque grant token, verbatim |
+| Password | the provider credential, held as `Secret` |
+| New API | `RepositoryIdentity::keychain_subject(&self) -> &str` |
+| New dependency | none |
+| New persisted state | none |
+
+So the entry is `Entry::new("cartograph-ask", identity.keychain_subject())`, and
+that is the whole mapping.
+
+### Why an accessor, and why this is the narrowest possible exception
+
+`RepositoryIdentity` documents itself as exposing equality and nothing else, and
+that sentence was written for a reason: a value the authorization layer never
+interprets is a value it cannot leak into a message or a log (RULE 015). This
+amendment does not retract it. It carves **one** hole in it, and states the
+shape of the hole precisely.
+
+The alternative to a hole is worse in every direction. Hashing the token invents
+a derivation this architecture forbids and makes the credential's address depend
+on hash stability across Rust releases. Deriving from the path contradicts
+ADR-0020 Amendment 3 outright. Coupling the store to the opt-in table makes a
+credential lookup depend on a configuration file. Each of those is a larger
+change to the architecture than exposing, under a name that says exactly what it
+is for, a token the desktop already mints, already persists and already compares.
+
+**The honest statement of what this is.** The subject is not a new value derived
+from the identity. It **is** the identity's token, returned as a string. Calling
+it a "subject" names its *use*, not a different value. Pretending otherwise
+would be the kind of claim this ADR has refused to make elsewhere.
+
+That has a consequence worth stating rather than discovering later: the method's
+return type is `&str`, and a `&str` can be printed. **The guarantee that the
+subject is never logged or displayed is therefore a review obligation and a test
+obligation, not a type-system one.** The name is chosen so that a call site
+outside the credential backend reads as obviously wrong, and Step 7's tests
+assert the absence — but this amendment does not claim a structural enforcement
+the design does not have. **This amendment does not introduce a wrapper type.**
+Hardening the return into a type with no `Display` and no `Debug` is a separate
+choice, on its own evidence, and is not made here.
+
+### What the accessor does not do
+
+It does **not** interpret, derive, recompute, hash, canonicalise or normalise
+the identity. It consults nothing: not the filesystem, not Git, not source, not
+the opt-in table, not the environment. It performs no computation at all — it
+returns a borrow of a string that was minted once and has not changed since.
+
+The subject must never reach `Debug`, `Display`, tracing, an error, the
+frontend, IPC, MCP, or a network request body, and must never become an
+authorization token or a user-facing identifier. Authorization continues to be
+decided by equality on the typed value — never by comparing subjects. As stated
+above, that list is an **implementation and test invariant**, not something the
+type system enforces.
+
+### The invariants that do not move
+
+| Invariant | Why it holds |
+|---|---|
+| `PartialEq`, `Eq`, `Hash` | Derived from the same single field; a read-only borrow changes none of them |
+| `Debug` | Still `RepositoryIdentity(<redacted>)`. This amendment adds no `Debug` field and no `Display` |
+| No `Display` | Unchanged. The accessor is not a `Display` impl and must not be used as one |
+| Authorization | `authorize` compares granted paths and clones the identity through. It never calls the accessor |
+| Repository containment | Untouched — a path question, decided before an identity is consulted |
+| The token's value | Unchanged. Nothing is re-minted, re-encoded or migrated |
+| Frontend / IPC | Unchanged. The window is still told only whether ASK is on |
+| MCP | Unchanged. `cartograph-mcp` references no `CredentialStore` and no `Secret`, and gains neither here |
+| Crate locations | `CredentialStore` stays in `cartograph-desktop`; `RepositoryIdentity` stays in `cartograph-pipeline` |
+| Dependency direction | Unchanged. No crate gains a dependency, and no arrow reverses |
+
+### Isolation, and recovery across a restart
+
+Isolation is immediate from the mapping. Repository A holds identity A, whose
+token is subject A, which names account A under `"cartograph-ask"`. Repository B
+holds a different token. Two distinct tokens are two distinct account names, so
+A's credential is not reachable with B's identity and B's is not reachable with
+A's. There is no shared entry and no global fallback to fall back to.
+
+Recovery across a restart is the existing opt-in table, unchanged:
+
+```
+human selects a locator
+  -> OptIns::grant(locator) finds the recorded Entry for that locator
+  -> returns the token recorded against it  (not a fresh one)
+  -> RepositoryIdentity::keychain_subject() -> the same subject as last run
+  -> Entry::new("cartograph-ask", subject) -> the same keychain entry
+```
+
+**This adds nothing to configuration.** The opt-in table already records the
+token — that is how the same repository has recovered the same identity since
+Slice 4, and it is not a credential. §13 forbids *credentials* in configuration
+files, and the credential is precisely the thing that stays in the OS keychain.
+No second token is persisted by this amendment.
+
+### What the subject may contain, stated exactly
+
+The desktop mints `desktop-{nanoseconds:x}-{counter:x}`. It contains no path, no
+repository name, no machine username, no Git data, no content digest and no
+secret, because `mint()` never sees the locator.
+
+That is a property of **the desktop producer**, not of the type. The token is
+granter-chosen — `RepositoryIdentity::from_grant` takes whatever the granter
+supplies — and the MCP producer takes its identity from launch-time argv, which
+a launcher could set to anything, including a path. This amendment does not and
+cannot claim every possible token is path-free.
+
+What makes that safe today is narrower and checkable: **the desktop is the only
+producer whose identity reaches a credential store.** `cartograph-mcp` holds no
+`CredentialStore`, no `Secret` and no provider (Amendment 3, decision C9).
+
+So the constraint is recorded for whoever changes that: **a producer whose
+tokens reach the keychain is choosing keychain account names, and must mint
+tokens that carry nothing derived from the machine.** If MCP ever gains a
+credential, that is the sentence to re-read.
+
+### Two lifecycle consequences, recorded rather than discovered
+
+**A moved repository gets a new credential entry.** `OptIns::grant` finds an
+entry *by locator*. Move the repository and no entry matches, so a fresh token is
+minted, which is a fresh subject, which is a fresh keychain account. The old
+credential is not reachable from the new location and the user is asked for a key
+again.
+
+This is worth saying carefully, because it is easy to state the invariant wrongly:
+**the identity is not *derived* from the path, but it is *recovered by* the
+path.** Those are different claims. The first is what ADR-0020 Amendment 3
+requires and it holds — the token's value contains nothing from the locator. The
+second is a lookup mechanism that predates this amendment. The failure mode is
+conservative: a moved repository loses access to its own old credential rather
+than a new repository silently inheriting one.
+
+**Forgetting an opt-in entry does not delete the credential.** `prune_missing`
+drops entries whose locator no longer exists. Once an entry is gone, its token is
+gone, and the keychain entry that token named can no longer be addressed — while
+the secret itself remains in the OS keychain. That is an orphan, and it is the
+user's key sitting in their keychain with nothing left that knows its name.
+
+Step 7 does not have to solve this, and this amendment does not decide it. It
+records the obligation: **`CredentialStore::delete` must be called before the
+identity that addresses the credential is forgotten**, or the orphan must be
+accepted deliberately and documented. A later slice that wires the desktop UI is
+where that belongs.
+
+### Rejected alternatives
+
+| Rejected | Why |
+|---|---|
+| Hash the identity | Invents a storage identity by derivation, which ADR-0020 Amendment 3 forbids. `DefaultHasher` is explicitly not stable across releases or platforms, so the credential's address could move under a toolchain bump — a restart would silently stop finding a key that is still there |
+| Derive from the filesystem path | Contradicts the accepted identity architecture directly: *"never from filesystem path, source contents, Git, hashing or canonicalisation"*. It would also put a machine path into a keychain account name |
+| Derive from Git, source contents, or a canonical path | The same violation, and it would make the credential's address change when the repository's contents change |
+| Couple `CredentialStore` to `OptIns` | `CredentialStore::get` receives a `RepositoryIdentity` and Amendment 2 keeps Slice 4's boundary unchanged. It would also make a credential lookup depend on a configuration file being readable, and would fail for any identity not in the table |
+| Persist a second credential token in configuration | The configuration architecture keeps credentials and credential locators out of config. A second token is a second thing to keep in step, and a second thing to leak |
+| One global credential for every repository | Breaks per-repository isolation, which Slice 4 already tests. It would also make "AI is opt-in, per repository" false in the only way that matters: turning it on once would arm every repository |
+
+### What Step 7 must prove
+
+The tests below are the acceptance of this amendment, and all of them run against
+`keyring-core`'s `mock` store. None may touch a real keychain.
+
+1. The same identity yields the same keychain account, twice in one process.
+2. Two different identities yield two different accounts.
+3. `set` then `get` on one identity returns the same secret.
+4. A credential stored under identity A is **not** retrievable with identity B.
+5. `delete` on A removes A's credential and leaves B's intact.
+6. The recorded-token path recovers the same subject after a simulated restart —
+   the table is reloaded and the same locator yields the same subject.
+7. The subject is not derived from the locator: two identities minted for two
+   different locators differ, and the subject contains no part of either path.
+8. The credential never appears in any `Debug` output — `Secret`,
+   `CredentialError`, or the store itself.
+9. `Secret` still has no `Display` and no `Serialize`.
+10. `CredentialError` text carries no secret and no subject.
+11. No secret and no subject reaches tracing.
+12. No secret reaches configuration: the opt-in table after a `set` is byte-wise
+    free of the credential.
+13. Missing, `PermissionDenied`, `Unavailable` and `Backend` stay four distinct
+    outcomes, and absence remains `Ok(None)` rather than an error.
+
+Test 7 replaces a weaker formulation that should not be asserted, because it is
+not true of the current design: *"changing the filesystem path does not change
+the identity."* Moving a repository **does** produce a new identity, for the
+reason given above. What is true, and what test 7 checks, is that the identity's
+*value* is not derived from the path.
+
+### What this amendment does not do
+
+- It **adds no dependency**, and changes no manifest and no lockfile. The
+  keychain crates arrive in the Step 7 PR that cites Amendment 2 and this one.
+- It does **not** re-open Amendment 2. The crates, versions, features and the
+  mock-store rule stand exactly as accepted.
+- It does **not** touch Amendment 3. The provider, the HTTP client and the
+  transport are unchanged, and `GroqProvider` still receives a `Secret` from its
+  caller.
+- It does **not** wire the desktop, add an ASK button, or make any request.
+- It does **not** widen MCP. No provider, no credential, no egress.
+- It does **not** accept M16, move the ledger, advance the version, or create a
+  tag. M16 remains `next_allowed_milestone`, and `cartograph-m16` does not exist.
+
+### Status of ADR-0021 after this amendment
+
+ADR-0021 remains **Accepted**. **C** was closed by Amendment 3 and **D** by
+Amendment 2; this amendment closes the addressing question Amendment 2 left
+implicit, which was found by the implementation rather than by review — the
+reason it is written down here instead of decided in a pull request.
+
+M16 Slice 5 Step 7 may now proceed, in this order: the accessor on
+`RepositoryIdentity`, then the backend behind the existing `CredentialStore`,
+then the platform selection, then the tests above.
