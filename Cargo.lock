@@ -358,6 +358,7 @@ name = "cartograph-desktop"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "cartograph-ask",
  "cartograph-core",
  "cartograph-graph",
  "cartograph-pipeline",

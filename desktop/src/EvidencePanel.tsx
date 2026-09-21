@@ -35,13 +35,13 @@
 
 import { useEffect, useRef } from "react";
 
-import { aiWording, askSummary, orderedEntries } from "./ask";
+import { aiWording, askSummary, explanationOf, orderedEntries } from "./ask";
 import {
   formatLocation,
   kindWording,
   provenanceWording,
 } from "./evidence";
-import type { AskAnswer, EvidenceRecord } from "./session";
+import type { AskAnswer, EvidenceRecord, ExplanationRecord } from "./session";
 
 type Props =
   | { record: EvidenceRecord; answer?: undefined; onClose: () => void }
@@ -53,6 +53,29 @@ type Props =
  * The single place a relationship becomes text. Both modes go through here, so
  * a change to how a claim reads cannot apply to one of them and not the other.
  */
+/**
+ * One explanation, with the evidence it quoted.
+ *
+ * The quotations are rendered as quotations rather than paraphrased into the
+ * sentence: a citation that the reader cannot compare against the evidence
+ * below it is a citation they have to take on trust, which is the thing this
+ * feature exists not to ask of them.
+ */
+function Explanation({ item }: { item: ExplanationRecord }) {
+  return (
+    <div className="evidence-explanation">
+      <p>{item.text}</p>
+      <ul className="evidence-citations">
+        {item.citations.map((citation, index) => (
+          <li key={index}>
+            <q>{citation.text}</q>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function EvidenceBody({ record }: { record: EvidenceRecord }) {
   const relationship = kindWording(record.kind);
   const provenance = provenanceWording(record.provenance);
@@ -173,6 +196,10 @@ export default function EvidencePanel(props: Props) {
             {aiWording(answer.ai)}
           </p>
           <p className="evidence-footnote">{askSummary(answer)}</p>
+
+          {explanationOf(answer).map((item, index) => (
+            <Explanation key={index} item={item} />
+          ))}
 
           {orderedEntries(answer).map((entry) => (
             <EvidenceBody key={entry.edge} record={entry} />

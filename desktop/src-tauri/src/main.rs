@@ -168,6 +168,48 @@ fn ask_evidence(
     ask::answer(session, analysis, cartograph_core::NodeId::from_raw(node))
 }
 
+/// The derived evidence behind one artefact, explained by a model when every
+/// gate allows it.
+///
+/// Takes a question and nothing else from the window. It does **not** accept a
+/// credential, a repository identity or a keychain subject: this side obtains
+/// the grant, the opt-in and the key itself, from state the frontend cannot
+/// reach. Passing any of them in would make the window able to widen its own
+/// authorization, which is the whole reason they are not parameters.
+///
+/// Every decision about whether a model may be consulted lives in
+/// `cartograph_desktop::ask::explain` -- opt-in off, no usable credential, or
+/// a provider that failed all return the derived evidence with `ai` saying
+/// which. This function branches on nothing (ADR-0016).
+///
+/// Runs on the blocking pool: it walks a graph and may make one synchronous
+/// HTTPS request, and holding an async worker for either would stall other
+/// commands.
+#[tauri::command(async)]
+fn ask_explain(
+    analysis: AnalysisId,
+    node: u64,
+    question: String,
+    current: tauri::State<'_, Current>,
+    grant: tauri::State<'_, Grant>,
+) -> Result<AskAnswer, DesktopError> {
+    let held = current.0.lock().map_err(|_| poisoned())?;
+    let session = held.as_ref().ok_or_else(|| {
+        DesktopError::new(
+            DesktopErrorKind::NoAnalysis,
+            "No repository has been analysed yet.",
+        )
+    })?;
+    let granted = grant.0.lock().map_err(|_| poisoned())?;
+    ask::explain_with_os_keychain(
+        session,
+        analysis,
+        cartograph_core::NodeId::from_raw(node),
+        &question,
+        granted.as_ref(),
+    )
+}
+
 /// Whether ASK is enabled for the selected repository.
 ///
 /// The only thing about the grant that crosses to the window: a boolean. The
@@ -222,6 +264,7 @@ fn main() {
             edge_evidence,
             blast_radius,
             ask_evidence,
+            ask_explain,
             ask_enabled,
             set_ask_enabled
         ])

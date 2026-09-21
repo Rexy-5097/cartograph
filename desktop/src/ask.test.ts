@@ -8,7 +8,14 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { aiWording, askSummary, isDegraded, orderedEntries } from "./ask";
+import {
+  aiWording,
+  askSummary,
+  canAsk,
+  explanationOf,
+  isDegraded,
+  orderedEntries,
+} from "./ask";
 import type { AskAnswer, EvidenceRecord } from "./session";
 
 /** Evidence with spacing and punctuation a "tidy-up" would damage. */
@@ -137,5 +144,51 @@ describe("offline", () => {
     // construction; this pins that the UI does not prepend anything to it.
     expect(shown).toContain("api/routes.py");
     expect(shown.startsWith("/")).toBe(false);
+  });
+});
+
+describe("the wired ASK states", () => {
+  // Each of the three non-answered states is a different thing to tell a
+  // reader, and each keeps the evidence. Reading any of them as "answered"
+  // would claim a model contributed when none did.
+  it("describes every state this build knows, and each one differently", () => {
+    const said = ["disabled", "unavailable", "failed", "answered"].map(aiWording);
+
+    expect(new Set(said).size).toBe(said.length);
+    for (const wording of said) {
+      expect(wording.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("calls the three model-less states degraded and the answered one not", () => {
+    for (const ai of ["disabled", "unavailable", "failed"] as const) {
+      expect(isDegraded({ ...answerOf([]), ai })).toBe(true);
+    }
+    expect(isDegraded({ ...answerOf([]), ai: "answered" })).toBe(false);
+  });
+
+  it("treats a missing explanation and an empty one as the same thing", () => {
+    // Rust omits the field entirely unless there is something in it, so the
+    // panel must not have two conditions for one state.
+    expect(explanationOf(answerOf([]))).toEqual([]);
+    expect(explanationOf({ ...answerOf([]), explanation: [] })).toEqual([]);
+  });
+
+  it("returns the explanation untouched when there is one", () => {
+    const explanation = [
+      { text: "It calls the handler.", citations: [{ edge: 4, text: AWKWARD }] },
+    ];
+
+    expect(explanationOf({ ...answerOf([]), explanation })).toEqual(explanation);
+  });
+
+  // The opt-in alone decides whether to offer the box. Whether a key exists is
+  // not knowable in the window and must not be guessed at: Rust finds out and
+  // says so in `ai` afterwards.
+  it("offers asking only when the repository has opted in and nothing is in flight", () => {
+    expect(canAsk(true, false)).toBe(true);
+    expect(canAsk(false, false)).toBe(false);
+    expect(canAsk(true, true)).toBe(false);
+    expect(canAsk(false, true)).toBe(false);
   });
 });

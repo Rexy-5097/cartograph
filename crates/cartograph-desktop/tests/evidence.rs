@@ -297,6 +297,7 @@ fn error_kinds_serialise_under_their_agreed_names() {
         (DesktopErrorKind::StaleSelection, "\"staleSelection\""),
         (DesktopErrorKind::UnknownEdge, "\"unknownEdge\""),
         (DesktopErrorKind::NoAnalysis, "\"noAnalysis\""),
+        (DesktopErrorKind::InvalidQuestion, "\"invalidQuestion\""),
     ] {
         assert_eq!(serde_json::to_string(&kind).expect("serialises"), expected);
     }

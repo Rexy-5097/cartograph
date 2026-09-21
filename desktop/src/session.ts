@@ -39,6 +39,7 @@ export type DesktopErrorKind =
   | "unknownEdge"
   | "unknownNode"
   | "noAnalysis"
+  | "invalidQuestion"
   | "internal";
 
 /** A failure, ready to show and ready to branch on. */
@@ -204,7 +205,11 @@ export interface BlastResult {
  * was consulted and declined" are different things, and a boolean would force
  * them to look the same the moment the second one exists.
  */
-export type AiState = "disabled";
+export type AiState =
+  | "disabled"
+  | "unavailable"
+  | "failed"
+  | "answered";
 
 /**
  * An answer about one artefact, assembled from derived evidence alone.
@@ -234,6 +239,29 @@ export interface AskAnswer {
    * Empty is an answer, not a failure.
    */
   entries: EvidenceRecord[];
+  /**
+   * The model's explanation. Absent unless `ai` is `"answered"`.
+   *
+   * Only ever a validated answer: Rust rejects the whole answer if any
+   * citation fails, so there is no partially checked state to render.
+   */
+  explanation?: ExplanationRecord[];
+}
+
+/** One explanation and the evidence it quoted. */
+export interface ExplanationRecord {
+  /** The explanation, byte for byte as the provider produced it. */
+  text: string;
+  /** The evidence behind it. Never empty. */
+  citations: CitationRecord[];
+}
+
+/** One quoted piece of evidence. */
+export interface CitationRecord {
+  /** The edge whose evidence is quoted. */
+  edge: number;
+  /** The quotation, byte for byte from that edge's evidence. */
+  text: string;
 }
 
 /** A named group of nodes. */
