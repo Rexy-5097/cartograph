@@ -31,6 +31,15 @@ cartograph-graph.workspace = true
 # bytes it did not see.
 serde.workspace = true
 serde_json.workspace = true
+# M16 Slice 5 step 6: the HTTP client, and the only one in the workspace.
+# ADR-0021 Amendment 3 decision C2, accepted 2026-09-05: ureq 3.4, blocking,
+# over rustls. Default features and nothing added -- in particular `json` stays
+# OFF, so this repository keeps ownership of the exact bytes it sends.
+#
+# Blocking is architecture, not taste: the desktop and the whole synchronous
+# core path use no async Rust, and an async client would push a runtime into
+# that path to serve one request per user gesture.
+ureq = { workspace = true }
 
 [lints]
 workspace = true

@@ -71,6 +71,13 @@ rmcp = { version = "3.2", default-features = false }
 # added at the milestone that actually needs it, per the dependency policy.
 tokio = { version = "1.53", default-features = false }
 
+# M16: the HTTP client for ASK, reachable only from cartograph-ask so the CLI
+# and the MCP server stay incapable of network egress by the dependency graph
+# (ADR-0021 Amendment 3, decision C3). Default features: `rustls` for TLS and
+# `gzip`; `json` is deliberately NOT enabled, because the request bytes are
+# built and checked in this repository.
+ureq = "3.4"
+
 cartograph-core = { path = "crates/cartograph-core", version = "0.1.0" }
 cartograph-graph = { path = "crates/cartograph-graph", version = "0.1.0" }
 cartograph-pipeline = { path = "crates/cartograph-pipeline" }

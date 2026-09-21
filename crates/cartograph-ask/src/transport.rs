@@ -200,9 +200,10 @@ impl fmt::Debug for HttpResponse {
 /// | `ureq` | here |
 /// |---|---|
 /// | `BadUri`, `Http`, `BodyExceedsLimit`, `RedirectFailed`, `TooManyRedirects` | [`Request`](Self::Request) |
-/// | `ConnectionFailed`, `HostNotFound`, `Tls`, `Rustls`, `NativeTls`, `TlsRequired` | [`Connect`](Self::Connect) |
-/// | `Timeout` | [`Timeout`](Self::Timeout) |
-/// | `Io`, `Protocol`, `LargeResponseHeader`, `Other` | [`Read`](Self::Read) |
+/// | `ConnectionFailed`, `HostNotFound`, `Tls`, `Rustls`, `TlsRequired` | [`Connect`](Self::Connect) |
+/// | `Io` whose kind is `ConnectionRefused` and its neighbours | [`Connect`](Self::Connect) — a refused connection arrives as `Io`, not as `ConnectionFailed` |
+/// | `Timeout`, `Io(TimedOut)` | [`Timeout`](Self::Timeout) |
+/// | `Protocol`, `LargeResponseHeader`, `Other`, other `Io` | [`Read`](Self::Read) |
 /// | `StatusCode` | [`Status`](Self::Status), and only via [`HttpResponse::require_success`] |
 ///
 /// Coarser than `ureq`'s on purpose. A caller can retry, degrade, or tell the
