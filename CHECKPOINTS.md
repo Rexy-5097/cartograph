@@ -453,6 +453,174 @@ Provisional predecessor `cartograph-m05-rc1` remains available.
 
 ---
 
+## M16 — ASK — explanation over subgraph evidence
+
+| Field | Value |
+|---|---|
+| Status | **ACCEPTED** |
+| Accepted | 2026-09-22 by the project owner |
+| Base | `cartograph-m15` — commit `7d0c7f9` |
+| Contribution model | Open-source fork: `ronitsaha11/cartograph` → `Rexy-5097/cartograph` |
+| Pull requests | [#46](https://github.com/Rexy-5097/cartograph/pull/46) … [#67](https://github.com/Rexy-5097/cartograph/pull/67) — twenty-two, listed below |
+| Scope ADR | [ADR-0021](docs/adr/ADR-0021-ask-boundary-and-citation-contract.md), with Amendments 1–5 |
+| **Accepted checkpoint** | **`cartograph-m16`** — merge commit `c9cde1b`, immutable |
+| Live-provider evidence | One real Groq request through the production path, on a developer's machine |
+
+### Delivered in five slices, plus the ADRs each one needed first
+
+| Slice | PR | Merge | What landed |
+|---|---|---|---|
+| 1 — evidence bundle | [#47](https://github.com/Rexy-5097/cartograph/pull/47) | `0dcd5cb` | `EvidenceBundle` and the citation check |
+| 2 — degraded ASK | [#48](https://github.com/Rexy-5097/cartograph/pull/48) | `e877b55` | The answer with no model, built before anything could weaken it |
+| 3 — tracing redaction | [#49](https://github.com/Rexy-5097/cartograph/pull/49) | `a234c7e` | Tracing-layer redaction |
+| 4 — opt-in and credentials | [#51](https://github.com/Rexy-5097/cartograph/pull/51) | `41323eb` | Per-repository ASK opt-in and the `CredentialStore` boundary |
+| 5.1 — `Secret` | [#55](https://github.com/Rexy-5097/cartograph/pull/55) | `26af764` | `Secret` moved into `cartograph-core` |
+| 5.2 — provider boundary | [#57](https://github.com/Rexy-5097/cartograph/pull/57) | `83ba7a7` | `cartograph-ask`: the `Provider` trait and `validate` |
+| 5.3 — wire types | [#58](https://github.com/Rexy-5097/cartograph/pull/58) | `3c212c6` | Groq request and response types, offline |
+| 5.4 — transport seam | [#59](https://github.com/Rexy-5097/cartograph/pull/59) | `50f3cba` | The `Transport` trait, and a mock that panics if called |
+| 5.5 — Groq provider | [#60](https://github.com/Rexy-5097/cartograph/pull/60) | `4009fa1` | `GroqProvider` over the seam |
+| 5.6 — `ureq` transport | [#61](https://github.com/Rexy-5097/cartograph/pull/61) | `35bb456` | The workspace's only HTTP client |
+| 5.7 — keychain | [#63](https://github.com/Rexy-5097/cartograph/pull/63) | `9355e8e` | The OS keychain credential store |
+| 5.8 — desktop wiring | [#65](https://github.com/Rexy-5097/cartograph/pull/65) | `1356a4b` | `ask_explain`, the panel and the four gates |
+| 5.9 — live validation | [#66](https://github.com/Rexy-5097/cartograph/pull/66) | `bfca6e6` | The `#[ignore]`d harness and its recorded run |
+| prerequisite | [#67](https://github.com/Rexy-5097/cartograph/pull/67) | `c9cde1b` | `version::MILESTONE` and `current_milestone` advanced together |
+
+ADR-0021 landed as [#46](https://github.com/Rexy-5097/cartograph/pull/46) (`74ba918`); its amendments as [#52](https://github.com/Rexy-5097/cartograph/pull/52)
+(`e119855`) and [#53](https://github.com/Rexy-5097/cartograph/pull/53) (`60e7c74`) for the keychain choice,
+[#54](https://github.com/Rexy-5097/cartograph/pull/54) (`1907e83`) for the provider and HTTP client, [#62](https://github.com/Rexy-5097/cartograph/pull/62)
+(`2e8aae9`) for keychain entry addressing and [#64](https://github.com/Rexy-5097/cartograph/pull/64) (`ffc52b3`) for the
+platform feature matrix. ADR-0020 Amendment 3 landed as [#50](https://github.com/Rexy-5097/cartograph/pull/50)
+(`e88226b`), and [#56](https://github.com/Rexy-5097/cartograph/pull/56) (`e6b4966`) fixed rustdoc links across the
+workspace.
+
+### Acceptance criterion
+
+*"ASK answers cite edge evidence verbatim; with AI disabled the feature degrades
+to showing the raw evidence; gates pass."*
+
+**PASS**, on all three clauses.
+
+#### "ASK answers cite edge evidence verbatim"
+
+Checked locally against the bundle that was actually sent, rather than trusted
+from the reply. `Answer` has private fields and no public constructor, so
+`cartograph_ask::validate` is the only way to obtain one — rendering an
+unvalidated answer is not an expressible program. One invalid citation rejects
+**the whole answer**, not the item, because a partially valid answer is the most
+dangerous output this feature could produce: it looks checked.
+
+The live run, through `ask::explain_with_os_keychain` and nothing else:
+
+| Observation | Result |
+|---|---|
+| Model | `openai/gpt-oss-120b` |
+| Explanation items | **2** |
+| Every item cited | **yes** |
+| Citations verbatim in the bundle | **yes** — byte-for-byte substrings of the evidence named |
+| Repository identity in the payload | **absent** — checked on the serialised wire form |
+| Credential deleted afterwards | **yes** — re-read to confirm |
+| ASK opt-in restored to off | **yes** — re-read to confirm |
+
+#### "With AI disabled the feature degrades to showing the raw evidence"
+
+`ask::explain` runs four ordered gates, and **every exit above the provider
+returns the derived evidence**:
+
+| Gate | Failure outcome | Request made? |
+|---|---|---|
+| Selection | `StaleSelection` / `UnknownNode` error | no |
+| Opt-in | `AiState::Disabled` — credential never read | no |
+| Credential | `AiState::Unavailable` | no |
+| Provider | `AiState::Failed`, evidence intact | attempted |
+
+The offline suites prove it with a transport that **panics if it is called**, so
+"no network when AI is disabled" is a test failure rather than a claim.
+
+### Gate results
+
+Run on Windows 11, `x86_64-pc-windows-msvc`, Rust 1.97.1, at `c9cde1b`.
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS |
+| `cargo clippy … --all-features -D warnings` | PASS — 0 warnings |
+| `cargo test --workspace` | PASS — **1170 passed, 0 failed, 32 ignored** across 70 binaries |
+| Milestone/version consistency | PASS — `the_reported_milestone_matches_the_project_ledger` |
+| Desktop shell (typecheck + vitest) | PASS — **102/102** across 7 files |
+| `cargo bench --workspace --no-run` | PASS |
+| `cargo doc --workspace --no-deps` | PASS — 0 warnings |
+| QG-001 … QG-009 | PASS — 9/9 |
+| AgentOS validator | PASS — 100/100 |
+| CI on #66 and #67 | PASS — 10 checks each |
+
+### Verification findings
+
+**The live validation took three attempts, and the first two failed in the
+developer's shell rather than in the product.** Windows PowerShell does not
+connect two native commands with an operating system pipe: it decodes the
+child's stdout and re-encodes it, adding a UTF-8 BOM and a line ending, and
+delivered UTF-16LE. UTF-16LE-encoded ASCII is **valid UTF-8**, so
+`read_to_string` accepted it and the interleaved NULs surfaced only when `http`
+refused a control character in a header value — reported as
+`transport/request-not-sent`, with no socket opened. The second attempt
+delivered six bytes beginning with `ESC`: a terminal's bracketed-paste marker.
+
+Both were located with a **synthetic ASCII sentinel and no credential**,
+measured rather than guessed: the same 14 bytes arrive as 14 through a POSIX
+pipe and as 19 through PowerShell's. Both were fixed by changing shells. No
+production code was changed in response to either, and the harness reports
+malformed input rather than repairing it.
+
+**A production defect was found during that diagnosis and deliberately not
+fixed here.** On Windows a DNS failure arrives as
+`ureq::Error::Io(ErrorKind::Uncategorized)` and never as `HostNotFound`, so
+`ureq_transport::categorise` maps it to `TransportError::Read` — *"the
+provider's reply could not be read"* for a provider that was never reached. It
+changes nothing a user sees, because the error is discarded at the desktop
+boundary, and no acceptance criterion requires it. Left as a follow-up rather
+than carried into this milestone.
+
+**An early diagnostic hypothesis was wrong and was corrected by measurement.**
+A UTF-8 BOM in the credential was expected to be rejected as an illegal header
+value; `http` in fact accepts every byte from `0x20` up except `0x7F`, including
+bytes above `0x7F`, so a BOM would have been **sent**. Only a control character
+stops the request before a socket opens. The diagnostic checks the rule that
+actually applies.
+
+### Accepted limitations
+
+- **No way for an ordinary user to install a key.** `CredentialStore::set` has
+  **no production caller**: the eight Tauri commands are `validate_repository`,
+  `analyze_repository`, `edge_evidence`, `blast_radius`, `ask_evidence`,
+  `ask_explain`, `ask_enabled` and `set_ask_enabled`, and none accepts a
+  credential. A settings panel is a frozen v1 non-goal and an
+  environment-variable path is forbidden, so the only provisioning route is the
+  `#[ignore]`d harness that CI never runs. **Anyone without it gets the degraded
+  path** — which RULE 013 requires to be fully useful, and which is what this
+  milestone built first.
+- **One live sample.** One request, one machine, one model, one tree — the
+  parser fixtures, chosen because they are small and public. Not a measurement
+  of answer quality, not a claim about any other repository, and not evidence
+  about latency: the single observation was 1.977211s.
+- **The answer is checked, not reproducible.** Groq converts `temperature: 0` to
+  `1e-8` server-side, so identical requests may produce different sentences.
+  Determinism belongs to the analysis; the explanation is validated.
+- **TLS trust anchors are bundled.** `webpki-roots` is compiled in, so the trust
+  store is updated by a Cartograph release rather than by the operating system.
+- **`rustls` is not "pure Rust" here.** The `ring` provider contains C and
+  assembly. The accurate claim is that no system TLS library is relied on — no
+  `schannel`, no Secure Transport, no OpenSSL.
+- **A pruned opt-in can orphan a credential.** `OptIns::prune_missing` may forget
+  a locator→identity record while the secret stays in the keychain. ADR-0021
+  Amendment 4 records the orphan rather than closing it; automatic cleanup is a
+  lifecycle decision for the slice that wires it.
+- **Evidence text crosses the boundary.** Repository-relative paths travel inside
+  evidence and `location`, because a verbatim citation cannot be checked against
+  text that was altered in transit (ADR-0021 Amendment 3, decision C4). Absolute
+  paths cannot: `SourceLocation` refuses them at construction.
+
+---
+
 ## M15 — MCP server
 
 | Field | Value |

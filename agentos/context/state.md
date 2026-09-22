@@ -7,28 +7,26 @@
 
 | Field | Value |
 |---|---|
-| Last accepted milestone | **M15 — MCP server** (accepted 2026-09-04) |
-| Status | M00–M14 **ACCEPTED**; M16 **implemented and merged**, live validation passed, milestone bookkeeping in progress — **not accepted** |
+| Last accepted milestone | **M16 — ASK** (accepted 2026-09-22) |
+| Status | M00–M16 **ACCEPTED**; M17 unlocked, no code written, no branch |
 | Branch | `main` |
-| Next permitted milestone | M16 — **unlocked**; M17 locked until M16 is accepted |
-| Last accepted checkpoint | `cartograph-m15` (immutable, commit `7d0c7f9`) |
+| Next permitted milestone | M17 — **unlocked**; it is the final milestone |
+| Last accepted checkpoint | `cartograph-m16` (immutable, commit `c9cde1b`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger now reads **M16**, and
-> `cartograph_cli::version::MILESTONE` moved with it — a unit test asserts the
-> two are equal, and the pair must advance in a pull request, because the
-> constant is product code and a bookkeeping commit may not touch it. It
-> advanced here, landing before the checkpoint: tagging a commit whose
-> `cartograph version` still reported M15 would mislabel it, exactly as PR #45
-> avoided for M14. `next_allowed_milestone` stays M16 until acceptance; M17 is
-> locked until then.
+> `current_milestone` in the ledger reads **M16** and stays there.
+> `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
+> so the two must move together — in a pull request, because the constant is
+> product code and a bookkeeping commit may not touch it. The pair advanced in
+> PR #67, which landed before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M15 would have mislabelled it. M17 is
+> unlocked by `next_allowed_milestone`, exactly as M16 was at M15's acceptance.
 
 ## What exists
 
-- **M16: IN PROGRESS — NOT ACCEPTED.** ASK, delivered so far as twenty
-  reviewed pull requests through the fork, #46 through #65 — implementation
-  slices interleaved with the ADR decisions each one needed first. Scope
-  recorded in
+- **M16: ACCEPTED** — ASK, delivered as twenty-two reviewed pull requests
+  through the fork, #46 through #67 — implementation slices interleaved with
+  the ADR decisions each one needed first. Scope recorded in
   [ADR-0021](../../docs/adr/ADR-0021-ask-boundary-and-citation-contract.md).
 
   **The one condition no offline test can prove has now been observed once.**
@@ -92,14 +90,19 @@
   No production code was changed in response to either, and the harness still
   refuses malformed input rather than repairing it.
 
-  **Merged.** PR #66 carried the harness and this record, and landed on `main`
-  as `bfca6e6` with all ten checks green. The `current_milestone` /
-  `cartograph_cli::version::MILESTONE` pair and the machine-readable twin
-  advance in the bookkeeping pull request that follows it.
+  **Accepted on its stated criterion** on 2026-09-22, checkpointed as
+  `cartograph-m16` on merge commit `c9cde1b`. The pair advanced in PR #67 and
+  the tag followed it, so `cartograph version` reports M16 at the tagged
+  commit.
 
-  **Remaining for acceptance:** human acceptance against the stated criterion,
-  and the `cartograph-m16` checkpoint tag. Neither has happened, and no tag
-  exists.
+  **Not delivered:** no way for an ordinary user to install a key. A settings
+  panel is a frozen v1 non-goal and an environment-variable path is forbidden,
+  so `CredentialStore::set` has no production caller and the only provisioning
+  route is the ignored test. Anyone without one gets the degraded path, which
+  is the path RULE 013 requires to be fully useful. Also outstanding: on
+  Windows a DNS failure is reported as an unreadable reply rather than an
+  unreachable host, found during this milestone's diagnosis and left as a
+  follow-up.
 
 - **M15: ACCEPTED** — the MCP server, delivered as three reviewed slices through
   the fork (PRs #38, #41, #43), a test-isolation fix (#44) and #45 for the
