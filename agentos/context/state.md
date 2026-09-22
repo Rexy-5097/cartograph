@@ -8,19 +8,20 @@
 | Field | Value |
 |---|---|
 | Last accepted milestone | **M15 — MCP server** (accepted 2026-09-04) |
-| Status | M00–M14 **ACCEPTED**; M16 **in progress** — Slices 1–5 merged through the fork, the live provider run observed, **not accepted** |
+| Status | M00–M14 **ACCEPTED**; M16 **implemented and merged**, live validation passed, milestone bookkeeping in progress — **not accepted** |
 | Branch | `main` |
 | Next permitted milestone | M16 — **unlocked**; M17 locked until M16 is accepted |
 | Last accepted checkpoint | `cartograph-m15` (immutable, commit `7d0c7f9`) |
 | Spec | Frozen V3, August 2026 |
 
-> `current_milestone` in the ledger reads **M15** and stays there.
-> `cartograph_cli::version::MILESTONE` is asserted equal to it by a unit test,
-> so the two must move together — in a pull request, because the constant is
-> product code and a bookkeeping commit may not touch it. The pair advanced in
-> PR #45, which landed before the checkpoint: tagging a commit whose
-> `cartograph version` still reported M14 would have mislabelled it. M16 is
-> unlocked by `next_allowed_milestone`, exactly as M15 was at M14's acceptance.
+> `current_milestone` in the ledger now reads **M16**, and
+> `cartograph_cli::version::MILESTONE` moved with it — a unit test asserts the
+> two are equal, and the pair must advance in a pull request, because the
+> constant is product code and a bookkeeping commit may not touch it. It
+> advanced here, landing before the checkpoint: tagging a commit whose
+> `cartograph version` still reported M15 would mislabel it, exactly as PR #45
+> avoided for M14. `next_allowed_milestone` stays M16 until acceptance; M17 is
+> locked until then.
 
 ## What exists
 
@@ -91,10 +92,14 @@
   No production code was changed in response to either, and the harness still
   refuses malformed input rather than repairing it.
 
-  **Remaining for acceptance:** the pull request carrying this harness merged,
-  human acceptance, the `current_milestone` / `MILESTONE` pair advanced in a
-  pull request, the machine-readable twin updated, and the `cartograph-m16`
-  checkpoint tag. None of those has happened.
+  **Merged.** PR #66 carried the harness and this record, and landed on `main`
+  as `bfca6e6` with all ten checks green. The `current_milestone` /
+  `cartograph_cli::version::MILESTONE` pair and the machine-readable twin
+  advance in the bookkeeping pull request that follows it.
+
+  **Remaining for acceptance:** human acceptance against the stated criterion,
+  and the `cartograph-m16` checkpoint tag. Neither has happened, and no tag
+  exists.
 
 - **M15: ACCEPTED** — the MCP server, delivered as three reviewed slices through
   the fork (PRs #38, #41, #43), a test-isolation fix (#44) and #45 for the
