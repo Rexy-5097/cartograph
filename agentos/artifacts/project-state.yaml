@@ -4,8 +4,8 @@ project: cartograph
 spec_version: V3
 spec_frozen: 2026-08
 
-current_milestone: M15
-status: ACCEPTED                # M15 accepted 2026-09-04; see milestones.M15
+current_milestone: M16
+status: IN_PROGRESS             # M16 is implemented on main and NOT accepted
 current_branch: main
 next_allowed_milestone: M16    # UNLOCKED - M15 accepted; M17 locked until M16 is accepted
 # `current_milestone` names the milestone this tree implements, and
@@ -13,17 +13,18 @@ next_allowed_milestone: M16    # UNLOCKED - M15 accepted; M17 locked until M16 i
 # (crates/cartograph-cli/src/version.rs). The two must always move together,
 # in a pull request, because the constant is product code.
 #
-# It read M14 through M14's acceptance. M15's slices are merged (PRs #38, #41
-# and #43, plus #44 isolating a test that raced on a shared temporary path), so
-# the tree implements M15 and the pair advanced in PR #45, landing before the
-# checkpoint so the tag could not name a commit whose `cartograph version`
-# still reported M14.
+# It read M15 through M15's acceptance. M16 is merged - twenty pull requests,
+# #46 through #66, implementation slices interleaved with the ADR decisions
+# each one needed first - so the tree now implements M16 and the pair advances
+# here. This is that pull request, landing before the checkpoint so the tag
+# cannot name a commit whose `cartograph version` still reports M15.
 #
-# `status` above describes `current_milestone`. M15 is accepted, so it reads
-# ACCEPTED, flipped together with milestones.M15.status at the acceptance step.
+# `status` above describes `current_milestone`, and it is IN_PROGRESS rather
+# than ACCEPTED precisely because M16 is not accepted. Acceptance flips it,
+# together with milestones.M16.status, and only then.
 #
-# It reads M15 and stays there through M15's acceptance. The pair advances in
-# the first M16 pull request, not in a bookkeeping commit.
+# `next_allowed_milestone` stays M16 until acceptance: M17 is locked until M16
+# is accepted, and it advances in the acceptance commit, not here.
 
 milestones:
   M00:
@@ -478,6 +479,32 @@ milestones:
       HARD GATE 3 and M13 received. Its 30-day period began only with M13's
       acceptance on 2026-09-03 and has not elapsed.
 
+  M16:
+    # Implementation is merged; acceptance has not happened. The status field
+    # in this ledger has only ever taken ACCEPTED or NOT_STARTED, and it flips
+    # to ACCEPTED at the formal acceptance step - not before. The comment
+    # carries what the two-value vocabulary cannot.
+    #
+    # The live-provider condition - the one no offline test can prove - was
+    # observed once, by a developer, on their own machine, through the
+    # production path and nothing else, and recorded in PR #66 and in
+    # ../context/state.md. What the run printed: model openai/gpt-oss-120b;
+    # 2 explanation items; every item cited; every citation verbatim in the
+    # bundle it was checked against; the serialised payload free of the
+    # repository identity; the credential deleted and the opt-in restored to
+    # off afterwards, both re-read to confirm. One request, one machine, one
+    # tree - not a measurement of answer quality and not a latency claim.
+    #
+    # No production credential surface was added, deliberately: no settings
+    # panel, no key field, no environment-variable path, no CLI path, no
+    # configuration entry. The provisioning step lives in an ignored test that
+    # CI never runs, so RULE 013 still holds on every path the product ships.
+    status: NOT_STARTED                   # NOT ACCEPTED; slices merged, see above
+    implementation: MERGED                # PRs #46-#66; ADR-0021 and amendments 1-5
+    pull_request: null
+    provisional_tag: null
+    accepted_tag: null
+
   M15:
     status: ACCEPTED
     accepted: 2026-09-04
@@ -539,35 +566,40 @@ last_checkpoint:                 # ADR-0010: the tag is the authority for its SH
   tag: cartograph-m15
   merge_commit: 7d0c7f9b0621fe4cbfac6d080fd021a5df6fb008
 
-gates:                           # main at 8690ebf, 2026-08-31, on Windows (QG-001..009)
+gates:                           # main bfca6e6 plus this bookkeeping change, 2026-09-22, Windows
   repository: PASS               # QG-001
   fmt: PASS                      # QG-002
   clippy: PASS                   # QG-003
-  tests: PASS                    # QG-004 - 622 passed, 0 failed, 10 ignored
+  tests: PASS                    # QG-004 - 1170 passed, 0 failed, 32 ignored
   security: PASS                 # QG-005
   architecture: PASS             # QG-006
   documentation: PASS            # QG-007
   milestone_acceptance: PASS     # QG-008
-  agentos_validator: PASS        # 98/100, 3 warnings - see agentos_validator below
-  ci: PASS                       # 8690ebf: all six required checks green
+  agentos_validator: PASS        # 100/100, 3 warnings - see agentos_validator below
+  ci: PASS                       # #66 at 07b2139: all ten checks green; merged as bfca6e6
 
 agentos_validator:
-  score: 98                      # ADR-0009 recorded 99/100 at M00
+  score: 100                     # ADR-0009 recorded 99/100 at M00; 98 at 8690ebf
   status: PASS
   warnings: 3
-  # Two are ADR-0009's deliberate omissions. The third is absent from upstream
-  # raptors-way as well, so it is not a Cartograph regression. The 99 -> 98
-  # difference is historical documentation drift, not a change in the
-  # framework: no AgentOS file was modified to raise or lower it.
+  # The three warnings are unchanged and still the same three files. Two are
+  # ADR-0009's deliberate omissions; the third is absent from upstream
+  # raptors-way as well, so it is not a Cartograph regression.
+  #
+  # The score moved 98 -> 100 without the framework changing:
+  # validate_agentos.py is byte-identical to 8690ebf and no checklist or
+  # artifact file was added, so the difference is documentation content, not
+  # tooling. It is recorded here rather than explained further, because the
+  # cause was not investigated.
   warning_detail:
     - production_validation/productivity_metrics.csv  # absent upstream too
     - .pre-commit-config.yaml                         # ADR-0009: not vendored
     - .devcontainer/devcontainer.json                 # ADR-0009: not vendored
 
 tests:
-  total: 622
+  total: 1170
   failed: 0
-  ignored: 10                    # opt-in real-repository and profiling harnesses
+  ignored: 32                    # opt-in real-repository, profiling and live-provider harnesses
 
 benchmarks:
   harness: ts_extraction, py_extraction, canonicalization, matching, evaluation and orm groups run
