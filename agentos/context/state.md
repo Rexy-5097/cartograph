@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Last accepted milestone | **M15 — MCP server** (accepted 2026-09-04) |
-| Status | M00–M14 **ACCEPTED**; M16 unlocked, no code written, no branch |
+| Status | M00–M14 **ACCEPTED**; M16 **in progress** — Slices 1–5 merged through the fork, the live provider run observed, **not accepted** |
 | Branch | `main` |
 | Next permitted milestone | M16 — **unlocked**; M17 locked until M16 is accepted |
 | Last accepted checkpoint | `cartograph-m15` (immutable, commit `7d0c7f9`) |
@@ -23,6 +23,78 @@
 > unlocked by `next_allowed_milestone`, exactly as M15 was at M14's acceptance.
 
 ## What exists
+
+- **M16: IN PROGRESS — NOT ACCEPTED.** ASK, delivered so far as twenty
+  reviewed pull requests through the fork, #46 through #65 — implementation
+  slices interleaved with the ADR decisions each one needed first. Scope
+  recorded in
+  [ADR-0021](../../docs/adr/ADR-0021-ask-boundary-and-citation-contract.md).
+
+  **The one condition no offline test can prove has now been observed once.**
+  A developer ran the `#[ignore]`d harness at
+  `crates/cartograph-desktop/tests/live_groq.rs` on their own machine, against
+  a real key held in the Windows Credential Manager, through the production
+  path and nothing else: `GrantedRepository::establish`, `KeychainStore`,
+  `ask::explain_with_os_keychain`, `GroqProvider` over `UreqTransport`. What
+  the run printed, verbatim:
+
+  | | |
+  |---|---|
+  | credential supplied | yes |
+  | repository grant established | yes |
+  | ASK opt-in enabled | yes |
+  | credential available | yes |
+  | model | `openai/gpt-oss-120b` |
+  | HTTP + parse + validate | yes |
+  | elapsed | 1.977211s |
+  | explanation items | 2 |
+  | every item cited | yes |
+  | citations verbatim in the bundle | yes |
+  | frontend payload safe | yes |
+  | credential deleted afterward | yes |
+  | ASK opt-in restored to off | yes |
+  | test result | ok — 1 passed, 0 failed |
+
+  **What that establishes.** A real provider answered through the shipped
+  assembly, and both halves of the citation contract held against a live
+  answer rather than a fixture: every item carried a citation, and every
+  citation was re-checked byte for byte against the evidence bundle that was
+  actually sent. The serialised payload did not contain the repository
+  identity. The `Drop` guard removed the credential and switched ASK back off,
+  and the harness re-read both to confirm it.
+
+  **What it does not establish, and is not claimed.** One request, one
+  machine, one model, one subject tree — the parser fixtures, chosen because
+  they are small and public. It is not a measurement of answer quality, not a
+  claim about any other repository, and not evidence about latency: 1.977211s
+  is a single sample. The harness is developer-only and `#[ignore]`d, so CI
+  never runs it and no automated check depends on it.
+
+  **No production credential surface was introduced, deliberately.** Nothing
+  the product ships can put a key into the keychain: no settings panel, no
+  key field, no environment-variable path, no CLI path, no configuration
+  entry. That gap is the frozen v1 scope, and the provisioning step therefore
+  lives in the ignored test rather than in the product. RULE 013 holds on
+  every path — with no key and no network the feature still returns the
+  derived evidence.
+
+  **Two earlier attempts failed in the developer's shell, not in the
+  product.** The first delivered a credential carrying NUL bytes, because
+  Windows PowerShell does not connect two native commands with an operating
+  system pipe: it decodes the child's stdout and re-encodes it, adding a UTF-8
+  BOM and a line ending. UTF-16LE-encoded ASCII is valid UTF-8, so nothing
+  downstream objected until `http` refused a control character in a header
+  value. The second delivered six bytes beginning with `ESC`, a terminal's
+  bracketed-paste marker. Both were located with a synthetic sentinel and no
+  credential, and both were fixed by changing shells rather than code — the
+  successful run used interactive Git Bash, whose pipe is byte-transparent.
+  No production code was changed in response to either, and the harness still
+  refuses malformed input rather than repairing it.
+
+  **Remaining for acceptance:** the pull request carrying this harness merged,
+  human acceptance, the `current_milestone` / `MILESTONE` pair advanced in a
+  pull request, the machine-readable twin updated, and the `cartograph-m16`
+  checkpoint tag. None of those has happened.
 
 - **M15: ACCEPTED** — the MCP server, delivered as three reviewed slices through
   the fork (PRs #38, #41, #43), a test-isolation fix (#44) and #45 for the
