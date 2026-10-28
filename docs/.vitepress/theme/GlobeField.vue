@@ -14,6 +14,7 @@
 // prefers-reduced-motion or `paused`, a single still frame.
 
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { pacer } from './motion'
 
 const props = withDefaults(defineProps<{ paused?: boolean }>(), { paused: false })
 
@@ -60,6 +61,18 @@ let dpr = 1
 // Each has a near and a far version, both opaque: a translucent far label let
 // the globe's flickering glyphs show through its text.
 const labelSprites = new Map<string, HTMLCanvasElement | null>()
+// The globe's glyphs are drawn once into a sheet, a cell for each glyph, size
+// and weight, and stamped from it. Setting ~560 glyphs as text every frame
+// cost more than everything else the globe draws.
+const SIZES = [8, 9, 10, 11, 12, 13, 14] // px; a glyph's size follows its depth
+const UNIQUE = [...new Set(GLYPHS)]
+const GLYPH_INDEX = new Map(UNIQUE.map((ch, i) => [ch, i]))
+let sheet: HTMLCanvasElement | null = null
+let cell = 0 // a sheet cell's side, device px
+// The tagline boxes the edges run to, measured on resize and when the fonts
+// load rather than every frame.
+let links: Array<{ box: Rect }> = []
+const pace = pacer()
 const cleanups: Array<() => void> = []
 
 const still = () => reducedMotion || props.paused
@@ -88,7 +101,60 @@ function resize() {
   ctx = c.getContext('2d')
   ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
   labelSprites.clear()
+  drawSheet()
+  measureTargets()
   populate(width < 640 ? 300 : 560)
+}
+
+/** Draw every glyph, at every size, in both weights, into the sheet. */
+function drawSheet() {
+  const s = document.createElement('canvas')
+  const g = s.getContext('2d')
+  if (!g) {
+    sheet = null
+    return
+  }
+  cell = Math.ceil(SIZES[SIZES.length - 1] * 1.5 * dpr)
+  s.width = cell * UNIQUE.length
+  s.height = cell * SIZES.length * 2
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  // Rows: the regular weight in pink at each size, then the bright weight in
+  // light pink at each size.
+  for (let bright = 0; bright < 2; bright++) {
+    g.fillStyle = `rgb(${bright ? LIGHT : PINK})`
+    SIZES.forEach((size, row) => {
+      g.font = `${bright ? 600 : 500} ${size * dpr}px "Geist Mono Variable", ui-monospace, monospace`
+      const y = (bright * SIZES.length + row) * cell + cell / 2
+      UNIQUE.forEach((ch, i) => g.fillText(ch, i * cell + cell / 2, y))
+    })
+  }
+  sheet = s
+}
+
+/** The tagline elements' boxes relative to the canvas, from layout, so the scroll's scale does not move them. */
+function measureTargets() {
+  const h = host.value
+  const section = h?.offsetParent as HTMLElement | null
+  if (!h || !section) {
+    links = []
+    return
+  }
+  links = []
+  for (const el of section.querySelectorAll<HTMLElement>('[data-globe-edge]')) {
+    let x = 0
+    let y = 0
+    let n: HTMLElement | null = el
+    while (n && n !== section) {
+      x += n.offsetLeft
+      y += n.offsetTop
+      n = n.offsetParent as HTMLElement | null
+    }
+    if (n !== section || el.offsetWidth === 0) continue
+    const l = x - h.offsetLeft
+    const t = y - h.offsetTop
+    links.push({ box: { l, t, r: l + el.offsetWidth, b: t + el.offsetHeight } })
+  }
 }
 
 /** A label's pill and text, near or far, drawn once at the canvas's pixel density. */
@@ -126,20 +192,6 @@ function labelSprite(text: string, far: boolean): HTMLCanvasElement | null {
   return sprite
 }
 
-/** The tagline elements this globe links to, and their boxes relative to the canvas. */
-function targets() {
-  const h = host.value
-  const section = h?.parentElement
-  if (!h || !section) return [] as Array<{ box: Rect; el: HTMLElement }>
-  const origin = h.getBoundingClientRect()
-  return [...section.querySelectorAll<HTMLElement>('[data-globe-edge]')]
-    .map((el) => {
-      const r = el.getBoundingClientRect()
-      return { el, box: { l: r.left - origin.left, t: r.top - origin.top, r: r.right - origin.left, b: r.bottom - origin.top } }
-    })
-    .filter((t) => t.box.r - t.box.l > 0)
-}
-
 function draw(time: number) {
   if (!ctx) return
   const g = ctx
@@ -158,7 +210,6 @@ function draw(time: number) {
   const R = portrait ? width * 0.3 : Math.min(width * 0.135, height * 0.25)
   const cx = width / 2
   const cy = height / 2
-  const links = targets()
   const boxes = links.map((l) => l.box)
   const behindText = (x: number, y: number) => boxes.some((b) => x > b.l - 12 && x < b.r + 12 && y > b.t - 8 && y < b.b + 8)
 
@@ -220,11 +271,8 @@ function draw(time: number) {
   const cb = Math.cos(TILT)
   const sb = Math.sin(TILT)
   const band = (((time * 0.00022) % 2.8) - 1.4) // a bright band falling down the face
-  g.textAlign = 'center'
-  g.textBaseline = 'middle'
-  // Grouped by font and colour (opacity quantised to 5% steps), so each group
-  // sets its font and fill once instead of once per glyph.
-  const groups = new Map<string, { font: string; style: string; glyphs: Array<{ ch: string; x: number; y: number }> }>()
+  // Each glyph is stamped from the sheet at its own opacity.
+  const size = cell / dpr
   for (const p of points) {
     const x1 = p.x * ca + p.z * sa
     const z1 = -p.x * sa + p.z * ca
@@ -238,27 +286,14 @@ function draw(time: number) {
     let alpha = 0.1 + 0.62 * near ** 1.6 + rain * 0.7
     if (z2 < 0) alpha *= 0.55
     if (behindText(sx, sy)) alpha *= 0.22
-    if (alpha < 0.04) continue
-    const bright = rain > 0.45
-    const size = Math.round(8 + 6 * near)
-    const a = Math.round(Math.min(1, alpha) * 20) / 20
-    const key = `${bright ? 1 : 0}|${size}|${a}`
-    let group = groups.get(key)
-    if (!group) {
-      group = {
-        font: `${bright ? 600 : 500} ${size}px "Geist Mono Variable", ui-monospace, monospace`,
-        style: `rgba(${bright ? LIGHT : PINK}, ${a})`,
-        glyphs: [],
-      }
-      groups.set(key, group)
-    }
-    group.glyphs.push({ ch: p.ch, x: sx, y: sy })
+    if (alpha < 0.04 || !sheet) continue
+    const bright = rain > 0.45 ? 1 : 0
+    const row = bright * SIZES.length + Math.round(6 * near) // sizes 8 to 14 px, by depth
+    const column = GLYPH_INDEX.get(p.ch) ?? 0
+    g.globalAlpha = Math.min(1, alpha)
+    g.drawImage(sheet, column * cell, row * cell, cell, cell, sx - size / 2, sy - size / 2, size, size)
   }
-  for (const { font, style, glyphs } of groups.values()) {
-    g.font = font
-    g.fillStyle = style
-    for (const q of glyphs) g.fillText(q.ch, q.x, q.y)
-  }
+  g.globalAlpha = 1
 
   // Edges from the globe's rim to each tagline, with a packet travelling out.
   links.forEach(({ box }, k) => {
@@ -310,7 +345,11 @@ function draw(time: number) {
 }
 
 function loop(time: number) {
-  draw(time)
+  if (pace.due(time)) {
+    const start = performance.now()
+    draw(time)
+    pace.took(performance.now() - start)
+  }
   frame = visible && !still() ? requestAnimationFrame(loop) : 0
 }
 
@@ -378,9 +417,11 @@ onMounted(() => {
   cleanups.push(() => window.removeEventListener('scroll', onScroll))
 
   // Redraw once the mono face has loaded, so the glyphs are the right shape
-  // (and the labels are drawn in it).
+  // (and the labels are drawn in it), and measure the taglines in it.
   document.fonts?.ready.then(() => {
     labelSprites.clear()
+    drawSheet()
+    measureTargets()
     draw(performance.now())
   })
   draw(performance.now())

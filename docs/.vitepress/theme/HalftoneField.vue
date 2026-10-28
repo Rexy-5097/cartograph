@@ -21,6 +21,7 @@
 // (but still pointer-responsive) under prefers-reduced-motion or `paused`.
 
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { pacer } from './motion'
 
 const props = withDefaults(
   defineProps<{ variant?: 'field' | 'dome'; dot?: string; cross?: string; accent?: string; paused?: boolean }>(),
@@ -84,12 +85,27 @@ let bloomStart = -1
 const pointer = { x: 0, y: 0, active: false }
 // The surveyor: where the idle crosshair is, where it is going, and how.
 const guide = { x: 0, y: 0, fromX: 0, fromY: 0, toX: 0, toY: 0, phase: 'none' as 'none' | 'glide' | 'hop' | 'hold', start: 0, alpha: 0 }
+// The grid's dots that can ever be drawn (inside the disc, outside every
+// clearing), with what does not change from frame to frame worked out once,
+// on resize or when the clearings move: position, distance from the centre in
+// full radii, the clearings' fade, the angle from the centre, and the resting
+// density at full size.
+let dotCount = 0
+let dotX = new Float32Array(0)
+let dotY = new Float32Array(0)
+let dotR = new Float32Array(0)
+let dotClear = new Float32Array(0)
+let dotAngle = new Float32Array(0)
+let dotRest = new Float32Array(0)
 // One frame's dots, gathered before drawing so each colour is drawn in one
 // pass: position, size, and `kind` (bit 0: a cross; the rest: its colour step).
 let xs = new Float32Array(0)
 let ys = new Float32Array(0)
 let sizes = new Float32Array(0)
 let kinds = new Uint8Array(0)
+// The colour of each step from `dot` to `accent`, kept until either changes.
+let palette = { key: '', colours: [] as string[] }
+const pace = pacer()
 const cleanups: Array<() => void> = []
 
 const still = () => reducedMotion || props.paused
@@ -167,16 +183,57 @@ function resize() {
   c.style.height = `${height}px`
   ctx = c.getContext('2d')
   ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
+  measureClears()
+  layoutDots()
+  guide.phase = 'none'
+}
+
+/** The disc's centre and full radius for the current size and variant. */
+function geometry() {
+  const dome = props.variant === 'dome'
+  // A dome may fill its box's height; a field keeps its disc a little inside.
+  const full = dome ? Math.min(width * 0.42, height * 0.98) : Math.min(width, height * 1.25) * 0.47
+  return { dome, cx: width / 2, cy: dome ? 0 : height / 2, full }
+}
+
+/** Find the dots that can ever be drawn, and work out what is fixed about each. */
+function layoutDots() {
+  const { cx, cy, full } = geometry()
   const capacity = (Math.ceil(width / step) + 1) * (Math.ceil(height / step) + 1)
   if (xs.length < capacity) {
+    dotX = new Float32Array(capacity)
+    dotY = new Float32Array(capacity)
+    dotR = new Float32Array(capacity)
+    dotClear = new Float32Array(capacity)
+    dotAngle = new Float32Array(capacity)
+    dotRest = new Float32Array(capacity)
     xs = new Float32Array(capacity)
     ys = new Float32Array(capacity)
     sizes = new Float32Array(capacity)
     kinds = new Uint8Array(capacity)
   }
-  measureClears()
-  guide.phase = 'none'
+  let n = 0
+  for (let y = step / 2; y < height; y += step) {
+    for (let x = step / 2; x < width; x += step) {
+      // Beyond the rim at full size is beyond it while the disc blooms, too.
+      const r = Math.hypot(x - cx, y - cy) / full
+      if (r > SHAPE.rimEnd) continue
+      const clear = clears.length ? smooth(0, CLEAR_FALLOFF, clearDistance(x, y)) : 1
+      if (clear <= 0) continue
+      dotX[n] = x
+      dotY[n] = y
+      dotR[n] = r
+      dotClear[n] = clear
+      dotAngle[n] = Math.atan2(y - cy, x - cx)
+      dotRest[n] = shape(r) * clear
+      n++
+    }
+  }
+  dotCount = n
 }
+
+/** The disc's density at `r` full radii: sparse centre, dense ring, fading rim. */
+const shape = (r: number) => smooth(SHAPE.ringStart, SHAPE.ringFull, r) * (1 - smooth(SHAPE.rimStart, SHAPE.rimEnd, r))
 
 /** A point in the dense ring for the surveyor, clear of content; `from` asks for one near it. */
 function waypoint(cx: number, cy: number, full: number, from?: Pt): Pt | null {
@@ -256,14 +313,9 @@ function draw(time: number) {
   const g = ctx
   g.clearRect(0, 0, width, height)
 
-  const dome = props.variant === 'dome'
-  const cx = width / 2
-  const cy = dome ? 0 : height / 2
-  // A dome may fill its box's height; a field keeps its disc a little inside.
-  const full = dome ? Math.min(width * 0.42, height * 0.98) : Math.min(width, height * 1.25) * 0.47
+  const { dome, cx, cy, full } = geometry()
   const grown = bloom(performance.now())
   if (grown <= 0) return
-  const radius = full * grown
   const moving = !still()
   // The surveyor works once the disc is grown, and only while the pointer is away.
   const surveying = moving && grown >= 1 && !pointer.active
@@ -276,47 +328,52 @@ function draw(time: number) {
   const fade = 1 - smooth(PULSE.fadeFrom, 1, pulse)
 
   let count = 0
-  for (let y = step / 2; y < height; y += step) {
-    for (let x = step / 2; x < width; x += step) {
-      const r = Math.hypot(x - cx, y - cy) / radius
-      if (r > SHAPE.rimEnd) continue
-      let v = smooth(SHAPE.ringStart, SHAPE.ringFull, r) * (1 - smooth(SHAPE.rimStart, SHAPE.rimEnd, r))
-      if (moving) v *= 1 - RIPPLE.depth + RIPPLE.depth * Math.sin(r * RIPPLE.waves - time * RIPPLE.speed)
-      if (pointer.active) v *= smooth(PROBE.inner, PROBE.outer, Math.hypot(x - pointer.x, y - pointer.y))
-      else if (surveying && guide.alpha > 0) {
-        const near = 1 - smooth(SURVEY_PROBE.inner, SURVEY_PROBE.outer, Math.hypot(x - guide.x, y - guide.y))
-        v *= 1 - near * guide.alpha
-      }
-      if (clears.length) v *= smooth(0, CLEAR_FALLOFF, clearDistance(x, y))
-      if (v < SHAPE.cutoff) continue
-
-      // Lit by the sweep or the pulse. Lighting scales a dot that is already
-      // there, so where the dots have parted, nothing lights.
-      let lit = 0
-      if (moving) {
-        if (dome) {
-          const d = front - r // > 0 once the front has passed
-          lit = (d >= 0 ? Math.max(0, 1 - d / PULSE.trail) : Math.max(0, 1 + d / PULSE.lead)) * fade
-        } else {
-          let lag = (beam - Math.atan2(y - cy, x - cx)) % TAU
-          if (lag < 0) lag += TAU
-          lit = lag < SWEEP.trail ? (1 - lag / SWEEP.trail) ** 2 : 0
-        }
-        v = Math.min(1, v * (1 + LIT.grow * lit))
-      }
-      const shade = lit < LIT.from ? 0 : 1 + Math.min(LIT.steps - 1, Math.floor(((lit - LIT.from) / (1 - LIT.from)) * LIT.steps))
-      xs[count] = x
-      ys[count] = y
-      sizes[count] = v * step * SHAPE.dotSize
-      kinds[count] = (shade << 1) | (v > SHAPE.crossFrom ? 1 : 0)
-      count++
+  for (let i = 0; i < dotCount; i++) {
+    const x = dotX[i]
+    const y = dotY[i]
+    // While the disc blooms, its radius grows to full and each dot's place in
+    // the disc moves outward to its resting one.
+    const r = dotR[i] / grown
+    if (r > SHAPE.rimEnd) continue
+    let v = grown >= 1 ? dotRest[i] : shape(r) * dotClear[i]
+    if (moving) v *= 1 - RIPPLE.depth + RIPPLE.depth * Math.sin(r * RIPPLE.waves - time * RIPPLE.speed)
+    if (pointer.active) v *= smooth(PROBE.inner, PROBE.outer, Math.hypot(x - pointer.x, y - pointer.y))
+    else if (surveying && guide.alpha > 0) {
+      const near = 1 - smooth(SURVEY_PROBE.inner, SURVEY_PROBE.outer, Math.hypot(x - guide.x, y - guide.y))
+      v *= 1 - near * guide.alpha
     }
+    if (v < SHAPE.cutoff) continue
+
+    // Lit by the sweep or the pulse. Lighting scales a dot that is already
+    // there, so where the dots have parted, nothing lights.
+    let lit = 0
+    if (moving) {
+      if (dome) {
+        const d = front - r // > 0 once the front has passed
+        lit = (d >= 0 ? Math.max(0, 1 - d / PULSE.trail) : Math.max(0, 1 + d / PULSE.lead)) * fade
+      } else {
+        let lag = (beam - dotAngle[i]) % TAU
+        if (lag < 0) lag += TAU
+        lit = lag < SWEEP.trail ? (1 - lag / SWEEP.trail) ** 2 : 0
+      }
+      v = Math.min(1, v * (1 + LIT.grow * lit))
+    }
+    const shade = lit < LIT.from ? 0 : 1 + Math.min(LIT.steps - 1, Math.floor(((lit - LIT.from) / (1 - LIT.from)) * LIT.steps))
+    xs[count] = x
+    ys[count] = y
+    sizes[count] = v * step * SHAPE.dotSize
+    kinds[count] = (shade << 1) | (v > SHAPE.crossFrom ? 1 : 0)
+    count++
   }
 
   // One pass per colour: squares filled, crosses stroked.
+  const key = `${props.dot}|${props.accent}`
+  if (palette.key !== key) {
+    palette = { key, colours: Array.from({ length: LIT.steps + 1 }, (_, s) => (s ? mix(props.dot, props.accent, s / LIT.steps) : props.dot)) }
+  }
   g.lineWidth = 1
   for (let shade = 0; shade <= LIT.steps; shade++) {
-    const colour = shade === 0 ? props.dot : mix(props.dot, props.accent, shade / LIT.steps)
+    const colour = palette.colours[shade]
     g.fillStyle = colour
     g.strokeStyle = colour
     g.beginPath()
@@ -394,7 +451,11 @@ function reticle(g: CanvasRenderingContext2D, time: number) {
 }
 
 function loop(time: number) {
-  draw(time)
+  if (pace.due(time)) {
+    const start = performance.now()
+    draw(time)
+    pace.took(performance.now() - start)
+  }
   frame = visible && !still() ? requestAnimationFrame(loop) : 0
 }
 
@@ -448,6 +509,7 @@ onMounted(() => {
   const section = h.offsetParent as HTMLElement | null
   const clearing = new ResizeObserver(() => {
     measureClears()
+    layoutDots()
     guide.phase = 'none'
     if (still()) draw(0)
   })

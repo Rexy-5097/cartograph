@@ -110,8 +110,9 @@ const githubSlug = (s: string) =>
 // first paint, so the screen is there from the first frame instead of
 // flashing in after the page, and sets the class it is shown by. A timer
 // takes the class away after eight seconds whatever else happens (the screen
-// itself is done within six, waiting at most three for fonts), so a script
-// that fails can never leave the page covered. The storage key is the one
+// itself is done about five seconds after the page's script starts, waiting
+// at most three of them for fonts), so a script that fails can never leave
+// the page covered. The storage key is the one
 // Landing.vue's "Pause motion" control writes.
 const loadingScreen = `(() => {
   try {

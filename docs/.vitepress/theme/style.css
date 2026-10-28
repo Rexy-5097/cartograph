@@ -122,6 +122,15 @@
   color: var(--cg-black);
 }
 
+/* The landing page's panels' scroll progress (motion.ts, scrollScene). Only
+   the panel itself reads it, so it does not inherit: a change restyles the
+   panel, not everything inside it. */
+@property --rise {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
 /* ---------- Navigation ---------- */
 
 .VPNavBar .title {

@@ -12,11 +12,43 @@
 // `loading`, once built it sends packet after packet: the landing page's
 // loading screen, which lasts a few seconds and any input skips.
 //
-// Pure CSS and SVG, coloured by `currentColor`. All of it stops under
-// prefers-reduced-motion and the landing page's "Pause motion" (`.is-still`),
-// leaving the finished mark.
+// SVG and CSS, coloured by `currentColor`. The idle packet is a short
+// animation a timer starts, not an endless one: an endless CSS animation of
+// an SVG's parts runs on the main thread every frame, even while it holds
+// still between crossings. All of it stops under prefers-reduced-motion and
+// the landing page's "Pause motion" (`.is-still`), leaving the finished mark.
 
-withDefaults(defineProps<{ idle?: boolean; loading?: boolean }>(), { idle: false, loading: false })
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+
+const props = withDefaults(defineProps<{ idle?: boolean; loading?: boolean }>(), { idle: false, loading: false })
+
+// The idle packet: the first after `first` ms, then one every `every` ms,
+// each crossing taking `crossing` ms.
+const IDLE = { first: 2500, every: 8000, crossing: 1300 }
+const sending = ref(false)
+let timers: number[] = []
+
+onMounted(() => {
+  if (!props.idle || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const send = () => {
+    sending.value = true
+    timers.push(window.setTimeout(() => (sending.value = false), IDLE.crossing))
+  }
+  timers.push(
+    window.setTimeout(() => {
+      send()
+      timers.push(window.setInterval(send, IDLE.every))
+    }, IDLE.first),
+  )
+})
+
+onBeforeUnmount(() => {
+  timers.forEach((t) => {
+    clearTimeout(t)
+    clearInterval(t)
+  })
+  timers = []
+})
 
 // The edge, from the square's right side, down and up into the round node
 // (aimed at its centre, ending on its outline). pathLength makes dash lengths
@@ -25,7 +57,7 @@ const EDGE = 'M18.5 28.5 23.5 33.5 32.7 18.3'
 </script>
 
 <template>
-  <svg class="cg-mark" :class="{ 'is-idle': idle, 'is-loading': loading }" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+  <svg class="cg-mark" :class="{ 'is-sending': sending, 'is-loading': loading }" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
     <g class="cg-mark-build is-tl"><path class="cg-mark-corner is-tl" d="M4 14V4h10" /></g>
     <g class="cg-mark-build is-tr"><path class="cg-mark-corner is-tr" d="M34 4h10v10" /></g>
     <g class="cg-mark-build is-br"><path class="cg-mark-corner is-br" d="M44 34v10H34" /></g>
@@ -101,12 +133,14 @@ const EDGE = 'M18.5 28.5 23.5 33.5 32.7 18.3'
     animation: cg-mark-stroke 0.7s var(--cg-mark-ease) 0.7s backwards;
   }
 
-  .is-idle .cg-mark-packet {
-    animation: cg-mark-travel 8s ease-in-out 2.5s infinite;
+  /* An idle crossing, started by the timer above: the same packet and answer
+     as on hover. */
+  .is-sending .cg-mark-packet {
+    animation: cg-mark-send 0.8s ease-in-out 0.35s backwards;
   }
 
-  .is-idle .cg-mark-target {
-    animation: cg-mark-arrive 8s ease-out 2.5s infinite;
+  .is-sending .cg-mark-target {
+    animation: cg-mark-ping 1.2s ease-out;
   }
 
   .is-loading .cg-mark-packet {
@@ -168,41 +202,6 @@ const EDGE = 'M18.5 28.5 23.5 33.5 32.7 18.3'
 @keyframes cg-mark-stroke {
   from {
     stroke-dashoffset: 100;
-  }
-}
-
-/* Idle: most of the cycle nothing moves; then a packet crosses the edge and
-   the round node answers when it lands. */
-@keyframes cg-mark-travel {
-  0%,
-  80% {
-    stroke-dashoffset: 0;
-    opacity: 0;
-  }
-  81% {
-    opacity: 1;
-  }
-  93% {
-    stroke-dashoffset: -100;
-    opacity: 1;
-  }
-  95%,
-  100% {
-    stroke-dashoffset: -100;
-    opacity: 0;
-  }
-}
-
-@keyframes cg-mark-arrive {
-  0%,
-  92% {
-    transform: scale(1);
-  }
-  95% {
-    transform: scale(1.28);
-  }
-  100% {
-    transform: scale(1);
   }
 }
 

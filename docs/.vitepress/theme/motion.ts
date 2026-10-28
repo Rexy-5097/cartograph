@@ -10,29 +10,98 @@ type Stop = () => void
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
+// A canvas whose draws average more than `slow` ms (a quarter of a 60 Hz
+// frame) drops to 30 frames a second, and returns to 60 below `fast` ms.
+const PACE = { slow: 4, fast: 2.5 }
+
+/**
+ * Paces a canvas animation to about 60 frames a second on any display. On a
+ * 120 Hz screen it says to draw every other frame, on 240 Hz every fourth, so
+ * a decorative canvas costs no more than it would at 60 Hz and its cadence
+ * stays even. On a machine where drawing is slow (`took` reports each draw),
+ * it settles at 30 a second: steady motion rather than frames dropped at
+ * random. The animation's own clock comes from the frame time, so motion
+ * keeps its speed at any rate.
+ */
+export function pacer() {
+  let last = 0
+  let interval = 16.7
+  let count = 0
+  let cost = 0
+  let slow = false
+  return {
+    /** Whether this frame should draw. */
+    due(time: number) {
+      if (last) interval += (Math.min(100, time - last) - interval) * 0.1
+      last = time
+      return count++ % Math.max(1, Math.round((slow ? 33.3 : 16.7) / interval)) === 0
+    },
+    /** How long the last draw took, in ms. */
+    took(ms: number) {
+      cost += (ms - cost) * 0.1
+      if (cost > PACE.slow) slow = true
+      else if (cost < PACE.fast) slow = false
+    },
+  }
+}
+
+// Scroll-linked values ease toward where the scroll puts them over about this
+// many ms, so a mouse wheel's 100 px notches glide rather than jump.
+const SCROLL_EASE_MS = 90
+
 /**
  * Scroll-linked progress. Each `[data-scroll]` element under `root` gets a
- * `--p` custom property, recomputed once per frame while the page scrolls:
+ * `--p` custom property:
  *
  * - `top` — 0 while the element's top is at the viewport's top, 1 once it
  *   has scrolled one viewport height above it: progress away from a pinned
  *   hero, independent of how tall the content after it is.
  * - `enter` — 0 as the element's top enters at the bottom of the viewport, 1
  *   once it has risen to 35% from the top.
+ *
+ * A `top` element's children read its `--p`, so it is an ordinary, inherited
+ * custom property. An `enter` element is the only reader of its own value,
+ * so that is written as `--rise`, registered in style.css as not inherited:
+ * changing it restyles that one element, not the whole page inside it.
+ *
+ * Each frame reads every position first and only then writes: a write
+ * invalidates style, so reading after one would force a layout per element.
+ * A value is written only when it has changed, and it eases toward its
+ * target rather than jumping, running frames only until it settles.
  */
 export function scrollScene(root: HTMLElement, still: Still): Stop {
-  const items = [...root.querySelectorAll<HTMLElement>('[data-scroll]')]
+  const items = [...root.querySelectorAll<HTMLElement>('[data-scroll]')].map((el) => {
+    const top = el.dataset.scroll === 'top'
+    return { el, top, name: top ? '--p' : '--rise', target: 0, shown: -1 }
+  })
   let frame = 0
+  let last = 0
 
-  const update = () => {
+  const update = (now: number) => {
     frame = 0
-    if (still()) return
-    const vh = window.innerHeight
-    for (const el of items) {
-      const r = el.getBoundingClientRect()
-      const p = el.dataset.scroll === 'top' ? clamp(-r.top / vh, 0, 1) : clamp((vh - r.top) / (vh * 0.65), 0, 1)
-      el.style.setProperty('--p', p.toFixed(4))
+    if (still()) {
+      last = 0
+      return
     }
+    const vh = window.innerHeight
+    for (const it of items) {
+      const r = it.el.getBoundingClientRect()
+      it.target = it.top ? clamp(-r.top / vh, 0, 1) : clamp((vh - r.top) / (vh * 0.65), 0, 1)
+    }
+    const k = last ? 1 - Math.exp(-Math.min(64, now - last) / SCROLL_EASE_MS) : 1
+    last = now
+    let moving = false
+    for (const it of items) {
+      let next = it.shown < 0 ? it.target : it.shown + (it.target - it.shown) * k
+      if (Math.abs(it.target - next) < 0.0005) next = it.target
+      else moving = true
+      if (next !== it.shown) {
+        it.el.style.setProperty(it.name, next.toFixed(4))
+        it.shown = next
+      }
+    }
+    if (moving) frame = requestAnimationFrame(update)
+    else last = 0
   }
   const request = () => {
     if (!frame) frame = requestAnimationFrame(update)
@@ -40,12 +109,26 @@ export function scrollScene(root: HTMLElement, still: Still): Stop {
 
   window.addEventListener('scroll', request, { passive: true })
   window.addEventListener('resize', request)
-  update()
+  update(performance.now())
   return () => {
     cancelAnimationFrame(frame)
     window.removeEventListener('scroll', request)
     window.removeEventListener('resize', request)
   }
+}
+
+/**
+ * Pauses the CSS animations inside each `[data-idle]` element while it is off
+ * screen. The page's looping animations move parts of inline SVGs, which the
+ * browser animates on the main thread, every frame, whether or not anyone
+ * can see them.
+ */
+export function idleOffscreen(root: HTMLElement): Stop {
+  const io = new IntersectionObserver((entries) => {
+    for (const entry of entries) entry.target.classList.toggle('is-offscreen', !entry.isIntersecting)
+  })
+  root.querySelectorAll('[data-idle]').forEach((node) => io.observe(node))
+  return () => io.disconnect()
 }
 
 /** Adds `is-in` to each `[data-reveal]` and `[data-split]` element once it enters. */
@@ -164,16 +247,26 @@ export function magnetic(root: HTMLElement, still: Still): Stop {
   }
 }
 
-/** The marquee runs faster while the page is scrolled, then eases back. */
+/**
+ * The marquee runs faster while the page is scrolled, then eases back. Its
+ * animations are looked up once: getAnimations() brings every style up to
+ * date first, which done every frame forced a style recalculation per frame.
+ */
 export function marqueeVelocity(lists: HTMLElement[], still: Still): Stop {
   let last = window.scrollY
   let boost = 0
+  let rate = 1
   let frame = 0
-  const animations = () => lists.flatMap((l) => l.getAnimations())
+  let animations: Animation[] = []
 
   const settle = () => {
     boost *= 0.92
-    for (const a of animations()) a.playbackRate = 1 + boost
+    if (!animations.length) animations = lists.flatMap((l) => l.getAnimations())
+    const next = 1 + (boost > 0.01 ? boost : 0)
+    if (Math.abs(next - rate) > 0.005) {
+      rate = next
+      for (const a of animations) a.playbackRate = rate
+    }
     frame = boost > 0.01 ? requestAnimationFrame(settle) : 0
   }
   const scroll = () => {

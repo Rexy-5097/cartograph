@@ -7,6 +7,57 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — the landing page moves the same, for a fraction of the work
+
+The landing page's motion kept the main thread busy even with nothing
+happening: 345 to 445 ms of every second, at rest. On a slower machine that
+became dropped frames everywhere. The same motion now costs about a third as
+much at rest:
+
+- **Scrolling.** The scroll handler read each element's position and wrote
+  its progress in turn, forcing a layout per element per frame. It now reads
+  every position first, then writes, and only what changed.
+- **Panels.** The two rising panels' progress was an inherited CSS variable,
+  so every change restyled everything inside them, most of the page. It is
+  now `--rise`, registered as not inherited, and restyles only the panel.
+- **Wheel steps.** Scroll-linked values now ease toward their target over
+  about 90 ms, so a mouse wheel's 100 px steps glide instead of jumping.
+- **Canvases.** The globe and the dot fields draw at most 60 times a second
+  on any display; on 120 Hz they drew 120. Each times its own drawing: where
+  a frame costs more than 4 ms, it settles at a steady 30 instead of
+  dropping frames at random.
+- **The globe.** Its glyphs are stamped from a sheet drawn once, not set as
+  text, about 560 times a frame. The taglines its edges run to are measured
+  on resize, not every frame.
+- **The dot fields.** What is fixed about each dot (its distance and angle
+  from the centre, the clearing's fade) is worked out once, on resize, not
+  every frame. Dots that can never be drawn are left out.
+- **Looping animations.** The step icons', the orbit's, the marquee's and the
+  badge's loops pause while off screen. These parts of inline SVGs animate
+  on the main thread, every frame, seen or not. The mark's idle packet is
+  now a short animation a timer starts every 8 seconds, so between crossings
+  nothing runs at all.
+- **The loading screen.** The mark waits to build until the page's script
+  is running, so starting up can no longer stall it halfway. The globe
+  under the screen holds still until it clears.
+
+Measured in headless Chrome 1440 × 900 at 120 Hz, the production build
+before and after, the same probe for both. "Busy" is main-thread task time
+per second; "late" is frames over 1.5 times the display's interval:
+
+| Scenario | Busy, normal CPU | Late, normal CPU | Late, CPU slowed 4× |
+|---|---|---|---|
+| Load and intro | 443 → 232 ms/s | 0.4% → 0.3% | 100% → 11% |
+| At rest, hero | 419 → 144 ms/s | 0% → 0% | 94% → 0.3% |
+| Wheel through the page | 456 → 200 ms/s | 5.6% → 3.1% | 95% → 41% |
+| At rest, field | 345 → 99 ms/s | 0% → 0% | 66% → 0% |
+| At rest, dome | 372 → 104 ms/s | 0% → 0% | 78% → 0% |
+| Wheel, hero to statement | 299 → 177 ms/s | 2.7% → 0.6% | 77% → 36% |
+
+The longest frame while wheeling through the page went from 58.6 ms to
+33.4 ms at normal speed. The probe is a Node script driving Chrome over the
+DevTools protocol, with no new dependency; it is not part of the repository.
+
 ### Added — a loading screen that hands the mark to the header
 
 A full load of the home page now opens on a loading screen:

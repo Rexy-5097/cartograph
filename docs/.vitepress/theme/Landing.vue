@@ -15,7 +15,7 @@ import CartographMark from './CartographMark.vue'
 import HalftoneField from './HalftoneField.vue'
 import GlobeField from './GlobeField.vue'
 import SplitWords from './SplitWords.vue'
-import { counters, cursor, magnetic, marqueeVelocity, reveals, scrollScene } from './motion'
+import { counters, cursor, idleOffscreen, magnetic, marqueeVelocity, reveals, scrollScene } from './motion'
 
 const REPO = 'https://github.com/Rexy-5097/cartograph'
 
@@ -196,12 +196,15 @@ const loader = ref(true)
 const arriving = ref(false)
 const lockup = ref<HTMLElement | null>(null)
 const loaderBg = ref<HTMLElement | null>(null)
+/** The page's script is running: the loading screen's mark may build. */
+const loaderReady = ref(false)
 
-// The loading screen's timing, ms. The mark builds for at least `build` from
-// navigation start while the fonts arrive, but never past `cap`; the name
+// The loading screen's timing, ms. The mark builds once the page's script is
+// running, so the page starting up cannot stall it halfway; it builds for at
+// least `build` while the fonts arrive, but never waits past `cap`. The name
 // writes out over `name`; a beat of `hold`; the name retracts over `shrink`;
 // then the mark alone moves into the header over `move` as the screen clears.
-const INTRO = { build: 1300, cap: 3000, name: 650, hold: 350, shrink: 550, move: 850 }
+const INTRO = { build: 1400, cap: 3000, name: 650, hold: 350, shrink: 550, move: 850 }
 // Entrances ease out; the retraction and the move ease in and out, so the
 // mark sets off gently and settles gently.
 const INTRO_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
@@ -276,8 +279,9 @@ async function playIntro() {
   try {
     // Loading: the mark builds itself (in CSS, from the first paint) while the
     // fonts arrive, so the name below is set in its own face.
-    const built = Promise.all([document.fonts?.ready, pause(INTRO.build - performance.now())])
-    await Promise.race([built, pause(INTRO.cap - performance.now())])
+    loaderReady.value = true
+    const built = Promise.all([document.fonts?.ready, pause(INTRO.build)])
+    await Promise.race([built, pause(INTRO.cap)])
     if (skipped) return
 
     // The name writes out, and the pair moves to be centred together.
@@ -380,6 +384,7 @@ onMounted(async () => {
     counters(el, isStill),
     magnetic(el, isStill),
     marqueeVelocity([...el.querySelectorAll<HTMLElement>('.cg-marquee ul')], isStill),
+    idleOffscreen(el),
   )
   if (ring.value) cleanups.push(cursor(el, ring.value, isStill))
   if (loading) playIntro()
@@ -397,7 +402,7 @@ onBeforeUnmount(() => {
 
     <!-- The loading screen: in the page until it has played, and shown only
          while <html> has .cg-loading, set before the first paint (config.mts). -->
-    <div v-if="loader" class="cg-loader" aria-hidden="true">
+    <div v-if="loader" class="cg-loader" :class="{ 'is-ready': loaderReady }" aria-hidden="true">
       <div ref="loaderBg" class="cg-loader-bg" />
       <div ref="lockup" class="cg-loader-lockup">
         <CartographMark loading />
@@ -465,7 +470,8 @@ onBeforeUnmount(() => {
       <div class="cg-stage" data-scroll="top">
         <section class="cg-hero">
           <!-- The globe is the hub; edges run from it to each data-globe-edge. -->
-          <GlobeField :paused="still" />
+          <!-- Held still under the loading screen, where it cannot be seen. -->
+          <GlobeField :paused="still || loader" />
           <h1 class="cg-hero-title">
             <span class="cg-hero-left" data-globe-edge>
               <span class="cg-line"><span style="--d: 0.05s">Compute the</span></span>
@@ -496,7 +502,7 @@ onBeforeUnmount(() => {
               <i aria-hidden="true">+</i>Read the writeup
             </a>
           </div>
-          <div class="cg-badge" aria-hidden="true">
+          <div class="cg-badge" aria-hidden="true" data-idle>
             <svg viewBox="0 0 120 120">
               <defs>
                 <path id="cg-badge-ring" d="M60 60m-46 0a46 46 0 1 1 92 0a46 46 0 1 1-92 0" />
@@ -562,7 +568,7 @@ onBeforeUnmount(() => {
               <SplitWords class="cg-h" :lines="['Source in. Evidence out.']" />
             </div>
           </div>
-          <div class="cg-steps" data-reveal>
+          <div class="cg-steps" data-reveal data-idle>
             <a v-for="(s, i) in steps" :key="s.title" class="cg-step" :href="s.href" :style="{ '--i': i }">
               <div class="cg-step-top">
                 <h3>{{ s.title }}</h3>
@@ -747,7 +753,7 @@ onBeforeUnmount(() => {
             </p>
           </a>
           <a class="cg-card tone-green" :href="page('/benchmarks/m08-confidence-policy')" data-reveal style="--i: 1">
-            <svg class="cg-orbit" viewBox="0 0 320 320" aria-hidden="true">
+            <svg class="cg-orbit" viewBox="0 0 320 320" aria-hidden="true" data-idle>
               <g class="cg-orbit-rings">
                 <circle cx="160" cy="160" r="150" />
                 <circle cx="160" cy="160" r="112" stroke-dasharray="2 6" />
@@ -840,7 +846,7 @@ onBeforeUnmount(() => {
           <p class="cg-label" data-reveal>Corpus</p>
           <SplitWords class="cg-h" :lines="['Measured on seven pinned', 'production repositories.']" />
         </div>
-        <div class="cg-marquee">
+        <div class="cg-marquee" data-idle>
           <ul aria-label="The seven repositories in the benchmark corpus">
             <li v-for="name in corpus" :key="name">{{ name }}</li>
           </ul>
@@ -1106,6 +1112,12 @@ html.cg-loading .cg-loader {
 
 .cg-loader-lockup > span {
   clip-path: inset(0 100% 0 0);
+}
+
+/* Until the page's script runs, the mark waits at the start of its build:
+   starting up would otherwise stall the build halfway, on the main thread. */
+.cg-loader:not(.is-ready) :deep(.cg-mark *) {
+  animation-play-state: paused;
 }
 
 @media (max-width: 640px) {
@@ -2564,10 +2576,11 @@ html.cg-loading .cg-hero :deep(.cg-globe) {
   transform: scale(calc(1 + var(--p, 0) * 0.3));
 }
 
-/* The manilla and green panels rise and widen into place. */
+/* The manilla and green panels rise and widen into place. --rise is theirs
+   alone and does not inherit (style.css), so it restyles only the panel. */
 .cg-motion .cg-sheet,
 .cg-motion .cg-corpus {
-  transform: translate3d(0, calc((1 - var(--p, 1)) * 12vh), 0) scale(calc(0.92 + var(--p, 1) * 0.08));
+  transform: translate3d(0, calc((1 - var(--rise, 1)) * 12vh), 0) scale(calc(0.92 + var(--rise, 1) * 0.08));
   will-change: transform;
 }
 
@@ -3015,6 +3028,13 @@ html.cg-loading .cg-hero :deep(.cg-globe) {
 .cg.is-still .cg-orbit-rings,
 .cg.is-still .cg-orbit-sat {
   animation-play-state: paused;
+}
+
+/* A [data-idle] element off screen (idleOffscreen in motion.ts): its looping
+   animations wait, rather than costing a frame's work no one can see. */
+.is-offscreen,
+.is-offscreen :deep(*) {
+  animation-play-state: paused !important;
 }
 
 .cg-marquee:hover ul {
