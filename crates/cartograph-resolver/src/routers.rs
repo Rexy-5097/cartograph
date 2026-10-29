@@ -166,6 +166,12 @@ impl RouterIndex {
 }
 
 /// Resolves a router name used in `file` to the router it refers to.
+///
+/// An imported router is looked up in its own module by the name that module
+/// declares it under, not the name it was imported as. With `from
+/// polar.customer.endpoints import router as customer_router`, the module
+/// declares `router`; asking it for `customer_router` found nothing, and the
+/// inclusion — and every prefix composed through it — was silently dropped.
 fn resolve_router(
     modules: &ModuleIndex<'_>,
     file: &FileAnalysis,
@@ -177,8 +183,12 @@ fn resolve_router(
         return Some(here);
     }
     match modules.resolve_python(file, name) {
-        Resolution::Declared { file: at, .. } => {
-            let there = (at, name.to_owned());
+        Resolution::Declared {
+            file: at,
+            name: declared_as,
+            ..
+        } => {
+            let there = (at, declared_as);
             declared.contains_key(&there).then_some(there)
         }
         _ => None,

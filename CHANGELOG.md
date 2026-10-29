@@ -7,6 +7,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a router imported under an alias keeps its inclusion and its prefix
+
+With `from polar.customer.endpoints import router as customer_router`, the
+resolver looked for `customer_router` in the module that declares `router`,
+found nothing, and silently dropped the inclusion and every prefix composed
+through it ([BUG-0001](agentos/artifacts/bugs/ART-BUG-0001-router-alias-resolution.md)).
+Import resolution now reports the name a declaration has in its own file,
+through aliasing re-exports too, and routers are looked up by that name.
+
+Found on polarsource/polar `773cfcf`, which the authors never tested. Release
+builds before and after, on that commit:
+
+| | Before | After |
+|---|---|---|
+| `http-call` edges | 79 | 1,736 |
+| Cross-language edges | 4 | 322 |
+| Calls with no matching route | 2,143 | 253 |
+| Back-office tests joined to public handlers (wrong) | 20 | 0 |
+
+Ambiguous calls rose from 60 to 293. The resolver draws no edge for these, and
+most are Polar's date-versioned API, where two handlers serve one path. A
+20-edge random sample of the new edges, read by hand by the fixer, was 20
+correct; that is a spot-check, not a measured precision. One test object with
+a `url:` key is still read as a call; that is a separate defect.
+
+On the benchmark corpus's FastAPI repositories, Airflow (the committed M08
+dataset still reproduces exactly), Onyx and the FastAPI full-stack template
+are unchanged, and AutoGPT gains 7 correct test edges and loses none.
+
+A prefix passed to the application itself, `app.include_router(…, prefix=…)`,
+is still not composed. Counting `FastAPI()` as a router was tried and
+withdrawn: test files mount production routers on applications of their own,
+which made those routers look mounted twice. On AutoGPT that cost 15 correct
+edges (8 became ambiguous, 7 matched nothing) for 14 gained.
+
 ### Changed — the landing page moves the same, for a fraction of the work
 
 The landing page's motion kept the main thread busy even with nothing

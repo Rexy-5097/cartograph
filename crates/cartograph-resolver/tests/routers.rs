@@ -342,3 +342,154 @@ public_router.include_router(pools_router)
     assert!(text.contains("public_router"), "{text}");
     assert!(text.contains("pools_router"), "{text}");
 }
+
+// ── Aliases (out of sample: polarsource/polar) ──────────────────────
+//
+// Found on polarsource/polar `773cfcf`, a repository the authors never
+// tested: `from polar.customer.endpoints import router as customer_router`
+// was looked up in the declaring module by its alias, `customer_router`, so
+// the inclusion and its `/v1` prefix were dropped. 380 of 401 front-end
+// `/v1/…` calls then matched nothing. Airflow names its routers uniquely,
+// which is why the benchmark never caught it.
+
+/// The Polar shape: a router imported under an alias.
+#[test]
+fn an_aliased_router_is_found_by_the_name_its_module_declares() {
+    let served = served(
+        &[
+            (
+                "polar/customer/endpoints.py",
+                r#"
+router = APIRouter(prefix="/customers")
+
+@router.get("/{id}")
+def get_customer(id):
+    pass
+"#,
+            ),
+            (
+                "polar/api.py",
+                r#"
+from polar.customer.endpoints import router as customer_router
+
+router = APIRouter(prefix="/v1")
+router.include_router(customer_router)
+"#,
+            ),
+        ],
+        "polar/customer/endpoints.py",
+    );
+    assert_eq!(served.as_deref(), Some("/v1/customers/{id}"));
+}
+
+/// Not yet: a prefix passed to the application.
+///
+/// `app = FastAPI()` is not recorded as a router, so `app.include_router(…,
+/// prefix=…)` composes nothing, and the route keeps the prefix its own router
+/// states rather than a guessed one (RULE 009). Counting every `FastAPI()` as
+/// a parent was tried and measured: test files build their own applications
+/// and mount production routers on them, so those routers looked mounted
+/// twice. On Significant-Gravitas/AutoGPT `601093d` that cost 15 correct
+/// edges (8 became ambiguous, 7 matched nothing) for 14 gained. Composing the
+/// application's prefix needs a model of which application serves which
+/// call; until then this pins the refusal.
+#[test]
+fn a_prefix_passed_to_the_application_is_not_yet_composed() {
+    let served = served(
+        &[
+            (
+                "app/users.py",
+                r#"
+router = APIRouter(prefix="/users")
+
+@router.get("/me")
+def read_me():
+    pass
+"#,
+            ),
+            (
+                "app/main.py",
+                r#"
+from fastapi import FastAPI
+from app.users import router as users_router
+
+app = FastAPI()
+app.include_router(users_router, prefix="/api/v1")
+"#,
+            ),
+        ],
+        "app/users.py",
+    );
+    assert_eq!(
+        served.as_deref(),
+        Some("/users/me"),
+        "the router's own prefix, and nothing guessed beyond it",
+    );
+}
+
+/// An alias names one router; the module's other router is not it.
+#[test]
+fn an_alias_resolves_to_the_router_it_names_not_another_in_its_module() {
+    let files = [
+        (
+            "api/orders.py",
+            r#"
+router = APIRouter(prefix="/orders")
+admin_router = APIRouter(prefix="/admin/orders")
+"#,
+        ),
+        (
+            "api/main.py",
+            r#"
+from api.orders import admin_router as orders_admin
+
+root = APIRouter(prefix="/api")
+root.include_router(orders_admin)
+"#,
+        ),
+    ];
+    assert_eq!(
+        resolution(&files, "api/orders.py", "admin_router").known(),
+        Some("/api/admin/orders"),
+    );
+    assert_eq!(
+        resolution(&files, "api/orders.py", "router").known(),
+        Some("/orders"),
+        "the router the alias does not name stays unmounted",
+    );
+}
+
+/// An alias at the inclusion site, through a package that re-exports the
+/// router under an alias of its own.
+#[test]
+fn an_alias_through_an_aliasing_re_export_reaches_the_declaration() {
+    let served = served(
+        &[
+            (
+                "shop/cart/endpoints.py",
+                r#"
+router = APIRouter(prefix="/cart")
+
+@router.post("")
+def add_to_cart(item):
+    pass
+"#,
+            ),
+            (
+                "shop/cart/__init__.py",
+                "from shop.cart.endpoints import router as cart_router\n",
+            ),
+            (
+                "shop/api.py",
+                r#"
+from shop.cart import cart_router as cart
+
+api = APIRouter(prefix="/v2")
+api.include_router(cart)
+"#,
+            ),
+        ],
+        "shop/cart/endpoints.py",
+    );
+    assert_eq!(served.as_deref(), Some("/v2/cart"));
+}

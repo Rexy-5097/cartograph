@@ -36,6 +36,12 @@ pub enum Resolution {
     Declared {
         /// Repository-relative file holding the declaration.
         file: String,
+        /// The name the declaration has in that file, which an import alias
+        /// changes: asking about `users` after `from m import router as users`
+        /// finds `router`. A caller that looks the declaration up again by
+        /// name must use this one, not the name it asked about. For a
+        /// `TypeScript` default import it is `default`.
+        name: String,
         /// Line the declaration starts on.
         line: u32,
         /// How it was reached, for the edge's evidence.
@@ -89,7 +95,9 @@ impl Resolution {
     #[must_use]
     pub fn explain(&self) -> String {
         match self {
-            Self::Declared { file, line, route } => {
+            Self::Declared {
+                file, line, route, ..
+            } => {
                 format!("declared at {file}:{line} via {route}")
             }
             Self::Local { line } => format!("declared in the same file at line {line}"),
@@ -323,6 +331,7 @@ impl<'a> ModuleIndex<'a> {
         if let Some(symbol) = declaration_in(module, exported) {
             return Resolution::Declared {
                 file: module.path.clone(),
+                name: exported.to_owned(),
                 line: symbol.span.start_line,
                 route: format!("`from {} import {exported}`", import.specifier),
             };
@@ -334,11 +343,18 @@ impl<'a> ModuleIndex<'a> {
         match self.follow_python(module, exported, hop + 1, deps) {
             Resolution::Local { line } => Resolution::Declared {
                 file: module.path.clone(),
+                name: exported.to_owned(),
                 line,
                 route: hop_taken,
             },
-            Resolution::Declared { file, line, route } => Resolution::Declared {
+            Resolution::Declared {
                 file,
+                name,
+                line,
+                route,
+            } => Resolution::Declared {
+                file,
+                name,
                 line,
                 route: format!("{hop_taken} then {route}"),
             },
@@ -454,6 +470,7 @@ impl<'a> ModuleIndex<'a> {
             if let Some(symbol) = declaration_in(module, exported) {
                 return Resolution::Declared {
                     file: module.path.clone(),
+                    name: exported.to_owned(),
                     line: symbol.span.start_line,
                     route: format!("`import {{ {exported} }} from \"{}\"`", import.specifier),
                 };
@@ -462,11 +479,18 @@ impl<'a> ModuleIndex<'a> {
             return match self.follow_typescript(module, exported, hop + 1, deps) {
                 Resolution::Local { line } => Resolution::Declared {
                     file: module.path.clone(),
+                    name: exported.to_owned(),
                     line,
                     route: hop_taken,
                 },
-                Resolution::Declared { file, line, route } => Resolution::Declared {
+                Resolution::Declared {
                     file,
+                    name,
+                    line,
+                    route,
+                } => Resolution::Declared {
+                    file,
+                    name,
                     line,
                     route: format!("{hop_taken} then {route}"),
                 },
@@ -514,6 +538,7 @@ impl<'a> ModuleIndex<'a> {
             if let Some(symbol) = declaration_in(module, name) {
                 found.push(Resolution::Declared {
                     file: module.path.clone(),
+                    name: name.to_owned(),
                     line: symbol.span.start_line,
                     route: format!("`export * from \"{}\"`", import.specifier),
                 });
@@ -524,6 +549,7 @@ impl<'a> ModuleIndex<'a> {
                     r @ Resolution::Declared { .. } => found.push(r),
                     Resolution::Local { line } => found.push(Resolution::Declared {
                         file: module.path.clone(),
+                        name: name.to_owned(),
                         line,
                         route: format!("`export * from \"{}\"`", import.specifier),
                     }),
