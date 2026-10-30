@@ -874,7 +874,7 @@ urlpatterns = [
     path("auth/", django.urls.include(auth_urls)),
     path("inline/", include([path("x/", views.x)])),
     path("drf/", include(router.urls)),
-    re_path(r"^legacy/", include("project.legacy.urls")),
+    re_path(r"^v(?P<version>[0-9]+)/", include("project.versioned.urls")),
     path(prefix, include("project.dynamic.urls")),
     path("orders/", views.create_order),
 ]
@@ -939,12 +939,54 @@ urlpatterns = [
     assert_eq!(
         (mounts[5].0, mounts[5].1),
         (None, true),
-        "a `re_path` prefix is a regex, never interpreted"
+        "a `re_path` prefix with regex syntax after the anchor is not interpreted"
     );
     assert_eq!(
         (mounts[6].0, mounts[6].1),
         (None, true),
         "a variable prefix is unknown, not empty"
+    );
+}
+
+/// Label Studio, `label_studio/core/urls.py:59-70, 104` and
+/// `label_studio/projects/urls.py:61`. A `re_path` mount is read only when
+/// its pattern is an anchored literal, which is what Django consumes.
+#[test]
+fn a_re_path_mount_composes_only_when_its_pattern_is_an_anchored_literal() {
+    let analysis = analyze_source(
+        r#"
+urlpatterns = [
+    re_path(r"^", include("project.root.urls")),
+    re_path(r"^api-auth/", include("rest_framework.urls")),
+    re_path(r"legacy/", include("project.legacy.urls")),
+    re_path(r"^api/(?P<v>[0-9]+)/", include("project.versioned.urls")),
+    path("api/projects/", include((api_patterns, "projects"), namespace="api")),
+]
+"#,
+    );
+    let mounts: Vec<_> = analysis
+        .url_inclusions
+        .iter()
+        .map(|m| (m.prefix.as_deref(), m.prefix_unresolved))
+        .collect();
+    assert_eq!(
+        mounts,
+        vec![
+            (Some(""), false),
+            (Some("api-auth/"), false),
+            (None, true),
+            (None, true),
+            (Some("api/projects/"), false),
+        ],
+        "`^` consumes nothing; `^api-auth/` consumes exactly that; an \
+         unanchored pattern is searched for anywhere, and a group is regex"
+    );
+    assert_eq!(
+        analysis.url_inclusions[4].target,
+        IncludedUrlConf::Name {
+            name: "api_patterns".into()
+        },
+        "the `(patterns, app_name)` form can name a list"
     );
 }
 

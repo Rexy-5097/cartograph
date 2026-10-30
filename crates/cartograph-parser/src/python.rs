@@ -867,6 +867,7 @@ impl Walker<'_> {
         {
             let prefix = match self.url_observation(path_node) {
                 UrlObservation::Literal { value } if name == "path" => Some(value),
+                UrlObservation::Literal { value } => anchored_literal_prefix(&value),
                 _ => None,
             };
             self.analysis.url_inclusions.push(UrlConfInclusion {
@@ -936,12 +937,13 @@ impl Walker<'_> {
                 source: self.text(args),
             });
         };
-        // `include(("app.urls", "app"))`: the module is the tuple's first item.
-        let module = match first.kind() {
-            "tuple" => first.named_child(0).filter(|n| n.kind() == "string"),
-            "string" => Some(first),
-            _ => None,
+        // `include(("app.urls", "app"))` and `include((api_patterns, "app"))`:
+        // what is mounted is the tuple's first item.
+        let first = match first.kind() {
+            "tuple" => first.named_child(0).unwrap_or(first),
+            _ => first,
         };
+        let module = (first.kind() == "string").then_some(first);
         Some(match (module, first.kind()) {
             (Some(m), _) => match self.url_observation(m) {
                 UrlObservation::Literal { value } => IncludedUrlConf::Module { specifier: value },
@@ -1156,6 +1158,22 @@ fn node_has_async(node: Node<'_>) -> bool {
     let mut cursor = node.walk();
     node.children(&mut cursor)
         .any(|c| !c.is_named() && c.kind() == "async")
+}
+
+/// The literal prefix a `re_path` mount pattern stands for, when it is one.
+///
+/// Django mounts a regex pattern by searching for it and handing the rest of
+/// the path to the included patterns, so `^` mounts at the start with nothing
+/// consumed and `^api-auth/` consumes exactly `api-auth/`. That is a reading of
+/// the pattern, not a guess, only while nothing after the anchor is regex
+/// syntax. Anything else — no anchor, a group, a class, an escape — is not
+/// interpreted.
+fn anchored_literal_prefix(pattern: &str) -> Option<String> {
+    let rest = pattern.strip_prefix('^')?;
+    let regex = rest.contains([
+        '^', '$', '\\', '.', '[', ']', '(', ')', '{', '}', '*', '+', '?', '|',
+    ]);
+    (!regex).then(|| rest.to_owned())
 }
 
 /// The content of a `string` node: fragments and escapes, quotes and prefix

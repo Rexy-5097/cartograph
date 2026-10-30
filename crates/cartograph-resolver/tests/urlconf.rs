@@ -239,6 +239,45 @@ urlpatterns = [
     assert_eq!(path_of(&s, "views.health"), "health/");
 }
 
+/// Label Studio's shape: `re_path(r'^', include('projects.urls'))` in the
+/// root conf, then `include((_api_urlpatterns, app_name), namespace='api')`
+/// inside the app. Before the anchored-literal reading, the `^` mount made
+/// every prefix under it unresolved and nothing in the repository composed.
+#[test]
+fn an_anchored_literal_re_path_mount_and_a_tuple_of_a_list_compose() {
+    let s = served(&[
+        (
+            "label_studio/core/urls.py",
+            r"
+urlpatterns = [
+    re_path(r'^', include('projects.urls')),
+    re_path(r'^api-auth/', include('auth_views.urls')),
+]
+",
+        ),
+        (
+            "label_studio/projects/urls.py",
+            r"
+_api_urlpatterns = [
+    path('<int:pk>/tasks/', api.ProjectTaskListAPI.as_view()),
+]
+urlpatterns = [
+    path('api/projects/', include((_api_urlpatterns, app_name), namespace='api')),
+]
+",
+        ),
+        (
+            "label_studio/auth_views/urls.py",
+            r"urlpatterns = [path('login/', views.login)]",
+        ),
+    ]);
+    assert_eq!(
+        path_of(&s, "api.ProjectTaskListAPI.as_view"),
+        "api/projects/<int:pk>/tasks/"
+    );
+    assert_eq!(path_of(&s, "views.login"), "api-auth/login/");
+}
+
 // ── Negative and ambiguous: refuse, and keep the entry as written ───
 
 #[test]
@@ -276,7 +315,7 @@ fn a_regex_or_variable_prefix_is_unresolved_never_empty() {
             "proj/urls.py",
             r#"
 urlpatterns = [
-    re_path(r"^api/", include("proj.items")),
+    re_path(r"^api/v(?P<version>[0-9]+)/", include("proj.items")),
     path(PREFIX, include("proj.orders")),
 ]
 "#,
