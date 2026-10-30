@@ -124,6 +124,9 @@ never source text (RULE 015).
   pattern is not observable, and recording it would be a guess.
 - Class-based Django views record the callable as written
   (`LegacyView.as_view`); resolving it is later work.
+- `path("api/", include(...))` is recorded as a `UrlConfInclusion`, not a
+  route: `include` is not a view. Spreads into the module-level `urlpatterns`
+  are recorded the same way, with an empty prefix ([urlconf.md](../resolver/urlconf.md)).
 - Test-client calls (`self.client.get("/x")`, `factory.post("/y")`) are
   observed as HTTP, because syntactically they are HTTP requests. This inflates
   observation counts in test-heavy repositories; distinguishing test from
