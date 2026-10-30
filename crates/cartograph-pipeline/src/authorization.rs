@@ -207,14 +207,22 @@ impl std::error::Error for AuthorizationError {}
 ///
 /// # Why matching is exact
 ///
-/// Paths are compared as granted, with no normalisation and **no filesystem
-/// access**. Two consequences, both deliberate:
+/// Paths are compared with [`Path`]'s own equality and **no filesystem
+/// access**. That equality is component by component, not byte by byte, so it
+/// is not quite "as granted": a trailing separator, a doubled separator and an
+/// interior `.` do not change the components; on Windows `/` and `\` are both
+/// separators, and a drive letter's case is not part of its component. Those
+/// spellings name the same directory without resolving anything, and they are
+/// admitted. Nothing else is normalised. Two consequences, both deliberate:
 ///
-/// - a different spelling of a granted path — `./x` for `x`, a symlink into the
-///   tree, a different case on Windows — is **refused**, not accepted. Any
-///   smarter matching is a claim about when two paths are the same repository,
-///   which is the deferred derivation wearing a disguise. Failing closed is the
-///   safe direction while it is undecided;
+/// - a different spelling that only the filesystem could equate — `./x` for
+///   `x` (a leading `.` is a component), `..`, a symlink into the tree, a
+///   directory name in a different case on Windows, a `\\?\` verbatim form —
+///   is **refused**, not accepted, and so is a
+///   parent, a child or a sibling of a granted tree. Any smarter matching is a
+///   claim about when two paths are the same repository, which is the deferred
+///   derivation wearing a disguise. Failing closed is the safe direction while
+///   it is undecided;
 /// - because nothing is resolved against the filesystem, there is no
 ///   time-of-check-to-time-of-use window in the authorization decision itself.
 ///
@@ -429,6 +437,67 @@ mod tests {
             session.authorize(Path::new("other-repo")).unwrap_err(),
             AuthorizationError::NotAuthorized
         );
+    }
+
+    /// What "exact" means, pinned. The 2026-10-30 assessment (F15) found a
+    /// granted tree admitted with a trailing separator and with forward
+    /// slashes, while this type's documentation said "no normalisation". The
+    /// behaviour is `Path` equality, and it is safe. What was wrong was the
+    /// sentence, so this test holds the behaviour to the corrected one.
+    #[test]
+    fn spellings_with_the_same_components_are_admitted_and_nothing_else_is() {
+        let session = session(&["work/repos/app"]);
+        for same in ["work/repos/app/", "work//repos/app", "work/repos/./app"] {
+            assert!(
+                session.authorize(Path::new(same)).is_ok(),
+                "{same:?} has the granted tree's components"
+            );
+        }
+        for other in [
+            "./work/repos/app",
+            "work/repos/app/..",
+            "work/repos/other/../app",
+            "work/repos",
+            "work/repos/app/src",
+            "work/repos/app2",
+            "Work/repos/app",
+        ] {
+            assert_eq!(
+                session.authorize(Path::new(other)).unwrap_err(),
+                AuthorizationError::NotAuthorized,
+                "{other:?} is not the granted tree's components"
+            );
+        }
+    }
+
+    /// On Windows both separators split components and a drive letter's case
+    /// is not part of its component, so these spellings are the same path. A
+    /// directory name's case is part of its component.
+    #[cfg(windows)]
+    #[test]
+    fn windows_separators_and_drive_case_are_interchangeable_and_name_case_is_not() {
+        let session = session(&[r"D:\work\repos\app"]);
+        for same in [
+            r"D:\work\repos\app\",
+            "D:/work/repos/app",
+            r"D:/work\repos/app/",
+            r"d:\work\repos\app",
+        ] {
+            assert!(session.authorize(Path::new(same)).is_ok(), "{same:?}");
+        }
+        for other in [
+            r"D:\work\repos\APP",
+            r"D:\Work\repos\app",
+            r"\\?\D:\work\repos\app",
+            r"D:\work\repos",
+            r"D:\work\repos\app\..",
+        ] {
+            assert_eq!(
+                session.authorize(Path::new(other)).unwrap_err(),
+                AuthorizationError::NotAuthorized,
+                "{other:?}"
+            );
+        }
     }
 
     /// The session holds one identity, and it is the one every admitted tree
