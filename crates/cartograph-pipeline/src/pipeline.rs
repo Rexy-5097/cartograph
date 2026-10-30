@@ -565,16 +565,8 @@ fn finish_totals(totals: &mut Totals, graph: &ArchitectureGraph, analyses: &[Fil
         .map(|a| (a.path.as_str(), a.language))
         .collect();
 
-    // "Cross-language" means the two endpoints were extracted by different
-    // grammars — TypeScript calling Python, which is the relationship the
-    // product exists to recover. TypeScript and TSX are one language here.
-    let family = |language: SourceLanguage| match language {
-        SourceLanguage::TypeScript | SourceLanguage::Tsx => "ts",
-        SourceLanguage::Python => "py",
-        // A language added later is its own family until it is named here,
-        // which keeps "cross-language" true rather than convenient.
-        _ => "other",
-    };
+    // One definition of "cross-language", shared with MCP `map`.
+    let family = crate::map::language_family;
 
     totals.cross_language_edges = graph
         .edges()
