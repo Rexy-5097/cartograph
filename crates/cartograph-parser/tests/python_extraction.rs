@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use cartograph_parser::Analyzer;
 use cartograph_parser::diagnostics::DiagnosticKind;
 use cartograph_parser::model::{
-    Callee, ConcatPart, ExportStatus, FileAnalysis, HttpMethodHint, ParseStatus,
+    Callee, ConcatPart, ExportStatus, FileAnalysis, HttpMethodHint, IncludedUrlConf, ParseStatus,
     RouteDeclarationStyle, RouteObservation, SourceLanguage, StringFact, Symbol, SymbolKind,
     TemplatePart, UrlObservation,
 };
@@ -852,4 +852,133 @@ def listing():
 ",
     );
     assert_eq!(analysis.routes.len(), 1, "{:?}", analysis.routes);
+}
+
+// ── Recovery F-002: `include()` mounts patterns; it is not a view ─────
+
+/// Plane, `apps/api/plane/urls.py:21` (2026-10-30 assessment, F4).
+///
+/// `path("api/instances/", include("plane.license.urls"))` was recorded as a
+/// route whose handler is `include`, and both of Plane's emitted HTTP edges
+/// pointed at it. A mount serves nothing itself.
+#[test]
+fn a_django_include_is_a_mount_not_a_route() {
+    let analysis = analyze_source(
+        r#"
+from django.urls import include, path, re_path
+from . import views
+
+urlpatterns = [
+    path("api/", include("project.app.urls")),
+    path("api/v2/", include(("project.v2.urls", "v2"), namespace="v2")),
+    path("auth/", django.urls.include(auth_urls)),
+    path("inline/", include([path("x/", views.x)])),
+    path("drf/", include(router.urls)),
+    re_path(r"^legacy/", include("project.legacy.urls")),
+    path(prefix, include("project.dynamic.urls")),
+    path("orders/", views.create_order),
+]
+"#,
+    );
+    assert!(
+        !analysis
+            .routes
+            .iter()
+            .any(|r| r.handler.as_deref().is_some_and(|h| h.ends_with("include"))),
+        "no route may have `include` as its handler: {:?}",
+        analysis.routes
+    );
+    let handlers: Vec<_> = analysis
+        .routes
+        .iter()
+        .filter_map(|r| r.handler.as_deref())
+        .collect();
+    assert_eq!(
+        handlers,
+        vec!["views.x", "views.create_order"],
+        "real views stay routes"
+    );
+
+    let mounts: Vec<_> = analysis
+        .url_inclusions
+        .iter()
+        .map(|m| (m.prefix.as_deref(), m.prefix_unresolved, &m.target))
+        .collect();
+    assert_eq!(mounts.len(), 7, "{mounts:?}");
+    assert_eq!(
+        mounts[0],
+        (
+            Some("api/"),
+            false,
+            &IncludedUrlConf::Module {
+                specifier: "project.app.urls".into()
+            }
+        )
+    );
+    assert_eq!(
+        mounts[1].2,
+        &IncludedUrlConf::Module {
+            specifier: "project.v2.urls".into()
+        },
+        "the `(module, app_name)` form names its module first"
+    );
+    assert_eq!(
+        mounts[2].2,
+        &IncludedUrlConf::Name {
+            name: "auth_urls".into()
+        },
+        "a qualified `django.urls.include` is still an include"
+    );
+    assert!(matches!(mounts[3].2, IncludedUrlConf::Inline { .. }));
+    assert_eq!(
+        mounts[4].2,
+        &IncludedUrlConf::Name {
+            name: "router.urls".into()
+        }
+    );
+    assert_eq!(
+        (mounts[5].0, mounts[5].1),
+        (None, true),
+        "a `re_path` prefix is a regex, never interpreted"
+    );
+    assert_eq!(
+        (mounts[6].0, mounts[6].1),
+        (None, true),
+        "a variable prefix is unknown, not empty"
+    );
+}
+
+/// Plane, `apps/api/plane/app/urls/__init__.py`: twenty modules' patterns
+/// are spread into one `urlpatterns`.
+#[test]
+fn spreading_patterns_into_urlpatterns_mounts_them_with_no_prefix() {
+    let analysis = analyze_source(
+        r#"
+from .analytic import urlpatterns as analytic_urls
+from .asset import urlpatterns as asset_urls
+
+urlpatterns = [*analytic_urls, path("x/", views.x)]
+urlpatterns += [*asset_urls]
+other = [*not_a_url_conf]
+
+def build():
+    urlpatterns = [*inside_a_function]
+"#,
+    );
+    let names: Vec<_> = analysis
+        .url_inclusions
+        .iter()
+        .map(|m| {
+            assert_eq!(m.prefix.as_deref(), Some(""));
+            match &m.target {
+                IncludedUrlConf::Name { name } => name.as_str(),
+                other => panic!("unexpected target {other:?}"),
+            }
+        })
+        .collect();
+    assert_eq!(
+        names,
+        vec!["analytic_urls", "asset_urls"],
+        "only the module-level `urlpatterns` is what Django serves"
+    );
 }

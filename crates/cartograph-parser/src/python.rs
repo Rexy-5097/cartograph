@@ -31,8 +31,9 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::error::ParserError;
 use crate::model::{
     CallSite, Callee, ConcatPart, ExportStatus, FileAnalysis, HttpCallObservation, HttpMethodHint,
-    Import, NamedImport, ParseStatus, RouteDeclarationStyle, RouteObservation, RouterDeclaration,
-    RouterInclusion, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart, UrlObservation,
+    Import, IncludedUrlConf, NamedImport, ParseStatus, RouteDeclarationStyle, RouteObservation,
+    RouterDeclaration, RouterInclusion, SourceLanguage, StringFact, Symbol, SymbolKind,
+    TemplatePart, UrlConfInclusion, UrlObservation,
 };
 use crate::syntax::{span_of, text_of};
 
@@ -76,6 +77,7 @@ impl PythonExtractor {
             routes: Vec::new(),
             routers: Vec::new(),
             router_inclusions: Vec::new(),
+            url_inclusions: Vec::new(),
             module_aliases: Vec::new(),
             diagnostics: Vec::new(),
         };
@@ -193,6 +195,7 @@ impl Walker<'_> {
                 return;
             }
             "assignment" => self.extract_assignment(node),
+            "augmented_assignment" => self.extract_augmented_assignment(node),
             "call" => self.extract_call(node),
             "string" => {
                 if self.concat_depth == 0 {
@@ -450,12 +453,34 @@ impl Walker<'_> {
 
         self.extract_router_declaration(node, &name);
 
+        if name == "urlpatterns" && self.scope.is_empty() {
+            if let Some(right) = node.child_by_field_name("right") {
+                self.extract_urlpatterns_spreads(right);
+            }
+        }
         if name == "__all__" {
             if let Some(right) = node.child_by_field_name("right") {
                 self.collect_dunder_all(right);
             }
         }
         self.push_symbol(SymbolKind::Variable, &name, false, Vec::new(), node);
+    }
+
+    /// `urlpatterns += [...]` at module scope. Nothing else an augmented
+    /// assignment does is recorded: it declares no new name.
+    fn extract_augmented_assignment(&mut self, node: Node<'_>) {
+        if !self.scope.is_empty() {
+            return;
+        }
+        let is_urlpatterns = node
+            .child_by_field_name("left")
+            .is_some_and(|l| l.kind() == "identifier" && self.text(l) == "urlpatterns");
+        if !is_urlpatterns {
+            return;
+        }
+        if let Some(right) = node.child_by_field_name("right") {
+            self.extract_urlpatterns_spreads(right);
+        }
     }
 
     fn collect_dunder_all(&mut self, node: Node<'_>) {
@@ -831,6 +856,28 @@ impl Walker<'_> {
         let Some(&path_node) = positional.first() else {
             return;
         };
+
+        // `path("api/", include(...))` mounts patterns; it serves nothing
+        // itself. Recorded whatever its pattern is, because a mount with an
+        // unreadable prefix still means the patterns it mounts are not served
+        // where they are written.
+        if let Some(target) = positional
+            .get(1)
+            .and_then(|h| self.django_include_target(*h))
+        {
+            let prefix = match self.url_observation(path_node) {
+                UrlObservation::Literal { value } if name == "path" => Some(value),
+                _ => None,
+            };
+            self.analysis.url_inclusions.push(UrlConfInclusion {
+                prefix_unresolved: prefix.is_none(),
+                prefix,
+                target,
+                span: span_of(call),
+            });
+            return;
+        }
+
         // A route needs a string-ish pattern; `path(x, y)` with a variable
         // pattern is too weak to be worth recording as a route observation.
         if !matches!(path_node.kind(), "string" | "concatenated_string") {
@@ -857,6 +904,95 @@ impl Walker<'_> {
             handler,
             span: span_of(call),
         });
+    }
+
+    /// What `include(...)` mounts, when `node` is a call to it.
+    ///
+    /// `include` is recognised by name, bare or qualified
+    /// (`django.urls.include`), as `path` is: a URL conf is the one place a
+    /// call by that name sits in a pattern's view position.
+    fn django_include_target(&self, node: Node<'_>) -> Option<IncludedUrlConf> {
+        if node.kind() != "call" {
+            return None;
+        }
+        let function = node.child_by_field_name("function")?;
+        let is_include = match function.kind() {
+            "identifier" => self.text(function) == "include",
+            "attribute" => function
+                .child_by_field_name("attribute")
+                .is_some_and(|a| self.text(a) == "include"),
+            _ => false,
+        };
+        if !is_include {
+            return None;
+        }
+        let args = node.child_by_field_name("arguments")?;
+        let mut cursor = args.walk();
+        let Some(first) = args
+            .named_children(&mut cursor)
+            .find(|n| n.kind() != "keyword_argument")
+        else {
+            return Some(IncludedUrlConf::Other {
+                source: self.text(args),
+            });
+        };
+        // `include(("app.urls", "app"))`: the module is the tuple's first item.
+        let module = match first.kind() {
+            "tuple" => first.named_child(0).filter(|n| n.kind() == "string"),
+            "string" => Some(first),
+            _ => None,
+        };
+        Some(match (module, first.kind()) {
+            (Some(m), _) => match self.url_observation(m) {
+                UrlObservation::Literal { value } => IncludedUrlConf::Module { specifier: value },
+                _ => IncludedUrlConf::Other {
+                    source: self.text(m),
+                },
+            },
+            (None, "identifier" | "attribute") => IncludedUrlConf::Name {
+                name: self.text(first),
+            },
+            (None, "list") => IncludedUrlConf::Inline {
+                span: span_of(first),
+            },
+            _ => IncludedUrlConf::Other {
+                source: self.text(first),
+            },
+        })
+    }
+
+    /// `urlpatterns = [*analytic_urls, path(...)]` and
+    /// `urlpatterns += [*more]`: each spread name mounts its patterns here,
+    /// under no prefix of its own.
+    ///
+    /// Only the module-level `urlpatterns` list is read. It is the name Django
+    /// serves from; a spread into any other list mounts nothing until that
+    /// list is itself included, and the inclusion says so.
+    fn extract_urlpatterns_spreads(&mut self, value: Node<'_>) {
+        if value.kind() != "list" {
+            return;
+        }
+        let mut cursor = value.walk();
+        let spreads: Vec<_> = value
+            .named_children(&mut cursor)
+            .filter(|n| n.kind() == "list_splat")
+            .collect();
+        for spread in spreads {
+            let Some(inner) = spread.named_child(0) else {
+                continue;
+            };
+            if !matches!(inner.kind(), "identifier" | "attribute") {
+                continue;
+            }
+            self.analysis.url_inclusions.push(UrlConfInclusion {
+                prefix: Some(String::new()),
+                prefix_unresolved: false,
+                target: IncludedUrlConf::Name {
+                    name: self.text(inner),
+                },
+                span: span_of(spread),
+            });
+        }
     }
 
     // ── HTTP observations ────────────────────────────────────────────
