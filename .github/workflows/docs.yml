@@ -22,6 +22,12 @@ env:
   # Publish only from main; a pull request or a dispatch on another branch
   # builds and checks the site without deploying it.
   DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+  # Pages serves the site at the root of its custom domain, cartograph.co.in,
+  # so it is built for "/" rather than the default "/cartograph/". The link
+  # check reads the same variable (docs/.vitepress/site-base.mjs). The domain
+  # itself is set in Settings → Pages, not in a CNAME file: a workflow-built
+  # site takes it from there.
+  CARTOGRAPH_SITE_BASE: "/"
 
 jobs:
   build:
