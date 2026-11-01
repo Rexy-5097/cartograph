@@ -217,6 +217,7 @@ export default defineConfig({
           { text: 'Dynamic URLs', link: '/resolver/dynamic-urls' },
           { text: 'Matching', link: '/resolver/matching' },
           { text: 'Router prefixes', link: '/resolver/routers' },
+          { text: 'Django URL confs', link: '/resolver/urlconf' },
           { text: 'Imports', link: '/resolver/imports' },
           { text: 'ORM resolution', link: '/resolver/orm' },
           { text: 'Client wrapper tracing', link: '/resolver/client-tracing' },

@@ -2802,7 +2802,7 @@ mod profile {
     use super::*;
     use cartograph_graph::ArchitectureGraph;
     use cartograph_resolver::{
-        ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, add_client_call_edges,
+        ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, UrlConfIndex, add_client_call_edges,
         add_edge_for_match, add_orm_edges, collect_exported_constants, match_client,
         normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
         with_composed_prefix, with_resolved_url,
@@ -2845,6 +2845,7 @@ mod profile {
 
         let t = Instant::now();
         let routers = RouterIndex::build(analyses, &modules);
+        let urlconfs = UrlConfIndex::build(analyses, &modules);
         stages.push(Stage {
             name: "RouterIndex::build",
             ms: ms(t),
@@ -2864,7 +2865,8 @@ mod profile {
                     .receiver
                     .as_ref()
                     .and_then(|r| routers.prefix_for(&analysis.path, r))
-                    .and_then(|resolution| with_composed_prefix(route, resolution));
+                    .and_then(|resolution| with_composed_prefix(route, resolution))
+                    .or_else(|| urlconfs.served(&analysis.path, route));
                 if composed.is_some() {
                     composed_count += 1;
                 }

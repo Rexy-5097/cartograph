@@ -110,6 +110,7 @@ pub mod normalize;
 pub mod orm;
 pub mod routers;
 pub mod symbolic;
+pub mod urlconf;
 
 pub use access_cache::{
     AccessCache, AccessCacheError, AccessCacheStats, GlobalFingerprints, RecomputeHook,
@@ -141,3 +142,4 @@ pub use orm::{
 };
 pub use routers::{PrefixResolution, RouterIndex, with_composed_prefix};
 pub use symbolic::SymbolicValue;
+pub use urlconf::UrlConfIndex;
