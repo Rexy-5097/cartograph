@@ -653,6 +653,66 @@ fn dictionary_and_environment_lookups_are_not_http() {
     );
 }
 
+/// F-014a (recovery programme, 2026-11-01). A client-named receiver was
+/// enough to observe a request whatever the argument, so session-dictionary
+/// lookups became HTTP calls: Open `WebUI` `socket/main.py`
+/// `session.get('chat_ids')`, Odoo `request.session.get('pre_uid')`, Sentry
+/// `self.client.session.get("invite_token")`. On the 2026-10-30 corpus, 205
+/// observations had a client-named receiver and a literal containing no `/`;
+/// the one that produced an edge joined `airflowctl`'s base-URL-relative
+/// `client.get("jobs")` to another application's `GET /jobs`.
+#[test]
+fn a_client_named_receiver_with_a_bare_word_literal_is_not_a_request() {
+    let analysis = analyze_source(
+        r#"
+import requests
+
+chat_ids = session.get('chat_ids')
+uid = request.session.get('pre_uid')
+token = self.client.session.get("invite_token", None)
+empty = client.get("")
+
+requests.get("/orders")
+session.post("/from-session")
+client.put(f"api/v1/monitor/{route}/{message_id}")
+client.get("api/v1/flows/")
+requests.get(url)
+httpx.get("https://example.com/health")
+"#,
+    );
+    let urls: Vec<String> = analysis
+        .http_calls
+        .iter()
+        .map(|h| match &h.url {
+            UrlObservation::Literal { value } => value.clone(),
+            UrlObservation::Template { parts } => format!("template:{}", parts.len()),
+            UrlObservation::Dynamic { source } => format!("dynamic:{source}"),
+        })
+        .collect();
+    for key in ["chat_ids", "pre_uid", "invite_token", ""] {
+        assert!(
+            !urls.contains(&key.to_owned()),
+            "`{key}` is a key, not a URL: {urls:?}"
+        );
+    }
+    for kept in [
+        "/orders",
+        "/from-session",
+        "api/v1/flows/",
+        "dynamic:url",
+        "https://example.com/health",
+    ] {
+        assert!(
+            urls.contains(&kept.to_owned()),
+            "`{kept}` must stay observed: {urls:?}"
+        );
+    }
+    assert!(
+        urls.iter().any(|u| u.starts_with("template:")),
+        "an f-string URL stays observed: {urls:?}"
+    );
+}
+
 #[test]
 fn dynamic_urls_stay_dynamic_and_f_strings_stay_templates() {
     let analysis = analyze("http_calls.py");
