@@ -17,7 +17,7 @@
 //! - **Direction matters.** A server's declared parameter accepts a client's
 //!   concrete value (`POST /api/orders/123` reaches `POST /api/orders/{id}`).
 //!   The reverse — a client's *unknown* value landing on a server's *literal*
-//!   segment — is possible but unverified, so it can never be exact.
+//!   segment — is possible but unverified, so it is never an edge.
 //! - **A method is never invented.** An undeclared method stays undeclared and
 //!   downgrades the result; it is not read as GET.
 //! - **Ambiguity is reported, not resolved.** When several routes remain
@@ -54,9 +54,10 @@ pub enum MatchStatus {
     /// Exactly one candidate, compatible but with something undetermined — an
     /// undeclared method, or a position whose value is unknown.
     Strong,
-    /// The choice is not determined. **No edge is produced.** Either several
-    /// candidates remain equally plausible, or the best one shares no static
-    /// segment with the client path and so accepts a whole class of requests.
+    /// The choice is not determined. **No edge is produced.** Several
+    /// candidates remain equally plausible; or the best one shares no static
+    /// segment with the client path and so accepts a whole class of requests;
+    /// or the best one needs an unknown client value to equal a server literal.
     /// The candidate set is returned so a human, or a later milestone with
     /// more evidence, can decide.
     Ambiguous,
@@ -585,6 +586,20 @@ fn classify(candidates: &[Candidate]) -> MatchStatus {
     // otherwise becomes a magnet for every client call in the codebase, and a
     // single-segment `/{name}` route swallows every one-segment request.
     if !best.discriminating {
+        return MatchStatus::Ambiguous;
+    }
+    // A candidate that needs an unknown client value to equal a server
+    // literal is possible and never established. Being the only such route
+    // the index holds is not evidence: the routes it cannot see are exactly
+    // the alternatives. On the 2026-10-30 corpus every one of these accepted
+    // matches rested on a loop variable, a test parameter or an enum-typed
+    // field — Paperless-ngx's `f"/api/{endpoint}/"` over three endpoints
+    // matched `/api/token/`. Kept as a candidate, never an edge.
+    if best
+        .reasons
+        .iter()
+        .any(|r| matches!(r, MatchReason::UnknownValueAgainstLiteral(_)))
+    {
         return MatchStatus::Ambiguous;
     }
     let tied = candidates
