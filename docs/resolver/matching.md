@@ -52,8 +52,15 @@ Compared **client-to-server**; the direction is not symmetric.
 | `Static` | `Static` | must be **exactly equal**, else incompatible |
 | `Static` | `Parameter` | `ParameterBound` — a concrete value into a declared parameter |
 | `Dynamic` | `Parameter` | `VariableAligned` — aligned, value undetermined |
-| `Dynamic` | `Static` | `VariableAligned` — possible, **unverified** |
+| `Dynamic` | `Static` | `VariableAligned` — possible, **unverified**: kept as a candidate, classified `Ambiguous`, never an edge |
 | anything | trailing `Wildcard` | `WildcardSuffix` — consumes ≥1 remaining segment |
+
+An unknown client value is never taken to equal a server literal. Being the
+only literal route the index holds is not evidence, because the alternatives are
+the routes it cannot see: on the 2026-10-30 corpus, Paperless-ngx's
+`f"/api/{endpoint}/"` over `correspondents`, `tags` and `document_types`
+matched `/api/token/`, and every other such match rested on a loop variable, a
+test parameter or an enum-typed field.
 
 Segment counts must agree unless the route ends in a wildcard. A wildcard
 anywhere but the tail is refused rather than given an invented rule. A client
