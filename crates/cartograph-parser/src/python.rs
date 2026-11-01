@@ -883,6 +883,14 @@ impl Walker<'_> {
         if !known_client && !self.looks_like_path(first) {
             return;
         }
+        // A client-named receiver is evidence only when the argument could be
+        // a URL. A literal with no `/` at all — `request.session.get("uid")` —
+        // is a dictionary key, or a path relative to a base URL this analysis
+        // cannot see; in neither case is the request path `/uid`. A variable
+        // or an f-string is still observed: its value is simply unknown.
+        if known_client && self.is_bare_word_literal(first) {
+            return;
+        }
 
         self.analysis.http_calls.push(HttpCallObservation {
             callee: callee.to_string(),
@@ -906,6 +914,15 @@ impl Walker<'_> {
             _ => return false,
         };
         head.starts_with('/') || head.starts_with("http://") || head.starts_with("https://")
+    }
+
+    /// A plain string literal containing no `/`: `"chat_ids"`, `""`.
+    fn is_bare_word_literal(&self, node: Node<'_>) -> bool {
+        node.kind() == "string"
+            && matches!(
+                self.url_observation(node),
+                UrlObservation::Literal { value } if !value.contains('/')
+            )
     }
 
     /// A string node as a URL/path observation; anything else stays dynamic.

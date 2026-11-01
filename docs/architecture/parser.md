@@ -128,6 +128,14 @@ never source text (RULE 015).
   observed as HTTP, because syntactically they are HTTP requests. This inflates
   observation counts in test-heavy repositories; distinguishing test from
   production traffic needs context M02 does not have.
+- A receiver named like a client (`session`, `client`, `http`, …) is evidence
+  of a request only when its argument could be a URL. A string literal with no
+  `/` (`request.session.get("uid")`) is a dictionary key or a path relative to
+  an unseen base URL, and is not observed.
+- Any other receiver is observed when its literal argument starts with `/` or
+  a scheme, which a dictionary key can also do (`stream.get("/Subtype")` in a
+  PDF dictionary). That case is known and not yet distinguished: the parser
+  has no type or binding evidence for the receiver.
 - Decorator arguments other than the route path are not extracted.
 - Tuple/attribute assignment targets are not recorded as symbols.
 - `async` is detected on the definition; `functools.wraps`-style indirection is
