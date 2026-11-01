@@ -95,6 +95,17 @@ join.
 | `NoMatch` | No compatible route | no |
 | `Unsupported` | Client not comparable | no |
 
+**Candidates are ranked by path specificity first, then by prior.** A path
+equal at every position outranks a parameter bound to a value, which outranks an
+alignment with an unknown value, which outranks a wildcard tail. Only among
+equally specific candidates does method evidence rank. A router dispatches on
+the path: Werkzeug ranks Flask rules this way, and Starlette and Django serve a
+static route only when it is declared before the parameter route that would
+otherwise capture it. Before 2026-11-01 the prior alone ranked, so a static
+route with no declared method (0.98 × 0.8) lost to a parameter route with one
+(0.90), and Flask's `GET /orders/latest` was joined to `/orders/<order_id>`.
+A tie means equal specificity *and* equal prior.
+
 **Ambiguity produces no edge.** Several plausible routes is an unanswered
 question, and an edge is an answer; choosing arbitrarily would make every
 downstream confidence number inherit a guess. The candidate set is retained so
