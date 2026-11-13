@@ -1,0 +1,5 @@
+node_modules/
+out/
+# Generated: npm install copies the fonts, `npm run audio` synthesises the sound.
+public/audio/
+public/*.woff2
