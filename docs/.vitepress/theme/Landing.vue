@@ -172,6 +172,36 @@ connection_test_request  (table)
 This path crosses the HTTP boundary and reaches a database table.`
 const traceLines = trace.split('\n')
 
+/** The film's on-screen text, in order — its text alternative. */
+const filmText = [
+  '1994. One file. One language. You could read the whole program.',
+  '2004. A page and a server.',
+  '2014. Then services. APIs. Frameworks. More than one language in one system.',
+  'Today, one request crosses three languages: TypeScript, HTTP, Python, SQL.',
+  'An import graph tells you which files import which. It doesn’t tell you what a request reaches.',
+  'Cartograph computes the architecture from source. Across languages. Down to the table. With the evidence behind every edge.',
+  'Parse: it reads the source — TypeScript, TSX and Python. Nothing leaves the machine.',
+  'Resolve: it joins a call to the handler that serves it, and a model to its table.',
+  'Prove: every edge carries its evidence. Where the evidence is thin, it draws nothing. (Real output: apache/airflow at 9b43d6a.)',
+  'Local-first: your source never leaves the machine. No API key or network required.',
+  'No model in the graph: deterministic analysis draws every edge. A language model never does.',
+  'Refuses to guess: an ambiguous match produces no edge at all.',
+  'Measured in the open: benchmarked on seven open-source repositories, failures published.',
+  'One core: command line, desktop map, MCP server, pull-request review.',
+  'The vision: architecture that is computed, not remembered. Proven, not asserted.',
+  'Cartograph. Compute the architecture. Prove the relationships.',
+]
+const film = ref<HTMLVideoElement | null>(null)
+/** The viewer has started the film: its own controls take over. */
+const filmStarted = ref(false)
+
+function playFilm() {
+  filmStarted.value = true
+  film.value?.play().catch(() => {
+    // Leave the native controls showing; the viewer can press play there.
+  })
+}
+
 const MOTION_KEY = 'cartograph:motion-paused'
 
 const root = ref<HTMLElement | null>(null)
@@ -515,6 +545,51 @@ onBeforeUnmount(() => {
           </div>
         </section>
       </div>
+
+      <!--
+        The film. It never plays by itself: it has sound and no narration, so
+        it starts only when asked, loads nothing until then (preload="none"),
+        and its on-screen text is also here as text.
+      -->
+      <section class="cg-film cg-section" aria-labelledby="cg-film-label">
+        <div class="cg-head">
+          <div>
+            <p id="cg-film-label" class="cg-label" data-reveal>The film · 1 min 24 s</p>
+            <SplitWords class="cg-h" :lines="['From one file', 'to three languages.']" />
+          </div>
+          <p class="cg-film-note" data-reveal>Sound on. No narration — every line is on screen.</p>
+        </div>
+        <!-- The reveal sits on a wrapper: motion.ts marks it with a class, and
+             Vue would overwrite that class each time is-playing changes. -->
+        <div data-reveal>
+        <figure class="cg-film-frame" :class="{ 'is-playing': filmStarted }">
+          <video
+            ref="film"
+            :controls="filmStarted"
+            preload="none"
+            playsinline
+            :poster="withBase('/media/cartograph-film-poster.jpg')"
+            aria-label="Cartograph, a short film"
+            @play="filmStarted = true"
+          >
+            <source :src="withBase('/media/cartograph-film.webm')" type="video/webm" />
+            <source :src="withBase('/media/cartograph-film.mp4')" type="video/mp4" />
+          </video>
+          <button class="cg-film-play" type="button" aria-label="Play the film, 1 minute 24 seconds, with sound" @click="playFilm">
+            <span class="cg-film-play-inner">
+              <i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" /></svg></i>
+              Play the film
+            </span>
+          </button>
+        </figure>
+        </div>
+        <details class="cg-film-text">
+          <summary>Read the film's text</summary>
+          <ol>
+            <li v-for="(line, i) in filmText" :key="i">{{ line }}</li>
+          </ol>
+        </details>
+      </section>
 
       <!-- Manilla sheet: surfaces, approach, field -->
       <div class="cg-sheet" data-scroll="enter">
@@ -1500,6 +1575,144 @@ html.cg-loading .cg-hero :deep(.cg-globe) {
 @keyframes cg-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ---------- The film ---------- */
+
+.cg-film {
+  position: relative;
+  z-index: 1;
+  color: var(--cg-light-pink);
+  background: var(--cg-black);
+  padding-top: 0;
+}
+
+.cg-film-note {
+  max-width: 22rem;
+  margin: 0;
+  font-family: var(--cg-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-align: right;
+  text-transform: uppercase;
+  color: rgba(237, 223, 238, 0.6);
+}
+
+.cg-film-frame {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(237, 223, 238, 0.14);
+  border-radius: 0.75rem;
+}
+
+.cg-film-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+/* Over the poster until the film starts: one large, quiet control. */
+.cg-film-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: end start;
+  padding: clamp(1rem, 0.5rem + 2vw, 2.25rem);
+  border: 0;
+  font: inherit;
+  color: var(--cg-light-pink);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 45%);
+  cursor: pointer;
+}
+
+.cg-film-frame.is-playing .cg-film-play {
+  display: none;
+}
+
+.cg-film-play-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  font-family: var(--cg-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cg-film-play i {
+  display: grid;
+  place-items: center;
+  width: clamp(48px, 40px + 2vw, 64px);
+  aspect-ratio: 1;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  transition:
+    background-color 0.3s var(--cg-ease),
+    color 0.3s var(--cg-ease),
+    transform 0.4s var(--cg-ease);
+}
+
+.cg-film-play svg {
+  width: 38%;
+  fill: currentColor;
+  translate: 8% 0;
+}
+
+.cg-film-play:hover i,
+.cg-film-play:focus-visible i {
+  background: var(--cg-pink);
+  border-color: var(--cg-pink);
+  color: var(--cg-black);
+  transform: scale(1.06);
+}
+
+.cg-film-play:focus-visible {
+  outline-offset: -6px;
+}
+
+.cg-film-text {
+  margin-top: 1.25rem;
+  max-width: 68ch;
+}
+
+.cg-film-text summary {
+  font-family: var(--cg-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(237, 223, 238, 0.72);
+  cursor: pointer;
+}
+
+.cg-film-text ol {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(237, 223, 238, 0.86);
+}
+
+.cg-film-text li + li {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .cg-film .cg-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cg-film-note {
+    text-align: left;
   }
 }
 
