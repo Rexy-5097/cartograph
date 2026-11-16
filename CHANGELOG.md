@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — the macOS CI jobs run again, and the release workflow can build for macOS
+
+GitHub retired the `macos-14` and `macos-13` hosted runner images. Since about
+30 October, `release binary · macos-14` and `desktop shell · macos-14` were
+cancelled on every pull request before a single step ran: GitHub reported
+"the configuration 'macos-14-arm64-us-default' is not supported". The cause was
+the runner label, not any pull request's content. CI now pins `macos-15`. The
+release workflow builds `aarch64-apple-darwin` on `macos-15` and
+`x86_64-apple-darwin` on `macos-15-intel`, so each binary is still built and
+smoke-tested on the platform it targets.
+
 ### Fixed — a router imported under an alias keeps its inclusion and its prefix
 
 With `from polar.customer.endpoints import router as customer_router`, the
