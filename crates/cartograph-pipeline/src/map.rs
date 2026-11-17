@@ -148,13 +148,36 @@ pub struct Truncation {
     pub hubs_omitted: usize,
 }
 
-/// The language a repository-relative file is written in.
+/// The language a repository-relative file is written in, and its family.
 ///
-/// Rendered through `SourceLanguage`'s own `Display`, deliberately. The enum is
-/// `#[non_exhaustive]`, so a `match` here would need a wildcard arm — and a
-/// wildcard would quietly label a language added later as something it is not.
-fn language_of(file: &str) -> Option<String> {
-    SourceLanguage::from_path(file).map(|language| language.to_string())
+/// The name is rendered through `SourceLanguage`'s own `Display`, deliberately.
+/// The enum is `#[non_exhaustive]`, so a `match` here would need a wildcard arm
+/// — and a wildcard would quietly label a language added later as something it
+/// is not.
+fn language_of(file: &str) -> Option<(String, &'static str)> {
+    SourceLanguage::from_path(file)
+        .map(|language| (language.to_string(), language_family(language)))
+}
+
+/// Which family a language belongs to, for deciding whether a relationship
+/// crosses a language boundary.
+///
+/// "Cross-language" means the two endpoints were extracted by different
+/// languages' grammars — TypeScript calling Python, the relationship the
+/// product exists to recover. TypeScript and TSX are one language here. This
+/// is the only definition: the CLI's totals and MCP `map` both use it. They
+/// each had their own until the 2026-10-30 large-codebase assessment (F14)
+/// found `map` counting a TSX component calling a TypeScript client as a
+/// language boundary, so the same graph gave two answers.
+#[must_use]
+pub fn language_family(language: SourceLanguage) -> &'static str {
+    match language {
+        SourceLanguage::TypeScript | SourceLanguage::Tsx => "ts",
+        SourceLanguage::Python => "py",
+        // A language added later is its own family until it is named here,
+        // which keeps "cross-language" true rather than convenient.
+        _ => "other",
+    }
 }
 
 /// The top-level directory a repository-relative file sits in.
@@ -183,7 +206,7 @@ struct NodePass {
     languages: BTreeMap<String, usize>,
     artefacts: BTreeMap<String, usize>,
     areas: BTreeMap<String, usize>,
-    node_language: BTreeMap<NodeId, String>,
+    node_language: BTreeMap<NodeId, (String, &'static str)>,
 }
 
 /// Counts artefacts by kind, area and language, in one pass.
@@ -203,9 +226,9 @@ fn walk_nodes(graph: &ArchitectureGraph) -> NodePass {
 
         if let Some(location) = node.location() {
             *pass.areas.entry(area_of(location.file())).or_insert(0) += 1;
-            if let Some(language) = language_of(location.file()) {
+            if let Some((language, family)) = language_of(location.file()) {
                 *pass.languages.entry(language.clone()).or_insert(0) += 1;
-                pass.node_language.insert(node.id(), language);
+                pass.node_language.insert(node.id(), (language, family));
             }
         }
     }
@@ -223,10 +246,14 @@ struct EdgePass {
 
 /// Counts relationships, degrees and language boundaries, in one pass.
 ///
-/// A boundary is an edge whose endpoints are in files of different languages —
+/// A boundary is an edge whose endpoints are in different language families
+/// ([`language_family`]) —
 /// the thing Cartograph exists to show, so it is counted rather than inferred
 /// from the kind.
-fn walk_edges(graph: &ArchitectureGraph, node_language: &BTreeMap<NodeId, String>) -> EdgePass {
+fn walk_edges(
+    graph: &ArchitectureGraph,
+    node_language: &BTreeMap<NodeId, (String, &'static str)>,
+) -> EdgePass {
     let mut pass = EdgePass {
         relationships: BTreeMap::new(),
         boundaries: BTreeMap::new(),
@@ -242,10 +269,10 @@ fn walk_edges(graph: &ArchitectureGraph, node_language: &BTreeMap<NodeId, String
         *pass.degree.entry(edge.source()).or_insert(0) += 1;
         *pass.degree.entry(edge.target()).or_insert(0) += 1;
 
-        if let (Some(from), Some(to)) = (
+        if let (Some((from, from_family)), Some((to, to_family))) = (
             node_language.get(&edge.source()),
             node_language.get(&edge.target()),
-        ) && from != to
+        ) && from_family != to_family
         {
             pass.cross_language += 1;
             *pass
@@ -441,6 +468,99 @@ mod tests {
                 kind: "function".to_owned(),
                 count: 3
             }]
+        );
+    }
+
+    /// F14 of the 2026-10-30 assessment: Sentry's CLI summary reported 0
+    /// cross-language edges and MCP `map` 1; Phoenix 19 and 21. The difference
+    /// was TSX calling TypeScript, which is one language family.
+    #[test]
+    fn tsx_calling_typescript_is_not_a_language_boundary() {
+        let graph = graph_of(&[
+            ("Panel", "web/panel.tsx", "fetchSpans", "web/api/spans.ts"),
+            (
+                "fetchSpans",
+                "web/api/spans.ts",
+                "list_spans",
+                "server/spans.py",
+            ),
+            ("Notes", "web/notes.tsx", "add_note", "server/notes.py"),
+        ]);
+        let map = system_map(&graph);
+
+        assert_eq!(map.totals.cross_language, 2, "{:?}", map.boundaries);
+        assert!(
+            map.boundaries.iter().all(|b| b.to == "python"),
+            "only the edges into Python cross a family: {:?}",
+            map.boundaries
+        );
+        assert_eq!(
+            map.boundaries.iter().map(|b| b.count).sum::<usize>(),
+            map.totals.cross_language,
+            "every cross-language edge is one boundary entry's worth"
+        );
+    }
+
+    /// The same graph must give the same answer through every client: the
+    /// CLI's `cross_language_edges` and MCP `map`'s `cross_language` are now
+    /// one definition, checked here through the real pipeline.
+    #[test]
+    fn the_cli_totals_and_map_agree_on_cross_language_edges() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let root = std::env::temp_dir()
+            .join("cartograph-map-parity")
+            .join(format!(
+                "{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+        let _ = std::fs::remove_dir_all(&root);
+        for (rel, contents) in [
+            (
+                "server/app.py",
+                "from fastapi import FastAPI
+app = FastAPI()
+
+@app.get(\"/api/spans\")
+def list_spans():
+    return []
+",
+            ),
+            (
+                "web/api/spans.ts",
+                "export async function fetchSpans() {
+  return fetch(\"/api/spans\");
+}
+",
+            ),
+            (
+                "web/panel.tsx",
+                "import { fetchSpans } from \"./api/spans\";
+export function Panel() {
+  fetchSpans();
+  return null;
+}
+",
+            ),
+        ] {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("fixture dir");
+            std::fs::write(path, contents).expect("fixture");
+        }
+
+        let analysis = crate::pipeline::run(&root, crate::pipeline::Options { quiet: true })
+            .expect("fixture analyses");
+        let map = system_map(&analysis.graph);
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(
+            analysis.graph.edges().any(|e| e.source() != e.target()),
+            "precondition: the fixture must produce edges, or agreement proves nothing"
+        );
+        assert_eq!(
+            map.totals.cross_language, analysis.totals.cross_language_edges,
+            "map and the CLI totals must count the same edges"
         );
     }
 

@@ -23,7 +23,7 @@ use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_parser::model::{FileAnalysis, ParseStatus, SourceLanguage};
 use cartograph_resolver::{
-    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
+    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, UrlConfIndex,
     add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
     match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
     with_composed_prefix, with_resolved_url,
@@ -391,6 +391,9 @@ fn resolve(
     // included in another.
     let modules = ModuleIndex::build(analyses);
     let routers = RouterIndex::build(analyses, &modules);
+    // A Django URL-conf entry has no receiver; what mounts it is an
+    // `include(...)` or a spread elsewhere.
+    let urlconfs = UrlConfIndex::build(analyses, &modules);
 
     let mut backend = Vec::new();
     let mut clients = Vec::new();
@@ -406,7 +409,8 @@ fn resolve(
                 .receiver
                 .as_ref()
                 .and_then(|r| routers.prefix_for(&analysis.path, r))
-                .and_then(|resolution| with_composed_prefix(route, resolution));
+                .and_then(|resolution| with_composed_prefix(route, resolution))
+                .or_else(|| urlconfs.served(&analysis.path, route));
             if composed.is_some() {
                 totals.routes_composed += 1;
             }
@@ -565,16 +569,8 @@ fn finish_totals(totals: &mut Totals, graph: &ArchitectureGraph, analyses: &[Fil
         .map(|a| (a.path.as_str(), a.language))
         .collect();
 
-    // "Cross-language" means the two endpoints were extracted by different
-    // grammars — TypeScript calling Python, which is the relationship the
-    // product exists to recover. TypeScript and TSX are one language here.
-    let family = |language: SourceLanguage| match language {
-        SourceLanguage::TypeScript | SourceLanguage::Tsx => "ts",
-        SourceLanguage::Python => "py",
-        // A language added later is its own family until it is named here,
-        // which keeps "cross-language" true rather than convenient.
-        _ => "other",
-    };
+    // One definition of "cross-language", shared with MCP `map`.
+    let family = crate::map::language_family;
 
     totals.cross_language_edges = graph
         .edges()
