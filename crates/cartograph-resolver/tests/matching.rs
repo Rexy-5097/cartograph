@@ -511,8 +511,11 @@ fn a_numeric_looking_route_segment_is_still_a_literal() {
     );
 }
 
+/// Possible, never an edge. This test pinned `Strong` until 2026-11-01, which
+/// contradicted this module's own rule that an unanswered question is not a
+/// weak match (F-013); the candidate and its evidence are unchanged.
 #[test]
-fn an_unknown_client_value_against_a_literal_is_possible_but_never_exact() {
+fn an_unknown_client_value_against_a_literal_is_possible_but_never_an_edge() {
     let index = backend(&[("/orders/latest", &[HttpMethodHint::Get], "latest")]);
     let canonical = normalize_client_call(
         &HttpCallObservation {
@@ -537,7 +540,8 @@ fn an_unknown_client_value_against_a_literal_is_possible_but_never_exact() {
     );
     let result = match_client(&canonical, &index);
 
-    assert_eq!(result.status, MatchStatus::Strong);
+    assert_eq!(result.status, MatchStatus::Ambiguous);
+    assert!(!result.status.is_accepted());
     assert_eq!(
         result.candidates[0].path,
         PathCompatibility::VariableAligned
@@ -731,4 +735,190 @@ fn the_root_path_matches_only_the_root_route() {
         "an empty path is discriminating by equality"
     );
     assert_eq!(go("/orders", GET, &index).status, MatchStatus::NoMatch);
+}
+
+// ── F-013: an unknown client value against a server literal ─────────
+//
+// Recovery programme, 2026-11-01. The 2026-10-30 assessment's corpus held 21
+// accepted matches whose best candidate needed an unknown client segment to
+// equal a server literal. Read against source, the unknown was a loop
+// variable, a test parameter, an enum-typed field or a prefix constant: right
+// by chance at best. Paperless-ngx's `f"/api/{endpoint}/"` over
+// `correspondents`, `tags` and `document_types` matched `/api/token/`. Such a
+// candidate stays visible, but it is never an edge.
+
+/// A client URL written as `/api/${x}/`: text, with `${name}` marking an
+/// expression whose value the analysis does not know.
+fn templated(url: &str, method: Option<HttpMethodHint>) -> MatchResultInput {
+    let mut parts = Vec::new();
+    let mut rest = url;
+    while let Some(start) = rest.find("${") {
+        if start > 0 {
+            parts.push(TemplatePart::Text {
+                value: rest[..start].to_owned(),
+            });
+        }
+        let end = rest[start..].find('}').expect("closed") + start;
+        parts.push(TemplatePart::Expression {
+            source: rest[start + 2..end].to_owned(),
+            span: span(),
+        });
+        rest = &rest[end + 1..];
+    }
+    if !rest.is_empty() {
+        parts.push(TemplatePart::Text {
+            value: rest.to_owned(),
+        });
+    }
+    MatchResultInput(HttpCallObservation {
+        enclosing: None,
+        callee: "axios.request".into(),
+        method_hint: method,
+        url: UrlObservation::Template { parts },
+        span: span(),
+    })
+}
+
+struct MatchResultInput(HttpCallObservation);
+
+impl MatchResultInput {
+    fn against(&self, index: &RouteIndex) -> MatchResult {
+        let canonical =
+            normalize_client_call(&self.0, "web/src/api.ts", SourceLanguage::TypeScript);
+        match_client(&canonical, index)
+    }
+}
+
+fn unverified(result: &MatchResult) -> bool {
+    result.candidates.iter().any(|c| {
+        c.reasons.iter().any(|r| {
+            matches!(
+                r,
+                cartograph_resolver::MatchReason::UnknownValueAgainstLiteral(_)
+            )
+        })
+    })
+}
+
+/// Paperless-ngx `e240c89`, `src/documents/tests/test_api_documents.py:3444`.
+#[test]
+fn an_unknown_segment_never_becomes_a_server_literal() {
+    let index = backend(&[("/api/token/", &[], "PaperlessObtainAuthTokenView")]);
+    let result = templated("/api/${endpoint}/", POST).against(&index);
+
+    assert!(!result.status.is_accepted(), "{result:?}");
+    assert_eq!(result.status, MatchStatus::Ambiguous);
+    assert_eq!(
+        result.candidates.len(),
+        1,
+        "the candidate is kept for review"
+    );
+    assert!(unverified(&result));
+}
+
+/// Plane `b98e1de`, `apps/web/services/integrations/github.service.ts:29`:
+/// the unknown workspace slug lands on `file-assets`, and route parameters
+/// absorb `importers` and `github`.
+#[test]
+fn a_crossed_alignment_is_not_an_edge() {
+    let index = backend(&[(
+        "/api/workspaces/file-assets/{workspace_id}/{asset_key}/",
+        &[],
+        "FileAssetEndpoint",
+    )]);
+    let result = templated("/api/workspaces/${slug}/importers/github/", GET).against(&index);
+
+    assert!(!result.status.is_accepted(), "{result:?}");
+    assert!(unverified(&result));
+}
+
+/// The literal can sit anywhere, and every unverified position counts.
+#[test]
+fn an_unknown_segment_in_the_middle_against_a_literal_is_not_an_edge() {
+    let index = backend(&[("/api/v2/items", &[HttpMethodHint::Get], "items_v2")]);
+    let result = templated("/api/${version}/items", GET).against(&index);
+    assert!(!result.status.is_accepted(), "{result:?}");
+}
+
+/// What must still match: an unknown value into a declared parameter is
+/// exactly what the parameter accepts.
+#[test]
+fn an_unknown_segment_into_a_parameter_is_still_an_edge() {
+    let index = backend(&[("/orders/{id}", &[HttpMethodHint::Get], "read")]);
+    let result = templated("/orders/${orderId}", GET).against(&index);
+    assert_eq!(result.status, MatchStatus::Strong);
+    assert!(!unverified(&result));
+}
+
+/// Plane's issue attachments: unknowns into parameters and one static
+/// literal shared, all aligned — still an edge.
+#[test]
+fn unknowns_into_parameters_around_shared_literals_are_still_an_edge() {
+    let index = backend(&[(
+        "/api/workspaces/{slug}/projects/{project_id}/issues/{issue_id}/",
+        &[HttpMethodHint::Get],
+        "issue",
+    )]);
+    let result = templated("/api/workspaces/${ws}/projects/${p}/issues/${i}/", GET).against(&index);
+    assert_eq!(result.status, MatchStatus::Strong);
+}
+
+/// A parameter route and a literal route both fit an unknown segment, so
+/// which one serves the call is undetermined either way.
+#[test]
+fn a_parameter_and_a_literal_competing_for_an_unknown_are_ambiguous() {
+    let index = backend(&[
+        ("/orders/{id}", &[HttpMethodHint::Get], "read"),
+        ("/orders/latest", &[HttpMethodHint::Get], "latest"),
+    ]);
+    let result = templated("/orders/${which}", GET).against(&index);
+    assert_eq!(result.status, MatchStatus::Ambiguous);
+    assert_eq!(result.candidates.len(), 2);
+}
+
+/// A literal client value still reaches its literal route and nothing else.
+#[test]
+fn a_known_literal_still_reaches_its_literal_route_exactly() {
+    let index = backend(&[
+        ("/orders/{id}", &[HttpMethodHint::Get], "read"),
+        ("/orders/latest", &[HttpMethodHint::Get], "latest"),
+    ]);
+    let result = go("/orders/latest", GET, &index);
+    assert_eq!(result.status, MatchStatus::Exact);
+    assert_eq!(
+        result.candidates[0].route.provenance.handler.as_deref(),
+        Some("latest")
+    );
+}
+
+#[test]
+fn a_different_literal_or_length_or_method_still_matches_nothing() {
+    let index = backend(&[("/api/token/", &[HttpMethodHint::Post], "token")]);
+    assert_eq!(go("/api/tags/", POST, &index).status, MatchStatus::NoMatch);
+    assert_eq!(
+        templated("/api/${x}/extra/", POST).against(&index).status,
+        MatchStatus::NoMatch
+    );
+    assert_eq!(
+        templated("/api/${x}/", GET).against(&index).status,
+        MatchStatus::NoMatch,
+        "a declared method that differs excludes the route outright"
+    );
+}
+
+/// A trailing-slash difference is recorded, and does not by itself refuse.
+#[test]
+fn a_trailing_slash_difference_on_a_parameter_route_is_still_an_edge() {
+    let index = backend(&[("/orders/{id}/", &[HttpMethodHint::Get], "read")]);
+    let result = templated("/orders/${id}", GET).against(&index);
+    assert_eq!(result.status, MatchStatus::Strong);
+}
+
+/// Composed prefixes do not change the rule: under `/api/v1` the unknown
+/// still meets a literal.
+#[test]
+fn a_composed_prefix_does_not_license_an_unknown_against_a_literal() {
+    let index = backend(&[("/api/v1/images/upload", &[HttpMethodHint::Post], "upload")]);
+    let result = templated("/api/v1/images/${route}", POST).against(&index);
+    assert!(!result.status.is_accepted(), "{result:?}");
 }
