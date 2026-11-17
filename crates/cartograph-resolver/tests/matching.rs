@@ -922,3 +922,64 @@ fn a_composed_prefix_does_not_license_an_unknown_against_a_literal() {
     let result = templated("/api/v1/images/${route}", POST).against(&index);
     assert!(!result.status.is_accepted(), "{result:?}");
 }
+
+// ── F-016: path specificity decides before method evidence ──────────
+//
+// Recovery programme, 2026-11-01. A static route with no declared method
+// scored 0.98 × 0.8 = 0.784 and lost to a parameter route with a declared
+// method at 0.9, so `GET /orders/latest` was joined to `/orders/<order_id>`.
+// Flask serves it with the static rule. No framework dispatches on whether a
+// method was written down.
+
+/// Flask blueprint: `@bp.route("/orders/latest")` (no methods) beside
+/// `@bp.route("/orders/<order_id>", methods=["GET"])`.
+#[test]
+fn an_exact_static_route_outranks_a_parameter_route_whatever_the_methods_declare() {
+    let index = backend(&[
+        ("/orders/latest", &[], "latest_order"),
+        ("/orders/{order_id}", &[HttpMethodHint::Get], "read_order"),
+    ]);
+    let result = go("/orders/latest", GET, &index);
+    assert!(result.status.is_accepted(), "{result:?}");
+    assert_eq!(
+        result.candidates[0].route.provenance.handler.as_deref(),
+        Some("latest_order"),
+        "{result:?}"
+    );
+    assert_eq!(
+        result.status,
+        MatchStatus::Strong,
+        "the method is still undeclared"
+    );
+}
+
+/// The parameter route still serves every other value.
+#[test]
+fn a_parameter_route_still_serves_values_the_static_route_does_not() {
+    let index = backend(&[
+        ("/orders/latest", &[], "latest_order"),
+        ("/orders/{order_id}", &[HttpMethodHint::Get], "read_order"),
+    ]);
+    let result = go("/orders/42", GET, &index);
+    assert_eq!(result.status, MatchStatus::Strong);
+    assert_eq!(
+        result.candidates[0].route.provenance.handler.as_deref(),
+        Some("read_order")
+    );
+}
+
+/// Two exact static routes differing only in method evidence stay a
+/// method question: the declared one is the better-evidenced, as before.
+#[test]
+fn among_equally_specific_routes_method_evidence_still_ranks() {
+    let index = backend(&[
+        ("/orders", &[], "any_orders"),
+        ("/orders", &[HttpMethodHint::Get], "get_orders"),
+    ]);
+    let result = go("/orders", GET, &index);
+    assert_eq!(result.status, MatchStatus::Exact);
+    assert_eq!(
+        result.candidates[0].route.provenance.handler.as_deref(),
+        Some("get_orders")
+    );
+}

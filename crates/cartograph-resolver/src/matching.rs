@@ -373,13 +373,19 @@ pub fn match_client(client: &CanonicalRoute, index: &RouteIndex) -> MatchResult 
         .filter_map(|route| assess(client, route))
         .collect();
 
-    // Strongest first; ties broken on the route's own path so ordering cannot
-    // depend on index insertion order.
+    // Most specific path first, then strongest evidence; ties broken on the
+    // route's own path so ordering cannot depend on index insertion order.
+    // Specificity leads because that is what a router dispatches on: whether a
+    // route declared its method says nothing about which route serves a path.
     candidates.sort_by(|a, b| {
-        b.confidence
-            .get()
-            .partial_cmp(&a.confidence.get())
-            .unwrap_or(std::cmp::Ordering::Equal)
+        specificity(b.path)
+            .cmp(&specificity(a.path))
+            .then_with(|| {
+                b.confidence
+                    .get()
+                    .partial_cmp(&a.confidence.get())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .then_with(|| a.route.path.to_string().cmp(&b.route.path.to_string()))
     });
 
@@ -604,7 +610,10 @@ fn classify(candidates: &[Candidate]) -> MatchStatus {
     }
     let tied = candidates
         .iter()
-        .filter(|c| (c.confidence.get() - best.confidence.get()).abs() < f32::EPSILON)
+        .filter(|c| {
+            specificity(c.path) == specificity(best.path)
+                && (c.confidence.get() - best.confidence.get()).abs() < f32::EPSILON
+        })
         .count();
     if tied > 1 {
         return MatchStatus::Ambiguous;
@@ -613,5 +622,22 @@ fn classify(candidates: &[Candidate]) -> MatchStatus {
         MatchStatus::Exact
     } else {
         MatchStatus::Strong
+    }
+}
+
+/// How specifically a path class pins the request, most specific highest.
+///
+/// A static path equal at every position beats a parameter that binds a
+/// concrete value, which beats an alignment with an unknown value, which beats
+/// a wildcard tail. Werkzeug ranks Flask rules this way, and it is the order in
+/// which a developer must declare Starlette and Django routes for the static
+/// one to be reachable at all.
+fn specificity(path: PathCompatibility) -> u8 {
+    match path {
+        PathCompatibility::ExactStatic => 4,
+        PathCompatibility::ParameterBound => 3,
+        PathCompatibility::VariableAligned => 2,
+        PathCompatibility::WildcardSuffix => 1,
+        PathCompatibility::Incompatible => 0,
     }
 }
