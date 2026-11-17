@@ -141,7 +141,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        # A pinned macOS image, not macos-latest, so a runner change is a
+        # reviewed commit. GitHub retired macos-14: jobs that asked for it were
+        # cancelled before starting ("configuration not supported").
+        os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v4
 
@@ -302,7 +305,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        # Pinned, and moved off the retired macos-14 image (see release-build).
+        os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v4
 
