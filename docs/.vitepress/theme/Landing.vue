@@ -15,6 +15,9 @@ import CartographMark from './CartographMark.vue'
 import HalftoneField from './HalftoneField.vue'
 import GlobeField from './GlobeField.vue'
 import SplitWords from './SplitWords.vue'
+import EdgeField from './graphics/EdgeField.vue'
+import OriginStory from './graphics/OriginStory.vue'
+import TraceChain from './graphics/TraceChain.vue'
 import { counters, cursor, idleOffscreen, magnetic, marqueeVelocity, reveals, scrollScene } from './motion'
 
 const REPO = 'https://github.com/Rexy-5097/cartograph'
@@ -171,6 +174,7 @@ connection_test_request  (table)
 
 This path crosses the HTTP boundary and reaches a database table.`
 const traceLines = trace.split('\n')
+
 
 const MOTION_KEY = 'cartograph:motion-paused'
 
@@ -516,6 +520,13 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
+      <!--
+        From one file to three languages: the film's opening as a stage the
+        reader scrolls through (graphics/OriginStory.vue). It ends on the
+        problem the rest of the page answers.
+      -->
+      <OriginStory :paused="!motionOn" />
+
       <!-- Manilla sheet: surfaces, approach, field -->
       <div class="cg-sheet" data-scroll="enter">
         <section class="cg-section">
@@ -676,6 +687,9 @@ onBeforeUnmount(() => {
           </a>
         </div>
 
+        <!-- The trace below, drawn as the chain it describes. -->
+        <TraceChain class="cg-chain" loop :paused="!motionOn" />
+
         <div class="cg-proof-stage">
           <figure class="cg-terminal" data-reveal>
             <div class="cg-terminal-bar" aria-hidden="true">
@@ -779,6 +793,9 @@ onBeforeUnmount(() => {
             </p>
           </a>
         </div>
+
+        <!-- The first card's figures, one dot per edge. -->
+        <EdgeField class="cg-edges" loop :paused="!motionOn" :aspect="2.6" />
 
         <dl class="cg-stats">
           <div data-reveal style="--i: 0">
@@ -1855,6 +1872,16 @@ html.cg-loading .cg-hero :deep(.cg-globe) {
   z-index: 1;
   color: var(--cg-black);
   background: var(--cg-white);
+  /* The graphics' accent on white: the deep pink, whatever the theme. */
+  --graphic-accent: var(--cg-pink-deep);
+}
+
+.cg-chain {
+  margin: 0 0 clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
+}
+
+.cg-edges {
+  margin: clamp(2.5rem, 1.5rem + 3vw, 4.5rem) 0;
 }
 
 .cg-proof-stage {

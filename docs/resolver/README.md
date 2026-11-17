@@ -7,6 +7,8 @@ subsystem the project exists for. The
 [technical writeup](../writeup/technical-writeup.md#1-resolver-design) explains
 its design in full, alongside what was measured about it.
 
+<TraceChain />
+
 ## Pipeline
 
 ```text

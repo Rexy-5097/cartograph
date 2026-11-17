@@ -4,6 +4,8 @@ Implemented in [`cartograph-core`](../../crates/cartograph-core/) and
 [`cartograph-graph`](../../crates/cartograph-graph/). Summary in
 [ARCHITECTURE.md](../../ARCHITECTURE.md#the-domain-graph).
 
+<TraceChain />
+
 ## The edge record
 
 Never `A → B`; always the claim and how it was known:

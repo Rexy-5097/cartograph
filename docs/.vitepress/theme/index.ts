@@ -17,11 +17,17 @@ import '@fontsource-variable/geist-mono'
 import './style.css'
 import CartographMark from './CartographMark.vue'
 import Landing from './Landing.vue'
+import EdgeField from './graphics/EdgeField.vue'
+import TraceChain from './graphics/TraceChain.vue'
 
 export default {
   extends: DefaultTheme,
   Layout: () => h(DefaultTheme.Layout, null, { 'nav-bar-title-before': () => h(CartographMark) }),
   enhanceApp({ app }) {
     app.component('Landing', Landing)
+    // Moving graphics the documentation pages can place in their Markdown.
+    // On those pages they play once and rest: there is no pause control.
+    app.component('TraceChain', TraceChain)
+    app.component('EdgeField', EdgeField)
   },
 } satisfies Theme

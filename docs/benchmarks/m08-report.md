@@ -13,6 +13,8 @@ Base checkpoint `cartograph-m07` (`2514f77`). Same seven repositories, same
 pinned commits, same supported subset, same ground-truth methodology. The M07
 reports are unchanged.
 
+<EdgeField />
+
 ### Source artifacts
 
 The figures below are read from committed files in
