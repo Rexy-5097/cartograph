@@ -104,6 +104,7 @@ impl TypeScriptExtractor {
             routes: Vec::new(),
             routers: Vec::new(),
             router_inclusions: Vec::new(),
+            url_inclusions: Vec::new(),
             module_aliases: Vec::new(), // TypeScript route declarations: not M02's scope
             diagnostics: Vec::new(),
         };

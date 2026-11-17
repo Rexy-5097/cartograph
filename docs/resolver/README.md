@@ -58,7 +58,10 @@ On the server side, in Python:
   `@router.post(...)`, `@bp.route("/x", methods=[...])`;
 - Django URL-conf entries, `path(...)` and `re_path(...)`;
 - `APIRouter(prefix=...)` declarations and `include_router(child, prefix=...)`
-  mountings, which compose the path a route is actually served on.
+  mountings, which compose the path a route is actually served on;
+- Django mounts, `include(...)` and `*spread` into `urlpatterns`, which compose
+  the path a URL-conf entry is served on ([urlconf.md](urlconf.md)). A mount
+  is never a route.
 
 ### URLs are constructed, not written
 
@@ -127,7 +130,8 @@ in [`benchmarks/acceptance/m07-acceptance-evaluation.json`](../../benchmarks/acc
   are not recognised; raw SQL is not linked to models; SQLModel and other ORMs
   are not recognised ([orm.md](orm.md)).
 - **Django `re_path` patterns** are recorded but not normalised, so they do not
-  match.
+  match. A `re_path` *mount* composes only when its pattern is an anchored
+  literal (`^`, `^api/`).
 - **Prefix composition follows named routers only.** An
   `include_router(items.router)` attribute, or a prefix applied by a
   project-local helper, does not compose.
