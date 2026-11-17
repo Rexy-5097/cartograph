@@ -23,7 +23,7 @@ use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_parser::model::{FileAnalysis, ParseStatus, SourceLanguage};
 use cartograph_resolver::{
-    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
+    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, UrlConfIndex,
     add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
     match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
     with_composed_prefix, with_resolved_url,
@@ -391,6 +391,9 @@ fn resolve(
     // included in another.
     let modules = ModuleIndex::build(analyses);
     let routers = RouterIndex::build(analyses, &modules);
+    // A Django URL-conf entry has no receiver; what mounts it is an
+    // `include(...)` or a spread elsewhere.
+    let urlconfs = UrlConfIndex::build(analyses, &modules);
 
     let mut backend = Vec::new();
     let mut clients = Vec::new();
@@ -406,7 +409,8 @@ fn resolve(
                 .receiver
                 .as_ref()
                 .and_then(|r| routers.prefix_for(&analysis.path, r))
-                .and_then(|resolution| with_composed_prefix(route, resolution));
+                .and_then(|resolution| with_composed_prefix(route, resolution))
+                .or_else(|| urlconfs.served(&analysis.path, route));
             if composed.is_some() {
                 totals.routes_composed += 1;
             }

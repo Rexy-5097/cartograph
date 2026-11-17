@@ -136,6 +136,9 @@ pub struct FileAnalysis {
     /// Routers mounted inside other routers in this file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub router_inclusions: Vec<RouterInclusion>,
+    /// Django URL patterns mounted from elsewhere: `include(...)` and `*name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub url_inclusions: Vec<UrlConfInclusion>,
     /// Module aliases this file declares, when it is a build configuration.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub module_aliases: Vec<ModuleAlias>,
@@ -567,6 +570,60 @@ impl RouterDeclaration {
     pub fn prefix_is_literal(&self) -> bool {
         !self.prefix_unresolved
     }
+}
+
+/// A Django URL conf mounting other URL patterns under a prefix.
+///
+/// `path("api/", include("app.urls"))` is not a route: `include` is not a
+/// view, and nothing is served at `api/` unless the included module declares
+/// it. Recording it as a route made every frontend call to `/api/...` match
+/// the mount instead of the view behind it. Spreading another module's
+/// patterns into a list — `urlpatterns = [*analytic_urls]` — mounts them too,
+/// with an empty prefix.
+///
+/// An observation, like a route: which module or list the target names is
+/// the resolver's question.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UrlConfInclusion {
+    /// The pattern the target is mounted under, when it is a plain string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    /// Whether a pattern was present but cannot be composed: not a string
+    /// literal, or a `re_path` regex, which this analysis does not interpret.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub prefix_unresolved: bool,
+    /// What is mounted.
+    pub target: IncludedUrlConf,
+    /// The whole mount: the `path(...)` call, or the `*name` element.
+    pub span: Span,
+}
+
+/// What a [`UrlConfInclusion`] mounts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IncludedUrlConf {
+    /// `include("app.urls")` or `include(("app.urls", "app"))`: a module named
+    /// by its dotted path.
+    Module {
+        /// The dotted path as written.
+        specifier: String,
+    },
+    /// `include(app_urls)`, `*analytic_urls`: a name, which may be an
+    /// imported module, an imported list or a list declared in this file.
+    Name {
+        /// The name as written; dotted when it is an attribute.
+        name: String,
+    },
+    /// `include([path(...), ...])`: the patterns are written in place.
+    Inline {
+        /// The list, so the entries inside it can be found by position.
+        span: Span,
+    },
+    /// Anything else, kept as source text and not resolved.
+    Other {
+        /// The argument's source text.
+        source: String,
+    },
 }
 
 /// One router being mounted inside another: `parent.include_router(child)`.
