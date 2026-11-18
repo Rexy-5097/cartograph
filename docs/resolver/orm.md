@@ -31,13 +31,26 @@ a `__tablename__` is not a model.
 | `__tablename__ = "orders"` | `Declared` — read exactly |
 | `Meta.db_table = "orders"` | `Declared` — read exactly |
 | SQLAlchemy without `__tablename__` | **Unresolved** |
-| Django without `db_table` | **Unresolved** |
+| Django without `db_table`, app package's `apps.py` states its label or name | `Derived` — `<app_label>_<modelname>` |
+| Django without `db_table`, no `apps.py`, or one that is contradictory, non-literal or names another app | **Unresolved** |
+| Django model whose `Meta` declares `abstract` or `proxy` | **Unresolved** — no table of its own |
 | `db_table = settings.TABLE` | **Unresolved** — not a string literal |
 
 An explicit declaration always wins. **No name is ever derived from a class
-name.** Django's default is `applabel_modelname` and the app label lives in the
-app's configuration, not the model file — deriving `order` from `Order` would
-be wrong for every app that sets a label. SQLAlchemy 2.0 requires
+name alone.** Django's default is `applabel_modelname` and the app label lives
+in the app's configuration, not the model file — deriving `order` from `Order`
+would be wrong for every app that sets a label. The label is therefore read
+from the app package's own `apps.py`: the `label` its `AppConfig` subclass
+states, else the last component of its `name`, which must be the package's own
+directory ([BUG-0009](../../agentos/artifacts/bugs/ART-BUG-0009-django-default-tables.md)).
+Anything less certain refuses. The parser records that `abstract` or `proxy`
+is assigned but not its value, so either one's presence refuses the default.
+
+A Django model is recognised by a `models.Model` base, by a base that is
+itself a Django model class in the same file (an abstract `TimestampedModel`),
+or by `AbstractUser`/`AbstractBaseUser` imported from
+`django.contrib.auth.models`. A class inheriting a same-named base from
+anywhere else is not a model. SQLAlchemy 2.0 requires
 `__tablename__` on a concrete model, so its absence means abstract or a naming
 callback this analysis cannot see. Both refuse.
 
