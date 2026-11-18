@@ -102,7 +102,9 @@ type aliases · enums · module-scope `const`/`let`/`var` · export forms
 (inline, `export {…}` clauses, `export default` incl. anonymous expressions) ·
 call sites `foo()` / `a.b.c()` / `new Foo()` · string literals · template
 literals with substitution structure · `+` concatenation chains · HTTP-shaped
-calls (`fetch`, `axios.*`, known client verbs, path-like heuristic).
+calls (`fetch`, `axios.*`, known client verbs, any receiver bound by an
+import to axios's default or namespace export — `import Axios from 'axios'` —
+whatever its local name, path-like heuristic).
 
 ## Error tolerance
 
