@@ -13,9 +13,11 @@
 //!   than an absent one.
 //! - **HTTP-looking calls** are observed (never resolved) when they match:
 //!   `fetch(url, …)`; `<obj>.<verb>(url, …)` where `<verb>` is an HTTP method
-//!   name and either `<obj>` is one of `axios`/`client`/`http`/`api` or the
-//!   URL argument is a string/template starting with `/`, `http://` or
-//!   `https://`. `map.get("key")` is therefore not observed unless its
+//!   name and either `<obj>` is one of `axios`/`client`/`http`/`api`, or
+//!   `<obj>` is bound by an import to the default or namespace export of
+//!   `axios` (`import Axios from 'axios'` — by binding, whatever the local
+//!   name), or the URL argument is a string/template starting with `/`,
+//!   `http://` or `https://`. `map.get("key")` is therefore not observed unless its
 //!   argument looks like a path — and a stray observation is harmless because
 //!   observations only become edges after the resolver matches them against
 //!   real backend routes (M04).
@@ -41,6 +43,11 @@ const DIAGNOSTIC_CAP: usize = 25;
 /// Object names whose `.get/.post/…` calls are observed as HTTP regardless of
 /// what the URL argument looks like.
 const HTTP_CLIENT_OBJECTS: [&str; 4] = ["axios", "client", "http", "api"];
+
+/// Modules whose default or namespace export is an HTTP client (R7-C1). A receiver
+/// bound to one of these by an import is a known client whatever its local name:
+/// `import Axios from 'axios'` makes `Axios.get(…)` a request.
+const HTTP_CLIENT_MODULES: [&str; 1] = ["axios"];
 
 /// Which of the two grammars this extractor should use.
 ///
@@ -763,8 +770,9 @@ impl Walker<'_> {
                 let Some(verb) = HttpMethodHint::from_name(property) else {
                     return;
                 };
-                let known_client =
-                    object.len() == 1 && HTTP_CLIENT_OBJECTS.contains(&object[0].as_str());
+                let known_client = object.len() == 1
+                    && (HTTP_CLIENT_OBJECTS.contains(&object[0].as_str())
+                        || self.bound_to_http_client(&object[0]));
                 // Express and Hono register a route by passing handlers,
                 // and the syntax is identical to a client call:
                 //
@@ -967,6 +975,21 @@ impl Walker<'_> {
             }
         }
         None
+    }
+
+    /// Is `name` bound, by an import earlier in this file, to the default or
+    /// namespace export of an HTTP-client module? (R7-C1: by binding, not by name.)
+    fn bound_to_http_client(&self, name: &str) -> bool {
+        self.analysis.imports.iter().any(|import| {
+            !import.type_only
+                && HTTP_CLIENT_MODULES.contains(&import.specifier.as_str())
+                && (import.default_name.as_deref() == Some(name)
+                    || import.namespace_name.as_deref() == Some(name)
+                    || import
+                        .named
+                        .iter()
+                        .any(|n| n.imported == "default" && n.local.as_deref() == Some(name)))
+        })
     }
 
     /// Does this argument syntactically look like a URL path?

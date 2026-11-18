@@ -43,6 +43,24 @@ were 24 of 24 sampled access edges and 25 of 25 sampled on CVAT. HTTP-call
 edges are unchanged. Committed M08 results are frozen and do not change, but a
 re-run on a Django repository would now report these edges.
 
+### Fixed — a request through `axios` is observed whatever the import is called
+
+`<obj>.<verb>(url)` was observed as a request only when `<obj>` was literally
+named `axios`, `client`, `http` or `api`, or when the URL began with a literal
+path. CVAT's API layer imports axios as `Axios` and builds every URL as
+`` `${backendAPI}/…` ``, so none of the 121 requests in
+`cvat-core/src/server-proxy.ts` was observed and the frontend looked silent
+([BUG-0008](agentos/artifacts/bugs/ART-BUG-0008-axios-import-binding.md)).
+A receiver bound by an import to axios's default or namespace export is now a
+known client, by binding rather than by name. A lookalike name with no axios
+import, a type-only import and an `Axios` from another module are not.
+
+On CVAT `b976874` the 122 requests an independent scan of `cvat-core` and
+`cvat-ui` finds are all observed now, against none before, and no observation
+appears outside them. Each is refused as `ClientPrefixUnresolved`, because
+`backendAPI` is not yet resolved, so no edge is formed and none is guessed. On
+Plane, Label Studio and Paperless-ngx no edge is gained or lost.
+
 ### Fixed — the macOS CI jobs run again, and the release workflow can build for macOS
 
 GitHub retired the `macos-14` and `macos-13` hosted runner images. Since about

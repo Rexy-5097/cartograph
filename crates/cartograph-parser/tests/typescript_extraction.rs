@@ -909,3 +909,74 @@ void channel.post({ url: '/emails/', data });
         .expect("fixture parses");
     assert_eq!(analysis.http_calls.len(), 2, "{:?}", analysis.http_calls);
 }
+
+/// BUG-0008: a client is recognised by its import binding, not by its name.
+///
+/// CVAT's API layer (`cvat-core/src/server-proxy.ts`) imports axios as `Axios`
+/// and builds every URL as `${backendAPI}/…`. Neither the name list nor the
+/// literal-path rule accepted those calls, so 121 requests were never observed.
+#[test]
+fn a_receiver_bound_to_an_axios_import_makes_requests_whatever_its_name() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/server-proxy.ts",
+            r"
+import Axios from 'axios';
+import * as ax from 'axios';
+import { default as Http } from 'axios';
+import config from './config';
+
+export async function about(): Promise<void> {
+    const { backendAPI } = config;
+    await Axios.get(`${backendAPI}/server/about`);
+}
+export async function login(): Promise<void> {
+    await ax.post(`${config.backendAPI}/auth/login`, {});
+}
+export async function remove(id: number): Promise<void> {
+    await Http.delete(`${config.backendAPI}/tasks/${id}`);
+}
+",
+        )
+        .expect("fixture parses");
+    let callees: Vec<String> = analysis
+        .http_calls
+        .iter()
+        .map(|c| format!("{:?}", c.callee))
+        .collect();
+    assert_eq!(
+        analysis.http_calls.len(),
+        3,
+        "a request through an axios import was not observed: {callees:?}"
+    );
+}
+
+/// The controls: a binding decides, so a lookalike name with no axios import,
+/// a type-only import, and an `Axios` from some other module are not clients,
+/// and an expression-headed URL alone still does not make a request.
+#[test]
+fn a_lookalike_receiver_without_an_axios_binding_is_not_a_client() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/cache.ts",
+            r"
+import type AxiosType from 'axios';
+import Axios from './axios-like';
+
+const cache = new Map<string, string>();
+export function lookups(key: string, AxiosType: Map<string, string>): void {
+    cache.get(`${key}/children`);
+    Axios.get(`${key}/children`);
+    AxiosType.get(`${key}/children`);
+}
+",
+        )
+        .expect("fixture parses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "a non-client lookup was observed as a request: {:?}",
+        analysis.http_calls
+    );
+}
