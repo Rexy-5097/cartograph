@@ -7,6 +7,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a Django model without `db_table` gets its default table when its app states its label
+
+A Django model with no `Meta.db_table` was always left without a table,
+because the default, `<app_label>_<modelname>`, needs the app label and that
+lives in the app's configuration, not the model file. Models were also missed
+when their base was another model class rather than `models.Model` itself.
+On CVAT none of the 44 concrete tables resolved, and `Task`, `Job` and
+`Project` were not models at all
+([BUG-0009](agentos/artifacts/bugs/ART-BUG-0009-django-default-tables.md)).
+
+- The label is now read from the app package's own `apps.py`: the `label` its
+  `AppConfig` subclass states, else the last component of its `name`, which
+  must be the package's own directory. A missing `apps.py`, conflicting
+  configurations, a non-literal value or a `name` for another package refuse,
+  as before.
+- A model whose `Meta` declares `abstract` or `proxy` gets no table of its own.
+- A class inheriting a Django model class from the same file is a model, and so
+  is one inheriting `AbstractUser` or `AbstractBaseUser` imported from
+  `django.contrib.auth.models`. A same-named base from anywhere else is not.
+
+On CVAT `b976874` 44 of 44 tables now resolve, all correct, with no table given
+to an abstract model, 51 models are recognised instead of 33, and ORM edges
+rise from 37 to 188. Graph consumers see new edges on other Django repositories
+too, none lost:
+
+| Repository | ORM-access edges | `queries` edges | Tables |
+|---|---|---|---|
+| Plane | +129 | +1 | 0 → 1 |
+| Label Studio | +131 | +22 | 5 → 27 |
+| Paperless-ngx | +1,082 | +18 | 0 → 18 |
+
+All 41 new table edges on the last three were verified against the source, as
+were 24 of 24 sampled access edges and 25 of 25 sampled on CVAT. HTTP-call
+edges are unchanged. Committed M08 results are frozen and do not change, but a
+re-run on a Django repository would now report these edges.
+
 ### Fixed — the macOS CI jobs run again, and the release workflow can build for macOS
 
 GitHub retired the `macos-14` and `macos-13` hosted runner images. Since about

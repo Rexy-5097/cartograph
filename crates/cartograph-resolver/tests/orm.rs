@@ -967,3 +967,147 @@ def create_group(name):
         Some("create_group")
     );
 }
+
+// ---- BUG-0009: Django's default table and models through abstract bases ----
+
+const ENGINE_APPS: &str = "from django.apps import AppConfig
+
+class EngineConfig(AppConfig):
+    name = \"cvat.apps.engine\"
+";
+
+const ENGINE_MODELS: &str = r"
+from django.db import models
+
+class TimestampedModel(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+class Project(TimestampedModel):
+    name = models.CharField(max_length=256)
+
+class Task(TimestampedModel):
+    name = models.CharField(max_length=256)
+
+class Label(models.Model):
+    name = models.CharField(max_length=64)
+
+class ProjectProxy(Project):
+    class Meta:
+        proxy = True
+";
+
+#[test]
+fn a_django_default_table_is_derived_from_the_label_its_apps_py_states() {
+    let a = orm(&[
+        ("cvat/apps/engine/apps.py", ENGINE_APPS),
+        ("cvat/apps/engine/models.py", ENGINE_MODELS),
+    ]);
+    assert_eq!(a.models["Label"].table.name(), Some("engine_label"));
+    assert!(matches!(a.models["Label"].table, TableName::Derived { .. }));
+}
+
+#[test]
+fn an_explicit_app_label_wins_over_the_package_name() {
+    let apps = "from django.apps import AppConfig
+
+class C(AppConfig):
+    name = \"shop.orders\"
+    label = \"sales\"
+";
+    let models = "from django.db import models
+
+class Order(models.Model):
+    n = models.IntegerField()
+";
+    let a = orm(&[
+        ("shop/orders/apps.py", apps),
+        ("shop/orders/models.py", models),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("sales_order"));
+}
+
+#[test]
+fn models_inheriting_an_abstract_base_in_the_same_file_are_models() {
+    let a = orm(&[
+        ("cvat/apps/engine/apps.py", ENGINE_APPS),
+        ("cvat/apps/engine/models.py", ENGINE_MODELS),
+    ]);
+    assert_eq!(a.models["Project"].table.name(), Some("engine_project"));
+    assert_eq!(a.models["Task"].table.name(), Some("engine_task"));
+    assert_eq!(a.models["Task"].flavor, OrmFlavor::Django);
+}
+
+#[test]
+fn an_abstract_or_proxy_model_gets_no_table_of_its_own() {
+    let a = orm(&[
+        ("cvat/apps/engine/apps.py", ENGINE_APPS),
+        ("cvat/apps/engine/models.py", ENGINE_MODELS),
+    ]);
+    for name in ["TimestampedModel", "ProjectProxy"] {
+        let model = a.models.get(name).expect("still discovered as a model");
+        assert_eq!(
+            model.table.name(),
+            None,
+            "{name} must have no derived table"
+        );
+    }
+}
+
+#[test]
+fn a_custom_user_model_is_a_django_model_and_keeps_its_declared_table() {
+    let apps = "from django.apps import AppConfig
+
+class IamConfig(AppConfig):
+    name = \"cvat.apps.iam\"
+";
+    let models = "from django.contrib.auth.models import AbstractUser
+
+class User(AbstractUser):
+    class Meta(AbstractUser.Meta):
+        db_table = \"auth_user\"
+";
+    let a = orm(&[
+        ("cvat/apps/iam/apps.py", apps),
+        ("cvat/apps/iam/models.py", models),
+    ]);
+    assert_eq!(a.models["User"].table.name(), Some("auth_user"));
+}
+
+#[test]
+fn a_same_named_base_not_imported_from_django_auth_is_not_a_model() {
+    let models = "from mylib import AbstractUser
+
+class Person(AbstractUser):
+    pass
+";
+    let a = orm(&[("people/models.py", models)]);
+    assert!(!a.models.contains_key("Person"));
+}
+
+#[test]
+fn the_default_table_is_refused_when_apps_py_does_not_describe_this_package() {
+    // No apps.py at all.
+    let a = orm(&[("api/models.py", DJANGO_MODELS)]);
+    assert_eq!(a.models["Receipt"].table.name(), None);
+    // apps.py names a different app.
+    let apps = "from django.apps import AppConfig
+
+class C(AppConfig):
+    name = \"something.else\"
+";
+    let a = orm(&[("api/apps.py", apps), ("api/models.py", DJANGO_MODELS)]);
+    assert_eq!(a.models["Receipt"].table.name(), None);
+    // A label that is not a literal.
+    let apps = "from django.apps import AppConfig
+PREFIX = make()
+
+class C(AppConfig):
+    name = \"api\"
+    label = PREFIX
+";
+    let a = orm(&[("api/apps.py", apps), ("api/models.py", DJANGO_MODELS)]);
+    assert_eq!(a.models["Receipt"].table.name(), None);
+}

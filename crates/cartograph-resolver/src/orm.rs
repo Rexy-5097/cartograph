@@ -17,9 +17,11 @@
 //!
 //! Table names follow the same discipline. An explicit `__tablename__` or
 //! `Meta.db_table` is read from the source. A *derived* name is produced only
-//! where the framework's convention is deterministic and documented — Django's
-//! `app_modelname` cannot be derived without the app label, so Django models
-//! without `db_table` resolve to [`TableName::Unresolved`] rather than a guess.
+//! where the framework's convention is deterministic and documented. Django's
+//! `applabel_modelname` needs the app label, which the model file does not
+//! hold: it is read from the app package's own `apps.py` (BUG-0009), and the
+//! table stays [`TableName::Unresolved`] when that configuration is missing,
+//! contradictory or not a literal, or when the model is abstract or a proxy.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -329,7 +331,8 @@ impl OrmAnalysis {
         let index = ModuleIndex::build(files);
 
         for file in &python {
-            for model in discover_models(file) {
+            for mut model in discover_models(file) {
+                derive_django_default_table(&mut model, &python);
                 *seen.entry(model.name.clone()).or_insert(0) += 1;
                 analysis.models.insert(model.name.clone(), model);
             }
@@ -384,9 +387,188 @@ impl OrmAnalysis {
     }
 }
 
-/// Finds ORM model classes in one file (slices 1 and 3).
+/// R7-C4: Django's documented default table, `<app_label>_<modelname>`, for a
+/// model that declares no `Meta.db_table`.
+///
+/// The app label is read from the app package's own `apps.py`: the `label` its
+/// `AppConfig` subclass states, else the last component of its `name`. The
+/// derivation is refused, and the table stays unresolved with the reason, when
+/// the package has no `apps.py`, when its configs disagree, when a value is not
+/// a literal, or when `name` does not end with the package's directory name
+/// (the config then describes some other app).
+fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
+    if model.flavor != OrmFlavor::Django || !matches!(model.table, TableName::Unresolved { .. }) {
+        return;
+    }
+    if model_declares_attribute(python, model, "db_table") {
+        return; // declared but not a literal: unresolved stays unresolved
+    }
+    // R7-C4 iteration 2: an abstract model has no table, a proxy model shares
+    // its parent's. The parser records that `abstract`/`proxy` is assigned, not
+    // its boolean value, so its presence refuses the derivation.
+    for flag in ["abstract", "proxy"] {
+        if model_declares_attribute(python, model, flag) {
+            model.table = TableName::Unresolved {
+                reason: format!("Meta declares `{flag}`: no table of its own is derived"),
+            };
+            return;
+        }
+    }
+    match django_app_label(&model.file, python) {
+        Ok(label) => {
+            model.table = TableName::Derived {
+                name: format!("{label}_{}", model.name.to_lowercase()),
+                rule: format!(
+                    "Django default <app_label>_<modelname>; app label `{label}` from the package's apps.py"
+                ),
+            };
+        }
+        Err(reason) => {
+            model.table = TableName::Unresolved {
+                reason: format!("no Meta.db_table; {reason}"),
+            };
+        }
+    }
+}
+
+fn model_declares_attribute(python: &[&FileAnalysis], model: &OrmModel, attribute: &str) -> bool {
+    python.iter().filter(|f| f.path == model.file).any(|f| {
+        f.symbols.iter().any(|s| {
+            s.kind == SymbolKind::Variable
+                && s.name == attribute
+                && s.span.start_line >= model.span.start_line
+                && s.span.end_line <= model.span.end_line
+        })
+    })
+}
+
+fn django_app_label(model_file: &str, python: &[&FileAnalysis]) -> Result<String, String> {
+    let parent = |p: &str| {
+        p.rsplit_once('/')
+            .map(|(d, _)| d.to_owned())
+            .unwrap_or_default()
+    };
+    let mut dir = parent(model_file);
+    if dir.ends_with("/models") || dir == "models" {
+        dir = parent(&dir); // models/ package: the app is its parent
+    }
+    let dir_name = dir.rsplit('/').next().unwrap_or(&dir).to_owned();
+    let apps_path = if dir.is_empty() {
+        "apps.py".to_owned()
+    } else {
+        format!("{dir}/apps.py")
+    };
+    let Some(apps) = python.iter().find(|f| f.path == apps_path) else {
+        return Err(format!(
+            "the app package has no apps.py stating its label ({apps_path})"
+        ));
+    };
+    let literal_of = |decl: &Symbol| {
+        apps.strings.iter().find_map(|s| match s {
+            StringFact::Literal { value, span }
+                if span.start_line >= decl.span.start_line
+                    && span.end_line <= decl.span.end_line =>
+            {
+                Some(value.clone())
+            }
+            _ => None,
+        })
+    };
+    let mut labels: Vec<String> = Vec::new();
+    for config in apps.symbols.iter().filter(|s| {
+        s.kind == SymbolKind::Class
+            && s.enclosing.is_none()
+            && s.bases.iter().any(|b| b.ends_with("AppConfig"))
+    }) {
+        let attr = |name: &str| {
+            apps.symbols.iter().find(|s| {
+                s.kind == SymbolKind::Variable
+                    && s.name == name
+                    && s.enclosing.as_deref() == Some(config.name.as_str())
+            })
+        };
+        if let Some(decl) = attr("label") {
+            match literal_of(decl) {
+                Some(l) if !l.is_empty() => labels.push(l),
+                _ => return Err(format!("{apps_path} states a label that is not a literal")),
+            }
+        } else if let Some(decl) = attr("name") {
+            match literal_of(decl) {
+                Some(n) if n.rsplit('.').next() == Some(dir_name.as_str()) => {
+                    labels.push(dir_name.clone());
+                }
+                Some(n) => {
+                    return Err(format!(
+                        "{apps_path} names app `{n}`, not the package `{dir_name}`"
+                    ));
+                }
+                None => return Err(format!("{apps_path} states a name that is not a literal")),
+            }
+        }
+    }
+    labels.sort();
+    labels.dedup();
+    match labels.len() {
+        1 => Ok(labels.remove(0)),
+        0 => Err(format!(
+            "{apps_path} has no AppConfig stating a name or label"
+        )),
+        _ => Err(format!("{apps_path} has AppConfigs with different labels")),
+    }
+}
+
+/// Finds ORM model classes in one file (slices 1 and 3), plus (R7-C6) Django
+/// models that inherit from another Django model class defined in the same
+/// file — typically an abstract base such as `TimestampedModel` — and models
+/// deriving from `AbstractUser`/`AbstractBaseUser` imported from
+/// `django.contrib.auth.models`.
 #[must_use]
 pub fn discover_models(file: &FileAnalysis) -> Vec<OrmModel> {
+    let mut models = discover_direct_models(file);
+    let auth_bases: Vec<String> = file
+        .imports
+        .iter()
+        .filter(|i| i.specifier == "django.contrib.auth.models")
+        .flat_map(|i| i.named.iter())
+        .filter(|n| n.imported == "AbstractUser" || n.imported == "AbstractBaseUser")
+        .map(|n| n.local.clone().unwrap_or_else(|| n.imported.clone()))
+        .collect();
+    loop {
+        let django: HashSet<String> = models
+            .iter()
+            .filter(|m| m.flavor == OrmFlavor::Django)
+            .map(|m| m.name.clone())
+            .collect();
+        let known: HashSet<String> = models.iter().map(|m| m.name.clone()).collect();
+        let added: Vec<OrmModel> = file
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.kind == SymbolKind::Class && s.enclosing.is_none() && !known.contains(&s.name)
+            })
+            .filter_map(|class| {
+                let base = class.bases.iter().find(|b| {
+                    let tail = b.rsplit('.').next().unwrap_or(b);
+                    (django.contains(tail) && !b.contains('.')) || auth_bases.contains(b)
+                })?;
+                Some(OrmModel {
+                    name: class.name.clone(),
+                    flavor: OrmFlavor::Django,
+                    base: base.clone(),
+                    table: resolve_table(file, class, OrmFlavor::Django),
+                    file: file.path.clone(),
+                    span: class.span,
+                })
+            })
+            .collect();
+        if added.is_empty() {
+            return models;
+        }
+        models.extend(added);
+    }
+}
+
+fn discover_direct_models(file: &FileAnalysis) -> Vec<OrmModel> {
     file.symbols
         .iter()
         .filter(|s| s.kind == SymbolKind::Class && s.enclosing.is_none())
@@ -487,7 +669,9 @@ fn resolve_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Tabl
         },
         // Django derives `applabel_modelname`, and the app label comes from
         // the app's configuration rather than this file. Deriving from the
-        // class name alone would produce a wrong table for every app.
+        // class name alone would produce a wrong table for every app, so this
+        // per-file answer stays Unresolved; `derive_django_default_table`
+        // replaces it when the package's `apps.py` states the label.
         OrmFlavor::Django => TableName::Unresolved {
             reason: "no Meta.db_table; Django's default needs the app label".into(),
         },
