@@ -283,7 +283,7 @@ export default defineConfig({
     search: { provider: 'local' },
     outline: { level: [2, 3] },
     footer: {
-      message: 'Released under the Apache-2.0 licence.',
+      message: 'Released under the Functional Source License (FSL-1.1-ALv2). Each version becomes Apache-2.0 two years after release.',
     },
   },
 })

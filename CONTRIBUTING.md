@@ -95,4 +95,9 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Licence
 
-Contributions are licensed under [Apache-2.0](LICENSE).
+Cartograph is licensed under the [Functional Source License, Version 1.1,
+ALv2 Future License](LICENSE) (FSL-1.1-ALv2), and contributions are accepted
+under the same licence. Each released version becomes available under
+Apache-2.0 two years after it is made available. Versions published before the
+change stay Apache-2.0
+([ADR-0023](docs/adr/ADR-0023-functional-source-license.md)).

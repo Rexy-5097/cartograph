@@ -2,7 +2,7 @@
   "name": "cartograph-cli",
   "version": "0.1.0",
   "description": "Compute the architecture. Prove the relationships. A launcher for the Cartograph native binary.",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Rexy-5097/cartograph.git"

@@ -2,7 +2,7 @@
   "name": "cartograph-walkthrough",
   "private": true,
   "description": "A text-and-motion walkthrough of Cartograph, rendered to video with Remotion.",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/fonts.mjs",

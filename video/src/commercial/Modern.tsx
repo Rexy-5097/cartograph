@@ -294,7 +294,7 @@ export const Vision: React.FC<P> = ({ total }) => {
           <div style={{ height: 46 }} />
           <Line text="Compute the architecture. Prove the relationships." at={card + 86} size={38} weight={300} />
           <div style={{ height: 70 }} />
-          <div style={{ fontFamily: MONO, fontSize: 18, letterSpacing: '0.3em', textTransform: 'uppercase', color: MUTED, opacity: easeOut((f - card - 130) / 30) }}>Open source · cartograph.co.in</div>
+          <div style={{ fontFamily: MONO, fontSize: 18, letterSpacing: '0.3em', textTransform: 'uppercase', color: MUTED, opacity: easeOut((f - card - 130) / 30) }}>Source available · cartograph.co.in</div>
         </div>
       )}
       <Sfx at={card + 20} name="pop" volume={0.25} />
