@@ -514,16 +514,22 @@ fn inherits_table_options(
     else {
         return false;
     };
-    // `class Meta(Base.Meta)` — whatever `Base.Meta` sets is inherited.
-    let own_meta_extends = file.symbols.iter().any(|s| {
+    // `class Meta(Base.Meta)` inherits whatever `Base.Meta` sets. When `Base`
+    // is one of the model's own bases, the walk below reads that `Meta`. A
+    // `Meta` that extends anything else is not followed, so it refuses.
+    let meta_extends_something_unread = file.symbols.iter().any(|s| {
         s.kind == SymbolKind::Class
             && s.name == "Meta"
             && s.enclosing.as_deref() == Some(model.name.as_str())
             && s.span.start_line >= class.span.start_line
             && s.span.end_line <= class.span.end_line
-            && !s.bases.is_empty()
+            && s.bases.iter().any(|meta_base| {
+                meta_base
+                    .strip_suffix(".Meta")
+                    .is_none_or(|owner| !class.bases.iter().any(|base| base == owner))
+            })
     });
-    if own_meta_extends {
+    if meta_extends_something_unread {
         return true;
     }
 
@@ -731,6 +737,9 @@ fn discover_project_models(python: &[&FileAnalysis], index: &ModuleIndex<'_>) ->
         .iter()
         .flat_map(|file| discover_models(file))
         .collect();
+    // What a base resolves to does not change between rounds; only which
+    // classes are known to be models does. Resolved once per (file, base).
+    let mut resolved: HashMap<(usize, String), Option<(String, String)>> = HashMap::new();
     loop {
         let known: HashMap<(&str, &str), OrmFlavor> = models
             .iter()
@@ -743,7 +752,7 @@ fn discover_project_models(python: &[&FileAnalysis], index: &ModuleIndex<'_>) ->
             .collect();
 
         let mut added: Vec<OrmModel> = Vec::new();
-        for file in python {
+        for (file_index, file) in python.iter().enumerate() {
             for class in &file.symbols {
                 if class.kind != SymbolKind::Class
                     || class.enclosing.is_some()
@@ -752,8 +761,13 @@ fn discover_project_models(python: &[&FileAnalysis], index: &ModuleIndex<'_>) ->
                     continue;
                 }
                 let inherited = class.bases.iter().find_map(|base| {
-                    let (declared_in, name, _, _) =
-                        crate::handlers::resolve_reference(index, file, base)?;
+                    let (declared_in, name) = resolved
+                        .entry((file_index, base.clone()))
+                        .or_insert_with(|| {
+                            crate::handlers::resolve_reference(index, file, base)
+                                .map(|(declared_in, name, _, _)| (declared_in, name))
+                        })
+                        .as_ref()?;
                     let flavor = known.get(&(declared_in.as_str(), name.as_str()))?;
                     Some((base.clone(), *flavor))
                 });

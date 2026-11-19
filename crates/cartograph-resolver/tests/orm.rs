@@ -1464,3 +1464,36 @@ fn a_base_imported_twice_from_different_modules_makes_nothing_a_model() {
     ]);
     assert!(!a.models.contains_key("NotAModel"));
 }
+
+#[test]
+fn a_meta_that_extends_a_base_meta_which_names_no_table_keeps_its_default() {
+    // Narrowed after measuring on Paperless-ngx: `class Meta(Parent.Meta)` is
+    // ordinary, and `Parent.Meta` here sets only `abstract` and `ordering`.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+
+
+class Matching(models.Model):
+    class Meta:
+        abstract = True
+        ordering = (\"name\",)
+
+
+class Tag(Matching):
+    class Meta(Matching.Meta):
+        verbose_name = \"tag\"
+
+
+class Odd(Matching):
+    class Meta(SomethingElse):
+        verbose_name = \"odd\"
+",
+        ),
+    ]);
+    assert_eq!(a.models["Tag"].table.name(), Some("shop_tag"));
+    // A Meta extending a class that is not read still refuses.
+    assert_eq!(a.models["Odd"].table.name(), None);
+}
