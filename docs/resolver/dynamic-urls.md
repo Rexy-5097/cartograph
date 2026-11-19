@@ -44,11 +44,11 @@ a plausible-looking URL into the graph.
 |---|---|
 | `"literal"` | `Literal` |
 | `` `text ${expr} text` `` / f-string | `Concat` of parts |
-| `a + b` | `Concat` of both sides |
+| `a + b`, as a constant's value or written directly as the request argument | `Concat` of the operands, each a literal or one of the forms in this table |
 | a bound module constant | that constant's value, resolved transitively |
 | `process.env.NAME`, `import.meta.env.NAME`, `os.environ["NAME"]` | `EnvVar` |
 | an unbound identifier, `a.b` | `Unknown` |
-| a call, an index, an operator | `Unsupported` |
+| a call, an index, parentheses, any other operator | `Unsupported` |
 
 Everything else is `Unsupported`. **This is not a JavaScript engine**: it does
 not execute code, call functions, index objects, read the environment, touch

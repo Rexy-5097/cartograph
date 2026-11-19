@@ -313,3 +313,72 @@ fn evaluation_is_deterministic() {
 await fetch(`${BASE}/orders/${id}`);"#;
     assert_eq!(url_of("web/src/api.ts", src), url_of("web/src/api.ts", src));
 }
+
+// ── T-003: a `+` chain given as expression text ─────────────────────
+
+#[test]
+fn a_plus_chain_of_literals_and_constants_evaluates() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\nconst V = 'v1';\n");
+    for (expr, expected) in [
+        ("BASE + '/orders'", "/api/orders"),
+        ("BASE+\"/orders\"", "/api/orders"),
+        ("'/api' + '/orders'", "/api/orders"),
+        ("BASE + '/' + V + '/orders'", "/api/v1/orders"),
+        ("  BASE  +  '/a+b'  ", "/api/a+b"),
+    ] {
+        let value = evaluate_expression(expr, &scope);
+        assert_eq!(
+            value.as_literal().as_deref(),
+            Some(expected),
+            "{expr} gave {value:?}"
+        );
+    }
+}
+
+#[test]
+fn a_plus_chain_keeps_what_it_cannot_determine_unknown() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\n");
+    let value = evaluate_expression("BASE + '/orders/' + orderId", &scope);
+    assert_eq!(value.as_literal(), None);
+    assert_eq!(value.to_string(), "/api/orders/{unknown}");
+
+    // A member access and an environment read keep their existing meaning.
+    assert_eq!(
+        evaluate_expression("config.base + '/orders'", &scope).to_string(),
+        "{unknown}/orders"
+    );
+    assert_eq!(
+        evaluate_expression("process.env.API + '/orders'", &scope).to_string(),
+        "{env:API}/orders"
+    );
+}
+
+#[test]
+fn text_that_is_not_a_plain_plus_chain_stays_unsupported() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\n");
+    for expr in [
+        "BASE + build()",
+        "BASE + paths[0]",
+        "(BASE + '/x')",
+        "BASE + '/x' + (a ? b : c)",
+        "BASE - '/x'",
+        "BASE + `/x`",
+        "BASE + + '/x'",
+        "+BASE",
+        "BASE +",
+        "BASE++",
+        "BASE + 'it\\'s'",
+        "BASE + '/x",
+        "BASE '/x'",
+        "BASE + a b",
+        "a ? BASE + '/x' : '/y'",
+        "BASE + '/x' || '/y'",
+    ] {
+        let value = evaluate_expression(expr, &scope);
+        assert_eq!(value.as_literal(), None, "{expr} must not resolve");
+        assert!(
+            matches!(value, SymbolicValue::Unsupported { .. }),
+            "{expr} should be unsupported, got {value:?}"
+        );
+    }
+}

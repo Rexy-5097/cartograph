@@ -138,10 +138,11 @@ pub fn evaluate_string_fact(fact: &StringFact, scope: &Scope) -> SymbolicValue {
 /// Evaluates one expression's source text against a scope.
 ///
 /// The expression grammar is deliberately tiny — an identifier, a dotted
-/// environment access, or a quoted literal. Anything with a call, an index or
-/// an operator is [`SymbolicValue::Unsupported`], because interpreting those
-/// correctly needs a real evaluator and interpreting them approximately is
-/// worse than declining.
+/// environment access, a quoted literal, or a `+` chain of those (T-003).
+/// Anything with a call, an index or any other operator is
+/// [`SymbolicValue::Unsupported`], because interpreting those correctly needs
+/// a real evaluator and interpreting them approximately is worse than
+/// declining.
 #[must_use]
 pub fn evaluate_expression(source: &str, scope: &Scope) -> SymbolicValue {
     evaluate_expression_at(source, scope, 0)
@@ -194,9 +195,70 @@ fn evaluate_expression_at(source: &str, scope: &Scope, depth: usize) -> Symbolic
         };
     }
 
+    // `BASE + "/orders"`: a `+` chain written at the use site (T-003). The
+    // parser hands a template literal over in parts, but a concatenation used
+    // directly as an argument arrives as source text, and it means the same
+    // thing as `${BASE}/orders`. Each operand is evaluated by the rules above;
+    // one that is none of them makes the whole value unsupported.
+    if let Some(operands) = concatenation_operands(text) {
+        return SymbolicValue::Concat {
+            parts: operands
+                .into_iter()
+                .map(|operand| evaluate_expression_at(operand, scope, depth + 1))
+                .collect(),
+        }
+        .normalized();
+    }
+
     SymbolicValue::Unsupported {
         source: text.to_owned(),
     }
+}
+
+/// The operands of a top-level `+` chain, if the text is nothing else.
+///
+/// Deliberately strict, because this reads source text rather than a syntax
+/// tree. Outside a quoted literal only identifier characters, `.`, whitespace
+/// and `+` are accepted, so a call, an index, a parenthesis, a template
+/// literal or any other operator makes the text *not* a chain, and the caller
+/// declines it. Inside a literal a backslash does the same: an escape is not
+/// interpreted here. An empty operand (`a + + b`, `+a`, `a++`) is refused too.
+fn concatenation_operands(text: &str) -> Option<Vec<&str>> {
+    let mut operands = Vec::new();
+    let mut start = 0;
+    let mut quote: Option<char> = None;
+    for (index, c) in text.char_indices() {
+        match quote {
+            Some(open) => {
+                if c == '\\' {
+                    return None;
+                }
+                if c == open {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => quote = Some(c),
+                '+' => {
+                    operands.push(text[start..index].trim());
+                    start = index + 1;
+                }
+                c if c.is_ascii_alphanumeric() || "._$".contains(c) || c.is_whitespace() => {}
+                _ => return None,
+            },
+        }
+    }
+    if quote.is_some() {
+        return None;
+    }
+    operands.push(text[start..].trim());
+    // A single operand is not a chain, and an operand must be one token: a
+    // literal, or text with no whitespace inside it.
+    let well_formed = |operand: &&str| {
+        !operand.is_empty()
+            && (quoted_literal(operand).is_some() || !operand.contains(char::is_whitespace))
+    };
+    (operands.len() >= 2 && operands.iter().all(well_formed)).then_some(operands)
 }
 
 /// Re-evaluates a bound value so nested identifiers resolve too.

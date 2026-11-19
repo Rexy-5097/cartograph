@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — `fetch(BASE + '/orders')` resolves like the template it equals
+
+A `+` chain written directly as a request's URL was refused as unsupported,
+while the template `` `${BASE}/orders` `` built from the same constant matched
+(T-003). The parser hands a template over in parts but a concatenation used as
+an argument arrives as source text, and the evaluator's grammar rejected any
+text with an operator. It now accepts one more form: a top-level `+` chain
+whose operands are quoted literals, constants, member accesses or environment
+reads, each evaluated by the existing rules. The same holds for Python.
+
+Nothing is executed and nothing is invented. A call, an index, parentheses, a
+template operand, an escape inside a literal or any other operator still makes
+the whole value unsupported. An object property, a destructured name, a
+function-local value and an environment value stay unresolved, so a URL whose
+prefix depends on one is still refused, concatenated or not.
+
 ### Fixed — a request inside `const f = () => …` belongs to `f`
 
 A request made inside an arrow function or function expression bound to a
