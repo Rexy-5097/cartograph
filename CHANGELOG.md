@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a model whose base class lives in another file is a model
+
+`class Order(TimeStamped)` with `from core.models import TimeStamped` is the
+ordinary Django layout: one abstract base shared by every app. Only a base in
+the *same file* was followed, so such a model was not recognised at all: no
+table, and no edge from the views that query it (T-007). A class is now a model
+when one of its bases resolves, through the file's own imports, to a class
+already known to be a model, across any number of files; it takes that model's
+ORM. Every import form is followed, including a `models/` package that
+re-exports its base, and SQLAlchemy models gain the same rule.
+
+Nothing is decided by name: a base that merely shares a model's name, an
+ambiguous import and an import that leaves the project make nothing a model.
+Table rules are unchanged, so an abstract or proxy model still gets no table,
+and a SQLAlchemy model still needs its own `__tablename__`.
+
+Graphs gain models, tables and ORM edges on projects laid out this way.
+
 ### Fixed — a call to a function nested in its caller is followed
 
 `const Page = () => { async function load() { fetch(…) } … load() }` is how a

@@ -330,12 +330,10 @@ impl OrmAnalysis {
         // not matched against a global map of every model name.
         let index = ModuleIndex::build(files);
 
-        for file in &python {
-            for mut model in discover_models(file) {
-                derive_django_default_table(&mut model, &python);
-                *seen.entry(model.name.clone()).or_insert(0) += 1;
-                analysis.models.insert(model.name.clone(), model);
-            }
+        for mut model in discover_project_models(&python, &index) {
+            derive_django_default_table(&mut model, &python);
+            *seen.entry(model.name.clone()).or_insert(0) += 1;
+            analysis.models.insert(model.name.clone(), model);
         }
         // A class name claimed twice cannot identify one table.
         for (name, count) in seen {
@@ -561,6 +559,66 @@ pub fn discover_models(file: &FileAnalysis) -> Vec<OrmModel> {
                 })
             })
             .collect();
+        if added.is_empty() {
+            return models;
+        }
+        models.extend(added);
+    }
+}
+
+/// Every model in the project: each file's own ([`discover_models`]), plus
+/// classes whose base is a model declared **in another file** (T-007).
+///
+/// `class Order(TimeStamped)` with `from .base import TimeStamped` is the
+/// ordinary Django layout: one abstract base, shared by every app. A class is
+/// a model when one of its bases *resolves*, through the file's own imports,
+/// to a class already known to be a model; it takes that model's flavour.
+/// The step repeats until nothing is added, so a chain of bases across
+/// several files is followed. A base that is merely *named* like a model, or
+/// whose import is ambiguous or leaves the project, makes nothing a model.
+fn discover_project_models(python: &[&FileAnalysis], index: &ModuleIndex<'_>) -> Vec<OrmModel> {
+    let mut models: Vec<OrmModel> = python
+        .iter()
+        .flat_map(|file| discover_models(file))
+        .collect();
+    loop {
+        let known: HashMap<(&str, &str), OrmFlavor> = models
+            .iter()
+            .filter(|model| model.flavor != OrmFlavor::Unspecified)
+            .map(|model| ((model.file.as_str(), model.name.as_str()), model.flavor))
+            .collect();
+        let is_model: HashSet<(&str, &str)> = models
+            .iter()
+            .map(|model| (model.file.as_str(), model.name.as_str()))
+            .collect();
+
+        let mut added: Vec<OrmModel> = Vec::new();
+        for file in python {
+            for class in &file.symbols {
+                if class.kind != SymbolKind::Class
+                    || class.enclosing.is_some()
+                    || is_model.contains(&(file.path.as_str(), class.name.as_str()))
+                {
+                    continue;
+                }
+                let inherited = class.bases.iter().find_map(|base| {
+                    let (declared_in, name, _, _) =
+                        crate::handlers::resolve_reference(index, file, base)?;
+                    let flavor = known.get(&(declared_in.as_str(), name.as_str()))?;
+                    Some((base.clone(), *flavor))
+                });
+                if let Some((base, flavor)) = inherited {
+                    added.push(OrmModel {
+                        name: class.name.clone(),
+                        flavor,
+                        base,
+                        table: resolve_table(file, class, flavor),
+                        file: file.path.clone(),
+                        span: class.span,
+                    });
+                }
+            }
+        }
         if added.is_empty() {
             return models;
         }

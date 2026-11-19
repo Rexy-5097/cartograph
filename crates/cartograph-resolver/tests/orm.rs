@@ -1111,3 +1111,160 @@ class C(AppConfig):
     let a = orm(&[("api/apps.py", apps), ("api/models.py", DJANGO_MODELS)]);
     assert_eq!(a.models["Receipt"].table.name(), None);
 }
+
+// ---- T-007: a model whose base is declared in another file ----------------
+
+const SHOP_APPS: &str = "
+from django.apps import AppConfig
+
+
+class ShopConfig(AppConfig):
+    name = \"shop\"
+";
+
+const CORE_BASE: &str = "
+from django.db import models
+
+
+class TimeStamped(models.Model):
+    created = models.DateTimeField()
+
+    class Meta:
+        abstract = True
+
+
+class Audited(TimeStamped):
+    class Meta:
+        abstract = True
+";
+
+#[test]
+fn a_model_inheriting_an_imported_abstract_base_is_a_model() {
+    let a = orm(&[
+        ("core/base.py", CORE_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    // The abstract base itself still has no table.
+    assert_eq!(a.models["TimeStamped"].table.name(), None);
+}
+
+#[test]
+fn every_way_of_importing_the_base_is_followed() {
+    for (import, base) in [
+        ("from core.base import TimeStamped", "TimeStamped"),
+        ("from core.base import TimeStamped as Stamped", "Stamped"),
+        ("from core import base", "base.TimeStamped"),
+        ("import core.base", "core.base.TimeStamped"),
+        ("import core.base as cb", "cb.TimeStamped"),
+        // Two files away: `Audited` is itself a model only through its base.
+        ("from core.base import Audited", "Audited"),
+    ] {
+        let models = format!("{import}\n\n\nclass Order({base}):\n    pass\n");
+        let a = orm(&[
+            ("core/base.py", CORE_BASE),
+            ("shop/apps.py", SHOP_APPS),
+            ("shop/models.py", models.as_str()),
+        ]);
+        assert_eq!(
+            a.models.get("Order").and_then(|m| m.table.name()),
+            Some("shop_order"),
+            "`{import}` then `class Order({base})`"
+        );
+    }
+}
+
+#[test]
+fn a_base_re_exported_by_a_models_package_is_followed() {
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models/__init__.py",
+            "from .base import TimeStamped\nfrom .orders import Order\n",
+        ),
+        ("shop/models/base.py", CORE_BASE),
+        (
+            "shop/models/orders.py",
+            "from . import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n\n\nclass ArchivedOrder(Order):\n    class Meta:\n        proxy = True\n",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    // A proxy of a model found across files is a model, with no table of its own.
+    assert_eq!(a.models["ArchivedOrder"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["ArchivedOrder"].table.name(), None);
+}
+
+#[test]
+fn a_handler_reaches_a_model_found_through_an_imported_base() {
+    let (edges, g) = graph_of(&[
+        ("core/base.py", CORE_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+        (
+            "shop/views.py",
+            "from .models import Order\n\n\ndef list_orders(request):\n    return Order.objects.all()\n",
+        ),
+    ]);
+    assert_eq!(edges, 2, "one access edge and one table edge");
+    assert!(g.nodes().any(|n| n.name() == "shop_order"));
+}
+
+#[test]
+fn a_base_that_only_shares_a_models_name_makes_nothing_a_model() {
+    // `TimeStamped` here is a plain class in another module, a name bound by
+    // nothing, and a third-party import. None of them is the Django model.
+    for models in [
+        "from util.mixins import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        "class Order(TimeStamped):\n    pass\n",
+        "from thirdparty.models import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+    ] {
+        let a = orm(&[
+            ("core/base.py", CORE_BASE),
+            ("util/mixins.py", "class TimeStamped:\n    pass\n"),
+            ("shop/apps.py", SHOP_APPS),
+            ("shop/models.py", models),
+        ]);
+        assert!(!a.models.contains_key("Order"), "not a model: {models}");
+    }
+}
+
+#[test]
+fn an_ambiguous_base_import_makes_nothing_a_model() {
+    // `core.base` matches two files, so which `TimeStamped` is meant is open.
+    let a = orm(&[
+        ("a/core/base.py", CORE_BASE),
+        ("b/core/base.py", "class TimeStamped:\n    pass\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert!(!a.models.contains_key("Order"));
+}
+
+#[test]
+fn a_sqlalchemy_model_inheriting_an_imported_abstract_base_keeps_its_declared_table() {
+    let a = orm(&[
+        (
+            "db/base.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\n\nclass Base(DeclarativeBase):\n    pass\n\n\nclass Tracked(Base):\n    __abstract__ = True\n",
+        ),
+        (
+            "db/models.py",
+            "from .base import Tracked\n\n\nclass Customer(Tracked):\n    __tablename__ = \"customers\"\n\n\nclass Draft(Tracked):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Customer"].flavor, OrmFlavor::SqlAlchemy);
+    assert_eq!(a.models["Customer"].table.name(), Some("customers"));
+    // No `__tablename__`: a model, and no table is derived for it.
+    assert_eq!(a.models["Draft"].table.name(), None);
+}

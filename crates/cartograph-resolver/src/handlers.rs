@@ -133,11 +133,48 @@ fn resolve(
         Some(class) => (class, true),
         None => (reference, false),
     };
+    let (file, name, line, route) = resolve_reference(modules, from, target)?;
+
+    // The kind is read from the declaration, never assumed from the syntax.
+    let declared = modules.file(&file)?.symbols.iter().find(|symbol| {
+        symbol.name == name
+            && symbol.enclosing.is_none()
+            && matches!(symbol.kind, SymbolKind::Function | SymbolKind::Class)
+    })?;
+    let kind = match (declared.kind, class_based) {
+        (SymbolKind::Function, false) => NodeKind::Function,
+        (SymbolKind::Class, true) => NodeKind::Class,
+        // `function.as_view` and a bare class are not forms Django accepts.
+        _ => return None,
+    };
+
+    Some(HandlerDeclaration {
+        kind,
+        file,
+        name,
+        line,
+        route,
+    })
+}
+
+/// Follows a dotted Python reference written in `from` to the one
+/// declaration it names: `(file, name, line, how it was reached)`.
+///
+/// `name` is resolved through `from`'s own bindings; `module.name` through
+/// the import that binds `module`, then inside that module, following its
+/// re-exports. Shared with ORM model discovery, which asks the same question
+/// of a class's base (T-007). Anything that does not lead to exactly one
+/// declaration is `None`.
+pub(crate) fn resolve_reference(
+    modules: &ModuleIndex<'_>,
+    from: &FileAnalysis,
+    target: &str,
+) -> Option<(String, String, u32, String)> {
     if !is_dotted_name(target) {
         return None;
     }
 
-    let (file, name, line, route) = match target.rsplit_once('.') {
+    Some(match target.rsplit_once('.') {
         // A bare name: bound in the URL conf itself, or imported into it.
         None => match modules.resolve_python(from, target) {
             Resolution::Local { line } => (
@@ -169,27 +206,6 @@ fn resolve(
                 _ => return None,
             }
         }
-    };
-
-    // The kind is read from the declaration, never assumed from the syntax.
-    let declared = modules.file(&file)?.symbols.iter().find(|symbol| {
-        symbol.name == name
-            && symbol.enclosing.is_none()
-            && matches!(symbol.kind, SymbolKind::Function | SymbolKind::Class)
-    })?;
-    let kind = match (declared.kind, class_based) {
-        (SymbolKind::Function, false) => NodeKind::Function,
-        (SymbolKind::Class, true) => NodeKind::Class,
-        // `function.as_view` and a bare class are not forms Django accepts.
-        _ => return None,
-    };
-
-    Some(HandlerDeclaration {
-        kind,
-        file,
-        name,
-        line,
-        route,
     })
 }
 
