@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — `trace` no longer claims an HTTP boundary the path does not cross
+
+`cartograph trace` closed every trace that reached a table with "This path
+crosses the HTTP boundary and reaches a database table", even when no HTTP-call
+edge was on the path: tracing a model to its own table printed it (T-001). The
+sentence is now printed only when one path both contains an HTTP-call edge and
+reaches a table. A path that reaches a table with no HTTP-call edge says so:
+"This path reaches a database table without crossing the HTTP boundary". An
+HTTP call on one branch no longer vouches for a table on another. The JSON
+field `reaches_table` is unchanged; it has always meant only that a table was
+reached.
+
 ### Changed — Cartograph is licensed under the Functional Source License
 
 Cartograph moves from Apache-2.0 to the Functional Source License, Version 1.1,
