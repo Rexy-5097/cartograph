@@ -106,7 +106,7 @@ struct ResolvedCall {
 /// Resolution is memoised per (file, name): a large frontend re-imports the
 /// same handful of modules thousands of times.
 fn resolve_calls(files: &[FileAnalysis], modules: &ModuleIndex<'_>) -> Vec<ResolvedCall> {
-    let mut memo: HashMap<(String, String), Option<String>> = HashMap::new();
+    let mut memo: HashMap<(String, String), Binding> = HashMap::new();
     let mut resolved = Vec::new();
 
     for file in files {
@@ -126,19 +126,29 @@ fn resolve_calls(files: &[FileAnalysis], modules: &ModuleIndex<'_>) -> Vec<Resol
                     (first.clone(), property.clone())
                 }
             };
-            let declared_in = memo
+            let binding = memo
                 .entry((file.path.clone(), root.clone()))
                 .or_insert_with(|| match modules.resolve_typescript(file, &root) {
-                    Resolution::Declared { file: at, .. } => Some(at),
-                    Resolution::Local { .. } => Some(file.path.clone()),
-                    // Unresolved, ambiguous or unbound: none of those names a
-                    // declaration, and guessing which was meant is the defect
-                    // this module exists to avoid.
-                    _ => None,
+                    Resolution::Declared { file: at, .. } => Binding::DeclaredIn(at),
+                    Resolution::Local { .. } => Binding::DeclaredIn(file.path.clone()),
+                    Resolution::NotBound => Binding::Unbound,
+                    // Unresolved or ambiguous: an import binds the name, and
+                    // guessing which declaration was meant is the defect this
+                    // module exists to avoid.
+                    _ => Binding::Unknown,
                 })
                 .clone();
-            let Some(declaring_file) = declared_in else {
-                continue;
+            let declaring_file = match binding {
+                Binding::DeclaredIn(at) => at,
+                // Nothing at module scope binds the name. It may still be a
+                // function declared inside the caller (T-004).
+                Binding::Unbound
+                    if matches!(call.callee, Callee::Identifier { .. })
+                        && is_nested_in(file, &root, origin) =>
+                {
+                    file.path.clone()
+                }
+                _ => continue,
             };
 
             let from = (file.path.clone(), origin.name.clone());
@@ -155,6 +165,43 @@ fn resolve_calls(files: &[FileAnalysis], modules: &ModuleIndex<'_>) -> Vec<Resol
         }
     }
     resolved
+}
+
+/// What a callee's root name is bound to in the calling file.
+#[derive(Debug, Clone)]
+enum Binding {
+    /// A module-scope declaration or an import, resolved to this file.
+    DeclaredIn(String),
+    /// Nothing at module scope binds the name.
+    Unbound,
+    /// An import binds it, to something unresolved or ambiguous.
+    Unknown,
+}
+
+/// Whether `name` is a function declared inside `origin`, and nowhere else.
+///
+/// ```ts
+/// export const Page = () => {
+///   async function load() { await fetch("/api/orders"); }
+///   useEffect(() => { load(); }, []);
+/// };
+/// ```
+///
+/// `load()` is a call to the function three lines up. The rule is narrow on
+/// purpose. The name must be bound by nothing at module scope (the caller
+/// checks that), declared directly inside the calling function, and be the
+/// **only** symbol of that name in the file: nodes are identified by
+/// `(kind, name, file)`, so two hosts that each declare a `load` share one
+/// node, and an edge to it would give each host the other's requests.
+fn is_nested_in(file: &FileAnalysis, name: &str, origin: &Symbol) -> bool {
+    let mut named = file.symbols.iter().filter(|symbol| symbol.name == name);
+    let (Some(only), None) = (named.next(), named.next()) else {
+        return false;
+    };
+    only.kind == SymbolKind::Function
+        && only.enclosing.as_deref() == Some(origin.name.as_str())
+        && only.span.start_line >= origin.span.start_line
+        && only.span.end_line <= origin.span.end_line
 }
 
 /// Which callables reach a request, following calls backwards.

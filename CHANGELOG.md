@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a call to a function nested in its caller is followed
+
+`const Page = () => { async function load() { fetch(…) } … load() }` is how a
+React component usually loads its data. The call `load()` was followed to the
+nested function only by accident, when the host was an arrow function and the
+nested function was mistaken for a module-scope one; with a `function Page()`
+host it never was. With arrow functions now proper scopes (T-004), the call is
+followed on purpose, for both kinds of host: when nothing at module scope binds
+the name, and the calling function declares exactly one function of that name.
+
+It is refused when two functions in the file share the name. They share one
+node ([ADR-0011](docs/adr/ADR-0011-node-identity-within-a-graph.md)), so the
+edge would give each host the other's requests.
+
 ### Fixed — a Django view in `views.py` is the node its URL conf points at
 
 `path("orders/", views.list_orders)` in `urls.py` names a function declared in
