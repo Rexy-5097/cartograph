@@ -7,6 +7,36 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a Django view in `views.py` is the node its URL conf points at
+
+`path("orders/", views.list_orders)` in `urls.py` names a function declared in
+`views.py`. The request edge ended at a node named after the reference
+(`views.list_orders`, in `urls.py`), while the view's model accesses started at
+the function in `views.py`, so a trace from the frontend stopped one hop short
+of the table in the standard Django layout (T-002). The reference is now
+resolved through the URL conf's own imports to the declaration, and the edge
+ends there. Supported: a bare imported name, with or without an alias;
+`module.name` through `from . import views`, `from pkg import views as v`,
+`import pkg.views` and `import pkg.views as v`; a `views/` package that
+re-exports the view; and `X.as_view()`, which resolves to the class. The
+edge's evidence names where the handler is declared and which import led there.
+
+Refused, leaving the node as it was: an import that is ambiguous or leaves the
+project, a name that is not a function or class, `function.as_view`, and a bare
+class.
+
+Two deliberate limits:
+
+- **A wrapper call names no handler.** `login_required(views.orders)` used to
+  be recorded with the handler `login_required`. What a wrapper returns is not
+  known, so such an entry now names no handler and its edge ends at a route
+  node, as documented for a route without one.
+- **A class-based view is reached, not entered.** The request ends at the
+  class. No edge is drawn from the class to `get` or `post`: those are separate
+  nodes, shared by every class in the file that defines one
+  ([ADR-0011](docs/adr/ADR-0011-node-identity-within-a-graph.md)), so the edge
+  would also claim the other classes' model accesses.
+
 ### Fixed — `fetch(BASE + '/orders')` resolves like the template it equals
 
 A `+` chain written directly as a request's URL was refused as unsupported,

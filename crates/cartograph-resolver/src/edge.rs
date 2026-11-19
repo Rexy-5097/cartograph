@@ -33,6 +33,7 @@ use cartograph_core::{CommitId, EdgeKind, Evidence, NodeId, NodeKind, Provenance
 use cartograph_graph::{ArchitectureGraph, EdgeSpec, GraphError};
 
 use crate::canonical::ObservationKind;
+use crate::handlers::{HandlerDeclaration, HandlerIndex};
 use crate::matching::{Candidate, MatchReason, MatchResult, MethodCompatibility};
 
 /// Adds the edge for an accepted match, creating its endpoint nodes.
@@ -62,13 +63,42 @@ pub fn add_edge_for_match(
     result: &MatchResult,
     commit: Option<CommitId>,
 ) -> Result<Option<cartograph_core::EdgeId>, GraphError> {
+    add_edge_for_match_with(graph, result, commit, &HandlerIndex::default())
+}
+
+/// [`add_edge_for_match`], with URL-conf handler references resolved to their
+/// declarations.
+///
+/// A decorator route's handler is in the file that declares the route. A
+/// Django URL-conf entry's handler is a *reference* (`views.list_orders`) to a
+/// function declared elsewhere. Where `handlers` resolved the reference, the
+/// target node is that declaration — the same node the handler's model
+/// accesses start from — so the chain from a request to a table is connected
+/// (T-002). Where it did not, the target is what it has always been.
+///
+/// # Errors
+///
+/// As [`add_edge_for_match`].
+pub fn add_edge_for_match_with(
+    graph: &mut ArchitectureGraph,
+    result: &MatchResult,
+    commit: Option<CommitId>,
+    handlers: &HandlerIndex,
+) -> Result<Option<cartograph_core::EdgeId>, GraphError> {
     let Some(candidate) = result.accepted() else {
         return Ok(None);
     };
     debug_assert_eq!(result.client.provenance.kind, ObservationKind::ClientCall);
 
+    let declaration = candidate
+        .route
+        .provenance
+        .handler
+        .as_deref()
+        .and_then(|handler| handlers.declaration(&candidate.route.provenance.file, handler));
+
     let source = client_node(graph, result)?;
-    let target = backend_node(graph, candidate)?;
+    let target = backend_node(graph, candidate, declaration)?;
 
     let id = graph.add_edge(EdgeSpec {
         source,
@@ -80,7 +110,7 @@ pub fn add_edge_for_match(
         // model inference: no model was consulted, and none ever will be
         // (RULE 007).
         provenance: Provenance::RouteMatcher,
-        evidence: evidence_for(result, candidate),
+        evidence: evidence_with_declaration(result, candidate, declaration),
         // The claim was observed at the client call site.
         location: client_location(result)?,
         commit,
@@ -121,8 +151,22 @@ fn client_node(graph: &mut ArchitectureGraph, result: &MatchResult) -> Result<No
 fn backend_node(
     graph: &mut ArchitectureGraph,
     candidate: &Candidate,
+    declaration: Option<&HandlerDeclaration>,
 ) -> Result<NodeId, GraphError> {
     let provenance = &candidate.route.provenance;
+
+    // A URL-conf reference that resolved: the node is the declaration, in the
+    // file that declares it. Identity is `(kind, name, file)`, so this is the
+    // node the handler's model accesses already start from.
+    if let Some(declaration) = declaration {
+        let location = SourceLocation::new(declaration.file.clone(), declaration.line).ok();
+        return graph
+            .node_for(declaration.kind, declaration.name.clone(), location)
+            .map_err(|_| GraphError::UnknownNode {
+                id: NodeId::from_raw(u64::MAX),
+            });
+    }
+
     // The route declaration's own position. For a decorator this is the
     // decorator line rather than the `def` line — a one-line difference that
     // is recorded honestly rather than adjusted by guesswork.
@@ -177,6 +221,28 @@ pub fn evidence_for(result: &MatchResult, candidate: &Candidate) -> Evidence {
     // Evidence rejects an empty summary, and the format above cannot be empty.
     Evidence::new(summary)
         .unwrap_or_else(|_| Evidence::new("route matched").expect("non-empty literal"))
+}
+
+/// [`evidence_for`], naming where the handler is declared when the route's
+/// own reference to it was resolved.
+fn evidence_with_declaration(
+    result: &MatchResult,
+    candidate: &Candidate,
+    declaration: Option<&HandlerDeclaration>,
+) -> Evidence {
+    let evidence = evidence_for(result, candidate);
+    let Some(declaration) = declaration else {
+        return evidence;
+    };
+    let summary = format!(
+        "{}; handler `{}` declared at {}:{}, reached through {}",
+        evidence.as_str(),
+        declaration.name,
+        declaration.file,
+        declaration.line,
+        declaration.route
+    );
+    Evidence::new(summary).unwrap_or(evidence)
 }
 
 /// Renders match reasons as a sentence.

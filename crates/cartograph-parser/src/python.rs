@@ -889,9 +889,13 @@ impl Walker<'_> {
             // `create_order` or `views.create_order`, kept as written.
             "identifier" | "attribute" => Some(self.text(*h)),
             // `LegacyView.as_view()` — record the callable being invoked.
+            // Any other call (`login_required(views.orders)`) names a wrapper,
+            // not the view: what it returns is not known here, so the entry
+            // names no handler rather than the wrong one (T-002).
             "call" => h
                 .child_by_field_name("function")
-                .map(|f| text_of(f, self.source)),
+                .map(|f| text_of(f, self.source))
+                .filter(|callee| callee.ends_with(".as_view")),
             _ => None,
         });
 
