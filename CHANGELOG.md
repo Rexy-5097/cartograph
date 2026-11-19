@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — `axios(url, config)` is observed as a request
+
+axios may be called as a function, `axios('/api/orders')` or
+`axios(url, { method: 'post' })`. Only its verb methods and its
+configuration-object form were observed; this form was silently dropped
+(T-006). It is now observed like `fetch(url, init)`, under whatever name axios
+was imported, with the method read from a literal `method` in the second
+argument. A function that is not axios is not a request because its argument
+looks like a path.
+
 ### Fixed — a model whose base class lives in another file is a model
 
 `class Order(TimeStamped)` with `from core.models import TimeStamped` is the

@@ -1134,3 +1134,62 @@ fn an_arrow_function_binding_keeps_its_symbol_kind_and_scope() {
         .collect();
     assert_eq!(symbols, vec![("loadOrders", SymbolKind::Variable, None)]);
 }
+
+// ---- T-006: axios called as a function ------------------------------------
+
+#[test]
+fn axios_called_as_a_function_is_a_request_whatever_its_name() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import axios from 'axios';
+import Http from 'axios';
+export function a() { return axios('/api/a'); }
+export function b(base) { return Http(`${base}/b`, { method: 'post' }); }
+export function c(url) { return axios(url, { method: 'DELETE' }); }
+",
+        )
+        .expect("analyses");
+    let calls: Vec<_> = analysis
+        .http_calls
+        .iter()
+        .map(|call| (call.span.start_line, call.method_hint))
+        .collect();
+    assert_eq!(
+        calls,
+        vec![
+            (3, None),
+            (4, Some(HttpMethodHint::Post)),
+            (5, Some(HttpMethodHint::Delete)),
+        ]
+    );
+    assert!(matches!(
+        analysis.http_calls[0].url,
+        UrlObservation::Literal { .. }
+    ));
+}
+
+#[test]
+fn a_function_that_is_not_axios_is_not_a_request_because_it_takes_a_path() {
+    // A wrapper, a same-named function from another module and a type-only
+    // import are not axios, whatever their argument looks like.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import request from './request';
+import type TypeOnly from 'axios';
+import { get } from 'lodash';
+export function a() { return request('/api/a'); }
+export function b(t: TypeOnly) { return TypeOnly('/api/b'); }
+export function c(o) { return get(o, '/api/c'); }
+",
+        )
+        .expect("analyses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "observed a non-axios call as a request: {:?}",
+        analysis.http_calls
+    );
+}

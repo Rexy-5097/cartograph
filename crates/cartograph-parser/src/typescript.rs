@@ -829,12 +829,20 @@ impl Walker<'_> {
         }
 
         let (is_http, method_hint) = match callee {
-            Callee::Identifier { name } if name == "fetch" => (
-                true,
-                arg_nodes
-                    .get(1)
-                    .and_then(|n| self.literal_method_property(*n)),
-            ),
+            // `fetch(url, init)`, and axios called as a function:
+            // `axios(url, config)` is one of its documented signatures, under
+            // whatever name it was imported (T-006). The method is the
+            // literal `method` of the second argument, or not stated.
+            Callee::Identifier { name }
+                if name == "fetch" || name == "axios" || self.bound_to_http_client(name) =>
+            {
+                (
+                    true,
+                    arg_nodes
+                        .get(1)
+                        .and_then(|n| self.literal_method_property(*n)),
+                )
+            }
             Callee::Member { object, property } => {
                 let Some(verb) = HttpMethodHint::from_name(property) else {
                     return;
