@@ -994,8 +994,9 @@ fn enclosing_by_line(path: &str, source: &str) -> Vec<(u32, Option<String>)> {
         .collect()
 }
 
-fn named(name: &str) -> Option<String> {
-    Some(name.to_owned())
+/// A request on `line`, enclosed by the function called `name`.
+fn at(line: u32, name: &str) -> (u32, Option<String>) {
+    (line, Some(name.to_owned()))
 }
 
 #[test]
@@ -1018,10 +1019,10 @@ let patchOrder = function* () {
     assert_eq!(
         calls,
         vec![
-            (1, named("loadOrders")),
-            (3, named("saveOrder")),
-            (7, named("removeOrder")),
-            (10, named("patchOrder")),
+            at(1, "loadOrders"),
+            at(3, "saveOrder"),
+            at(7, "removeOrder"),
+            at(10, "patchOrder"),
         ]
     );
 }
@@ -1040,10 +1041,10 @@ export const checked = (() => fetch('/api/d')) satisfies Loader;
     assert_eq!(
         calls,
         vec![
-            (2, named("typed")),
-            (3, named("asserted")),
-            (4, named("wrapped")),
-            (5, named("checked")),
+            at(2, "typed"),
+            at(3, "asserted"),
+            at(4, "wrapped"),
+            at(5, "checked"),
         ]
     );
 }
@@ -1052,14 +1053,14 @@ export const checked = (() => fetch('/api/d')) satisfies Loader;
 fn an_anonymous_default_export_encloses_its_requests_as_default() {
     assert_eq!(
         enclosing_by_line("src/a.ts", "export default () => fetch('/api/orders');\n"),
-        vec![(1, named("default"))]
+        vec![at(1, "default")]
     );
     assert_eq!(
         enclosing_by_line(
             "src/b.ts",
             "export default async function () {\n  return fetch('/api/orders');\n}\n"
         ),
-        vec![(2, named("default"))]
+        vec![at(2, "default")]
     );
 }
 
@@ -1078,14 +1079,7 @@ fn a_class_field_holding_a_function_encloses_its_requests_like_a_method() {
 }
 ",
     );
-    assert_eq!(
-        calls,
-        vec![
-            (2, named("list")),
-            (4, named("create")),
-            (7, named("remove"))
-        ]
-    );
+    assert_eq!(calls, vec![at(2, "list"), at(4, "create"), at(7, "remove")]);
 }
 
 #[test]
@@ -1103,7 +1097,7 @@ export const useItems = () => {
 };
 ",
     );
-    assert_eq!(calls, vec![(2, named("useOrders")), (6, named("useItems"))]);
+    assert_eq!(calls, vec![at(2, "useOrders"), at(6, "useItems")]);
 }
 
 #[test]
