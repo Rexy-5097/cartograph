@@ -209,6 +209,27 @@ enum Step<'t> {
     LeaveConcat,
 }
 
+/// Is this declarator written at the top level of the module?
+///
+/// Its declaration's parent is the program itself, or an `export` statement
+/// whose parent is. Anything deeper is inside a function, a callback or a
+/// block.
+fn is_top_level_declarator(declarator: Node<'_>) -> bool {
+    let Some(declaration) = declarator.parent() else {
+        return false;
+    };
+    let Some(mut holder) = declaration.parent() else {
+        return false;
+    };
+    if holder.kind() == "export_statement" {
+        let Some(outer) = holder.parent() else {
+            return false;
+        };
+        holder = outer;
+    }
+    holder.kind() == "program"
+}
+
 /// Is this argument a handler rather than a request option?
 ///
 /// A handler is a function written in place, a reference to one, or a call
@@ -310,25 +331,19 @@ impl Walker<'_> {
                 self.extract_variables(node, export);
                 // Still descend: initialisers contain calls and strings.
             }
-            // `const f = () => …` and a class field `f = () => …` are how most
-            // TypeScript functions are written. The binding is the function's
-            // name, so it encloses what the body does, exactly as a
-            // `function f() {}` would (T-004). Only a module-scope binding
-            // qualifies: inside a named function the host stays the enclosing
-            // scope, as it always has.
-            "variable_declarator" if self.scope.is_empty() => {
+            // `const f = () => …` is how most TypeScript functions are written.
+            // The binding is the function's name, so it encloses what the body
+            // does, exactly as a `function f() {}` would (T-004).
+            //
+            // Only a declaration written at the top level of the module
+            // qualifies, and that is checked on the syntax tree, not on the
+            // scope stack: inside `memo(() => { const submit = () => … })`
+            // the stack is empty too, and naming `submit` there would make a
+            // file-level function out of a local one (review R-07). A class
+            // field is left alone as well: it would share a node with any
+            // module function of the same name (R-08).
+            "variable_declarator" if self.scope.is_empty() && is_top_level_declarator(node) => {
                 if let Some(name) = self.function_binding(node, "name") {
-                    self.scope.push(name);
-                    next.push(Step::Children(node));
-                    next.push(Step::LeaveScope);
-                    return;
-                }
-            }
-            "public_field_definition" | "field_definition" => {
-                let named = self
-                    .function_binding(node, "name")
-                    .or_else(|| self.function_binding(node, "property"));
-                if let Some(name) = named {
                     self.scope.push(name);
                     next.push(Step::Children(node));
                     next.push(Step::LeaveScope);
@@ -833,16 +848,14 @@ impl Walker<'_> {
             // `axios(url, config)` is one of its documented signatures, under
             // whatever name it was imported (T-006). The method is the
             // literal `method` of the second argument, or not stated.
-            Callee::Identifier { name }
-                if name == "fetch" || name == "axios" || self.bound_to_http_client(name) =>
-            {
-                (
-                    true,
-                    arg_nodes
-                        .get(1)
-                        .and_then(|n| self.literal_method_property(*n)),
-                )
-            }
+            // By binding only: a local function or parameter that happens to
+            // be called `axios` is not the library (review R-11).
+            Callee::Identifier { name } if name == "fetch" || self.bound_to_http_client(name) => (
+                true,
+                arg_nodes
+                    .get(1)
+                    .and_then(|n| self.literal_method_property(*n)),
+            ),
             Callee::Member { object, property } => {
                 let Some(verb) = HttpMethodHint::from_name(property) else {
                     return;

@@ -1325,3 +1325,142 @@ fn a_field_named_like_a_meta_option_is_a_column_not_an_option() {
     ]);
     assert_eq!(a.models["Paper"].table.name(), Some("shop_paper"));
 }
+
+// ---- T-009: a name imported as two different things draws no access edge ---
+
+#[test]
+fn a_class_that_shares_a_models_name_is_not_an_access_to_the_model() {
+    // Found on Label Studio: one test function imports the Django model
+    // `Filter`, another imports an unrelated class called `Filter`, and the
+    // second function's `Filter(...)` was drawn as an access to the model.
+    let a = orm(&[
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Filter(models.Model):\n    class Meta:\n        db_table = 'filters'\n",
+        ),
+        ("shop/params.py", "class Filter:\n    pass\n"),
+        (
+            "shop/tests.py",
+            "def uses_the_model():\n    from shop.models import Filter\n    return Filter.objects.create()\n\n\ndef uses_the_other_class():\n    from shop.params import Filter\n    return Filter(value=1)\n",
+        ),
+    ]);
+    assert!(
+        a.accesses.is_empty(),
+        "which Filter each function sees is not known, so no access may be claimed: {:?}",
+        a.accesses
+    );
+}
+
+#[test]
+fn a_model_imported_identically_in_two_functions_is_still_accessed_by_both() {
+    let a = orm(&[
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Filter(models.Model):\n    class Meta:\n        db_table = 'filters'\n",
+        ),
+        (
+            "shop/tests.py",
+            "def a():\n    from shop.models import Filter\n    return Filter.objects.all()\n\n\ndef b():\n    from shop.models import Filter\n    return Filter.objects.count()\n",
+        ),
+    ]);
+    let mut handlers: Vec<&str> = a
+        .accesses
+        .iter()
+        .filter_map(|x| x.handler.as_deref())
+        .collect();
+    handlers.sort_unstable();
+    assert_eq!(handlers, ["a", "b"]);
+}
+
+// ---- found by independent review -------------------------------------------
+
+const BILLING_BASE: &str = "
+from django.db import models
+
+
+class BillingBase(models.Model):
+    class Meta:
+        abstract = True
+        app_label = \"billing\"
+";
+
+#[test]
+fn a_table_option_inherited_from_a_base_meta_refuses_the_default_table() {
+    // R-12: Django names these `billing_invoice` and `billing_refund`. The
+    // label is in the base's Meta, so `shop_invoice` would be wrong.
+    let a = orm(&[
+        ("core/models.py", BILLING_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.models import BillingBase\n\n\nclass Invoice(BillingBase):\n    pass\n\n\nclass Refund(BillingBase):\n    class Meta(BillingBase.Meta):\n        ordering = ['id']\n\n\nclass Local(models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Invoice"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["Invoice"].table.name(), None);
+    assert_eq!(a.models["Refund"].table.name(), None);
+    // A model with no such base is unaffected.
+    assert_eq!(a.models["Local"].table.name(), Some("shop_local"));
+}
+
+#[test]
+fn a_value_that_only_contains_a_literal_is_not_a_literal() {
+    // R-13: each of these was read as its first string.
+    for value in [
+        "LABELS[\"billing\"]",
+        "get_label(\"fallback\")",
+        "\"one\" if FLAG else \"two\"",
+        "FLAG or \"billing\"",
+        "\"bill\" + \"ing\"",
+        "f\"{PREFIX}billing\"",
+    ] {
+        for option in ["app_label", "db_table"] {
+            let models = format!(
+                "from django.db import models\n\n\nclass Entry(models.Model):\n    class Meta:\n        {option} = {value}\n"
+            );
+            let a = orm(&[
+                ("shop/apps.py", SHOP_APPS),
+                ("shop/models.py", models.as_str()),
+            ]);
+            assert_eq!(
+                a.models["Entry"].table.name(),
+                None,
+                "`{option} = {value}` is not a string literal"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_plain_literal_is_still_read_however_it_is_spaced() {
+    for assignment in [
+        "db_table = \"entries\"",
+        "db_table=\"entries\"",
+        "db_table = 'entries'",
+    ] {
+        let models = format!(
+            "from django.db import models\n\n\nclass Entry(models.Model):\n    class Meta:\n        {assignment}\n"
+        );
+        let a = orm(&[("shop/models.py", models.as_str())]);
+        assert_eq!(
+            a.models["Entry"].table.name(),
+            Some("entries"),
+            "{assignment}"
+        );
+    }
+}
+
+#[test]
+fn a_base_imported_twice_from_different_modules_makes_nothing_a_model() {
+    // R-15: the second import, a plain class, is the one Python binds.
+    let a = orm(&[
+        ("core/stamped.py", CORE_BASE),
+        ("core/plain.py", "class TimeStamped:\n    pass\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.stamped import TimeStamped\nfrom core.plain import TimeStamped\n\n\nclass NotAModel(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert!(!a.models.contains_key("NotAModel"));
+}

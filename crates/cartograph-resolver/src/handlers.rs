@@ -135,12 +135,25 @@ fn resolve(
     };
     let (file, name, line, route) = resolve_reference(modules, from, target)?;
 
-    // The kind is read from the declaration, never assumed from the syntax.
-    let declared = modules.file(&file)?.symbols.iter().find(|symbol| {
-        symbol.name == name
-            && symbol.enclosing.is_none()
-            && matches!(symbol.kind, SymbolKind::Function | SymbolKind::Class)
-    })?;
+    // The name must mean one thing in the declaring file. Nodes are
+    // identified by `(kind, name, file)`, so a method called `detail` shares
+    // the node of a function called `detail`, and the request would inherit
+    // the method's model accesses (review R-02). A later `detail = wrap(...)`
+    // rebinds the name to something this analysis cannot see (R-03). Either
+    // way the reference is not resolved.
+    let declaring = modules.file(&file)?;
+    let mut named = declaring
+        .symbols
+        .iter()
+        .filter(|symbol| symbol.name == name);
+    let (Some(declared), None) = (named.next(), named.next()) else {
+        return None;
+    };
+    if declared.enclosing.is_some()
+        || !matches!(declared.kind, SymbolKind::Function | SymbolKind::Class)
+    {
+        return None;
+    }
     let kind = match (declared.kind, class_based) {
         (SymbolKind::Function, false) => NodeKind::Function,
         (SymbolKind::Class, true) => NodeKind::Class,
@@ -222,6 +235,11 @@ fn module_file(
     let (head, tail) = reference
         .split_once('.')
         .map_or((reference, ""), |(head, tail)| (head, tail));
+    // `views = api_views` after the import: the alias no longer names the
+    // module the import bound it to (review R-04).
+    if from.symbols.iter().any(|symbol| symbol.name == head) {
+        return None;
+    }
     let with_tail = |specifier: String| {
         if tail.is_empty() {
             specifier

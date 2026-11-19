@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — one name imported as two different things is ambiguous, not the first import
+
+Python allows an import inside a function, so one file can bind a name twice,
+to different things. Imports are recorded per file, so which binding a given
+use sees is not known, and the resolver took the first. On Label Studio a test
+function's `Filter(...)`, a plain class imported inside that function, was
+drawn as an access to the Django model `Filter` imported inside another
+(T-009). Two imports that bind one name to different targets are now
+ambiguous, and no edge is drawn from either. The same import repeated in
+several functions is still one binding.
+
 ### Fixed — the MCP server no longer re-parses an unchanged repository on every call
 
 Every `map`, `trace`, `blast` and `diff` call analysed its repository from
@@ -17,9 +28,12 @@ On CVAT (1,295 files) a repeated `map` call went from 5.2 s to 0.85 s, for
 about 18 MB more memory.
 
 It cannot answer from a stale tree. Every call still lists the tree and reads
-every file; cached facts are reused only when a file's bytes hash to what they
-hashed to before, a deleted file is dropped, and routes, matches, models and
-edges are rebuilt on every call. The answer is the one a cold analysis gives.
+every file. A file's parsed facts are reused only when its bytes hash to what
+they hashed to before, and its model accesses only when that file, the files
+its resolution read and the project's sets of models, paths and import aliases
+are all unchanged. A deleted file is dropped, and routes, matches, models,
+tables and edges are rebuilt on every call. The answer is the one a cold
+analysis gives.
 The cache holds only trees the session authorized, lives in memory only, and
 is discarded for a tree whose analysis fails. Two requests for the same tree
 run one after the other.
@@ -34,7 +48,13 @@ Two errors in the default-table rule (T-007):
   that app, whatever package its module is in. Deriving the table from the
   package's `apps.py` instead named a table that does not exist. The model's
   own label is now used first, and it is enough on its own when the package has
-  no `apps.py`. A label that is not a string literal refuses the default table.
+  no `apps.py`. A label that is not a string literal refuses the default table,
+  and the value must *be* a literal, not contain one: `LABELS["billing"]` and
+  `"a" if x else "b"` refuse. The same rule now applies to `db_table`.
+- **An inherited `Meta` was ignored.** `Meta` options are inherited from an
+  abstract base, so a base whose `Meta` sets `app_label` or `db_table` decides
+  its children's tables. Such a model, and one whose own `Meta` extends another
+  class, now gets no derived table rather than a wrong one.
 - **A field was mistaken for a `Meta` option.** `abstract = models.TextField()`
   on a model refused its table, because any assignment to `abstract`, `proxy`
   or `db_table` anywhere in the class counted. Only an assignment inside the
@@ -47,8 +67,8 @@ axios may be called as a function, `axios('/api/orders')` or
 configuration-object form were observed; this form was silently dropped
 (T-006). It is now observed like `fetch(url, init)`, under whatever name axios
 was imported, with the method read from a literal `method` in the second
-argument. A function that is not axios is not a request because its argument
-looks like a path.
+argument. It is recognised by its import alone: a local function or parameter
+that happens to be called `axios` is not a request.
 
 ### Fixed — a model whose base class lives in another file is a model
 
@@ -83,8 +103,11 @@ re-exports the view; and `X.as_view()`, which resolves to the class. The
 edge's evidence names where the handler is declared and which import led there.
 
 Refused, leaving the node as it was: an import that is ambiguous or leaves the
-project, a name that is not a function or class, `function.as_view`, and a bare
-class.
+project; a name imported twice from different modules; a name that is not a
+function or class; a name that means more than one thing in the file that
+declares it (a function and a method of the same name share one node, and a
+later `name = wrap(...)` rebinds it); a module alias reassigned in the URL
+conf; `function.as_view`; and a bare class.
 
 Two deliberate limits:
 
@@ -110,9 +133,14 @@ reads, each evaluated by the existing rules. The same holds for Python.
 
 Nothing is executed and nothing is invented. A call, an index, parentheses, a
 template operand, an escape inside a literal or any other operator still makes
-the whole value unsupported. An object property, a destructured name, a
-function-local value and an environment value stay unresolved, so a URL whose
-prefix depends on one is still refused, concatenated or not.
+the whole value unsupported. An object property and an environment value stay
+unresolved, so a URL whose prefix depends on one is still refused.
+
+Known limit, shared with the template form: an identifier is looked up among
+the module's constants without regard to scope. A parameter, a function-local
+value or a destructured name that has the **same name as a module constant** is
+read as that constant, and a `let` reassigned later is read at its first value.
+Where no module constant shares the name, such an identifier stays unknown.
 
 ### Fixed — a request inside `const f = () => …` belongs to `f`
 
@@ -121,18 +149,26 @@ module-scope name had no enclosing function, so it was attributed to the whole
 file and `cartograph trace f` answered `symbol-not-found` (T-004). The parser
 now treats such a binding as the function it is, as the resolver already did
 when following calls. The same holds for an anonymous `export default`
-function, named `default`, and for a class field holding a function, named like
-a method. Parentheses and type assertions around the function are looked
-through.
+function, named `default`. Parentheses and type assertions around the function
+are looked through.
 
-Unchanged on purpose: a function nested inside a named function still belongs
-to its host, and a function passed to a wrapper call (`debounce(() => …)`) or
-kept in an object literal is not given the binding's name, because what the
-wrapper returns is not known. Those requests stay attributed to the file.
+Only a declaration written at the top level of the module qualifies. Unchanged
+on purpose: a function nested inside a named function still belongs to its
+host; a function declared inside a callback (`memo(() => { const submit = … })`)
+is not named, because it is local to that callback; a class field holding a
+function stays attributed to its class; and a function passed to a wrapper call
+(`debounce(() => …)`) or kept in an object literal is not given the binding's
+name, because what the wrapper returns is not known.
 
-Graphs change where requests sit in arrow functions: the request's source is
-the named function instead of the file, and callers of that function gain a
-`call` edge to it.
+Graphs change where requests sit in top-level arrow functions: the request's
+source is the named function instead of the file, and a caller that imports it
+by name gains a `call` edge to it. A call to a function nested in its caller is
+not followed, and neither is a call through a default import of an anonymous
+default export.
+
+Known limit, shared with `function` declarations: parameters are not recorded,
+so a call to a parameter that has the same name as a module function is read as
+a call to that function.
 
 ### Fixed — `trace` no longer claims an HTTP boundary the path does not cross
 
@@ -142,9 +178,10 @@ edge was on the path: tracing a model to its own table printed it (T-001). The
 sentence is now printed only when one path both contains an HTTP-call edge and
 reaches a table. A path that reaches a table with no HTTP-call edge says so:
 "This path reaches a database table without crossing the HTTP boundary". An
-HTTP call on one branch no longer vouches for a table on another. The JSON
-field `reaches_table` is unchanged; it has always meant only that a table was
-reached.
+HTTP call on one branch no longer vouches for a table on another. A walk cut
+short by `--max-depth` no longer says "a missing hop was refused, not hidden":
+it says no table was reached within the limit. The JSON field `reaches_table`
+is unchanged; it has always meant only that a table was reached.
 
 ### Changed — Cartograph is licensed under the Functional Source License
 

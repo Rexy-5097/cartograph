@@ -331,7 +331,7 @@ impl OrmAnalysis {
         let index = ModuleIndex::build(files);
 
         for mut model in discover_project_models(&python, &index) {
-            derive_django_default_table(&mut model, &python);
+            derive_django_default_table(&mut model, &python, &index);
             *seen.entry(model.name.clone()).or_insert(0) += 1;
             analysis.models.insert(model.name.clone(), model);
         }
@@ -394,7 +394,11 @@ impl OrmAnalysis {
 /// the package has no `apps.py`, when its configs disagree, when a value is not
 /// a literal, or when `name` does not end with the package's directory name
 /// (the config then describes some other app).
-fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
+fn derive_django_default_table(
+    model: &mut OrmModel,
+    python: &[&FileAnalysis],
+    index: &ModuleIndex<'_>,
+) {
     if model.flavor != OrmFlavor::Django || !matches!(model.table, TableName::Unresolved { .. }) {
         return;
     }
@@ -411,6 +415,17 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
             };
             return;
         }
+    }
+    // `Meta` options are inherited: a model with no `Meta` of its own takes
+    // its abstract base's, and `class Meta(Base.Meta)` extends it. A base
+    // that sets `app_label` or `db_table` therefore decides this model's
+    // table too, and neither this file's `Meta` nor the package's apps.py
+    // says what it is (review R-12). Refused rather than derived wrongly.
+    if inherits_table_options(model, python, index) {
+        model.table = TableName::Unresolved {
+            reason: "Meta options that name the table are inherited from a base class".into(),
+        };
+        return;
     }
     // `Meta.app_label` overrides the app the model's module belongs to, so it
     // is read before the package's apps.py. Deriving from apps.py while the
@@ -444,19 +459,110 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
 fn meta_app_label(python: &[&FileAnalysis], model: &OrmModel) -> Option<Result<String, String>> {
     let file = python.iter().find(|f| f.path == model.file)?;
     let declaration = meta_declaration(file, model, "app_label")?;
-    let literal = file.strings.iter().find_map(|s| match s {
-        StringFact::Literal { value, span }
-            if span.start_line >= declaration.span.start_line
-                && span.end_line <= declaration.span.end_line =>
-        {
-            Some(value.clone())
-        }
-        _ => None,
-    });
+    let literal = assigned_literal(file, declaration);
     Some(match literal {
         Some(label) if !label.is_empty() => Ok(label),
         _ => Err("Meta.app_label is not a string literal".to_owned()),
     })
+}
+
+/// The string literal an assignment assigns, when the literal is the whole
+/// value.
+///
+/// `db_table = "orders"` is one. `LABELS["billing"]`, `label("fallback")` and
+/// `"one" if FLAG else "two"` each *contain* a literal and are not one; taking
+/// the first literal on the line read them as `billing`, `fallback` and `one`
+/// (review R-13). The literal must be the only string in the assignment,
+/// start straight after `name =` and end where the assignment ends.
+fn assigned_literal(file: &FileAnalysis, declaration: &Symbol) -> Option<String> {
+    let within = |span: &cartograph_parser::model::Span| {
+        span.start_line >= declaration.span.start_line && span.end_line <= declaration.span.end_line
+    };
+    let mut strings = file.strings.iter().filter(|fact| match fact {
+        StringFact::Literal { span, .. }
+        | StringFact::Template { span, .. }
+        | StringFact::Concatenation { span, .. } => within(span),
+    });
+    let (Some(StringFact::Literal { value, span }), None) = (strings.next(), strings.next()) else {
+        return None;
+    };
+    let name_width = u32::try_from(declaration.name.chars().count()).ok()?;
+    let gap = span
+        .start_column
+        .checked_sub(declaration.span.start_column + name_width)?;
+    let whole_value = span.start_line == declaration.span.start_line
+        && (1..=3).contains(&gap)
+        && span.end_line == declaration.span.end_line
+        && span.end_column == declaration.span.end_column;
+    whole_value.then(|| value.clone())
+}
+
+/// Whether a base class, at any depth, sets `app_label` or `db_table` in its
+/// `Meta`, or the model's own `Meta` extends another class.
+fn inherits_table_options(
+    model: &OrmModel,
+    python: &[&FileAnalysis],
+    index: &ModuleIndex<'_>,
+) -> bool {
+    let Some(file) = python.iter().find(|f| f.path == model.file) else {
+        return false;
+    };
+    let Some(class) = file
+        .symbols
+        .iter()
+        .find(|s| s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == model.name)
+    else {
+        return false;
+    };
+    // `class Meta(Base.Meta)` — whatever `Base.Meta` sets is inherited.
+    let own_meta_extends = file.symbols.iter().any(|s| {
+        s.kind == SymbolKind::Class
+            && s.name == "Meta"
+            && s.enclosing.as_deref() == Some(model.name.as_str())
+            && s.span.start_line >= class.span.start_line
+            && s.span.end_line <= class.span.end_line
+            && !s.bases.is_empty()
+    });
+    if own_meta_extends {
+        return true;
+    }
+
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut pending: Vec<(&FileAnalysis, &Symbol)> = vec![(file, class)];
+    while let Some((at, current)) = pending.pop() {
+        for base in &current.bases {
+            let Some((declared_in, name, _, _)) =
+                crate::handlers::resolve_reference(index, at, base)
+            else {
+                continue;
+            };
+            if !seen.insert((declared_in.clone(), name.clone())) {
+                continue;
+            }
+            let Some(base_file) = python.iter().find(|f| f.path == declared_in) else {
+                continue;
+            };
+            let Some(base_class) = base_file
+                .symbols
+                .iter()
+                .find(|s| s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == name)
+            else {
+                continue;
+            };
+            let sets_table = base_file.symbols.iter().any(|s| {
+                s.kind == SymbolKind::Variable
+                    && (s.name == "app_label" || s.name == "db_table")
+                    && s.enclosing.as_deref() == Some("Meta")
+                    && s.span.start_line >= base_class.span.start_line
+                    && s.span.end_line <= base_class.span.end_line
+            });
+            if sets_table {
+                return true;
+            }
+            pending.push((base_file, base_class));
+        }
+    }
+    false
 }
 
 /// The assignment to `attribute` inside a model's own `Meta`, if there is one.
@@ -824,17 +930,8 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
             && within_class(s)
     })?;
 
-    // The value is the string literal inside the assignment's own span — the
-    // same span-correlation the constant evaluator uses.
-    let literal = file.strings.iter().find_map(|s| match s {
-        StringFact::Literal { value, span }
-            if span.start_line >= declaration.span.start_line
-                && span.end_line <= declaration.span.end_line =>
-        {
-            Some(value.clone())
-        }
-        _ => None,
-    });
+    // The value must *be* a string literal, not merely contain one.
+    let literal = assigned_literal(file, declaration);
 
     Some(match literal {
         Some(name) if !name.is_empty() => TableName::Declared {

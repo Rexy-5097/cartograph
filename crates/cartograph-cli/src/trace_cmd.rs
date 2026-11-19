@@ -304,6 +304,14 @@ fn reaches_table(steps: &[Step]) -> bool {
         .any(|step| matches!(step.to.kind, NodeKind::Table) || reaches_table(&step.next))
 }
 
+/// Whether the walk, or any branch of it, stopped at the depth limit.
+fn stopped_at_depth(stop: Option<Stop>, steps: &[Step]) -> bool {
+    matches!(stop, Some(Stop::MaxDepth))
+        || steps
+            .iter()
+            .any(|step| stopped_at_depth(step.stop, &step.next))
+}
+
 /// Whether some single path reaches a database table **through** an
 /// `HttpCall` edge.
 ///
@@ -410,6 +418,14 @@ fn render_text(analysis: &Analysis, result: &TraceResult) -> String {
             "This path reaches a database table without crossing the HTTP boundary:"
         );
         let _ = writeln!(out, "no HTTP-call edge is on it.");
+    } else if stopped_at_depth(result.stop, &result.steps) {
+        // The walk was cut short, so "a missing hop was refused" would be
+        // untrue: the table may be one hop past the limit (review R-14).
+        let _ = writeln!(
+            out,
+            "No database table was reached within --max-depth; the path may continue"
+        );
+        let _ = writeln!(out, "past the hops shown.");
     } else {
         let _ = writeln!(
             out,

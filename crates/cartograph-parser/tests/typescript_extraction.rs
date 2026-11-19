@@ -1065,7 +1065,9 @@ fn an_anonymous_default_export_encloses_its_requests_as_default() {
 }
 
 #[test]
-fn a_class_field_holding_a_function_encloses_its_requests_like_a_method() {
+fn a_class_field_holding_a_function_stays_with_its_class() {
+    // Review R-08: naming the field would give it the node of any module
+    // function called `list`. The request stays attributed to the class.
     let calls = enclosing_by_line(
         "src/api.ts",
         "export class OrderApi {
@@ -1073,13 +1075,29 @@ fn a_class_field_holding_a_function_encloses_its_requests_like_a_method() {
   create(order) {
     return fetch('/api/orders', { method: 'POST' });
   }
-  static remove = async function (id) {
-    return fetch('/api/orders/1', { method: 'DELETE' });
-  };
 }
 ",
     );
-    assert_eq!(calls, vec![at(2, "list"), at(4, "create"), at(7, "remove")]);
+    assert_eq!(calls, vec![at(2, "OrderApi"), at(4, "create")]);
+}
+
+#[test]
+fn a_function_inside_a_module_level_callback_is_not_a_module_function() {
+    // Review R-07: inside `memo(() => { ... })` no named scope is open, but
+    // `submit` is local to the callback. Naming it would create a file-level
+    // `submit` that any `submit()` in the file appears to call.
+    let calls = enclosing_by_line(
+        "src/form.tsx",
+        "export const Form = memo(() => {
+  const submit = () => fetch('/api/a');
+  return null;
+});
+describe('x', () => {
+  const load = async () => fetch('/api/b');
+});
+",
+    );
+    assert_eq!(calls, vec![(2, None), (6, None)]);
 }
 
 #[test]
@@ -1184,6 +1202,26 @@ import { get } from 'lodash';
 export function a() { return request('/api/a'); }
 export function b(t: TypeOnly) { return TypeOnly('/api/b'); }
 export function c(o) { return get(o, '/api/c'); }
+",
+        )
+        .expect("analyses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "observed a non-axios call as a request: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_local_function_or_parameter_called_axios_is_not_the_library() {
+    // Review R-11: nothing here imports axios.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/fmt.ts",
+            "function axios(path) { return path.toUpperCase(); }
+export function a() { return axios('/api/secret/'); }
+export function b(axios) { return axios('/api/secret/'); }
 ",
         )
         .expect("analyses");

@@ -296,3 +296,37 @@ fn every_call_edge_says_why_it_exists() {
         assert!(!edge.location().file().is_empty());
     }
 }
+
+// ── T-004 ───────────────────────────────────────────────────────────
+
+#[test]
+fn an_arrow_function_that_issues_a_request_is_a_client_function() {
+    // Before T-004 the request in `loadOrders` had no enclosing function, so
+    // nothing could call into it.
+    let edges = call_edges(&[
+        (
+            "web/api.ts",
+            "export const loadOrders = () => fetch('/api/orders');\n",
+        ),
+        (
+            "web/page.ts",
+            "import { loadOrders } from './api';\n\nexport const OrdersPage = () => {\n  return loadOrders();\n};\n",
+        ),
+    ]);
+    assert_eq!(
+        edges,
+        vec![("OrdersPage".to_owned(), "loadOrders".to_owned())]
+    );
+}
+
+#[test]
+fn a_call_to_a_function_nested_in_the_caller_is_not_followed() {
+    // A rule that followed it was written and withdrawn after review (R-06):
+    // parameters are not recorded, so `load()` may be a prop of the same
+    // name, and the edge would be a guess.
+    let edges = call_edges(&[(
+        "web/page.tsx",
+        "export function Page({ load }) {\n  const unused = () => {\n    function load() { return fetch('/api/secret'); }\n  };\n  load();\n}\n",
+    )]);
+    assert!(edges.is_empty(), "no edge may be drawn: {edges:?}");
+}

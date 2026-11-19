@@ -303,6 +303,20 @@ impl<'a> ModuleIndex<'a> {
         let Some(import) = python_import_binding(from, name) else {
             return Resolution::NotBound;
         };
+        // Python allows an import inside a function, so one file may bind a
+        // name twice, to different things:
+        //
+        //     def a(): from shop.models import Filter      # the model
+        //     def b(): from shop.params import Filter      # something else
+        //
+        // Imports are recorded per file, not per scope, so which binding a
+        // given use sees is not known here. Taking the first drew an edge
+        // from `b` to the model (T-009). Two bindings that disagree are an
+        // open question, and an edge is an answer.
+        let rivals = conflicting_python_bindings(from, name);
+        if rivals.len() > 1 {
+            return Resolution::Ambiguous { candidates: rivals };
+        }
         // The name the exporting module knows it by, which an alias changes.
         let exported = import
             .named
@@ -681,6 +695,27 @@ fn python_import_binding<'f>(
             .iter()
             .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
     })
+}
+
+/// Every distinct thing `name` is imported as in `file`, as `module.name`.
+///
+/// One entry when the name is imported once, or several times identically —
+/// the same function-local import repeated in ten functions is one binding.
+/// More than one entry means the file binds the name to different targets.
+fn conflicting_python_bindings(file: &FileAnalysis, name: &str) -> Vec<String> {
+    let mut targets: Vec<String> = Vec::new();
+    for import in &file.imports {
+        for named in &import.named {
+            if named.local.as_deref().unwrap_or(named.imported.as_str()) != name {
+                continue;
+            }
+            let target = format!("{}:{}", import.specifier, named.imported);
+            if !targets.contains(&target) {
+                targets.push(target);
+            }
+        }
+    }
+    targets
 }
 
 /// A module-scope declaration of `name` in one file.

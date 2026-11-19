@@ -365,12 +365,14 @@ pub fn analyze(tree: &AuthorizedTree, options: Options) -> Result<Analysis, CliE
 /// # It cannot answer from a stale tree
 ///
 /// Nothing here decides whether a file changed. Every analysis still lists the
-/// tree and reads every file; a file's cached facts are reused only when its
-/// bytes hash to what they hashed to before, a file that is gone is dropped,
-/// and everything derived from the facts (routes, matches, models, edges) is
-/// rebuilt on every call. That is [`pipeline::run_with_cache`]'s contract —
-/// *an incremental result equals a clean one* — and this type adds no second
-/// notion of freshness on top of it.
+/// tree and reads every file. Two things are reused, each under its own
+/// check: a file's parsed facts, only when its bytes hash to what they hashed
+/// to before; and a file's model accesses, only when that file, every file
+/// its resolution read, the set of models, the set of paths and the set of
+/// import aliases are all unchanged. A file that is gone is dropped. Routes,
+/// matches, models, tables and edges are rebuilt on every call. That is
+/// [`pipeline::run_with_cache`]'s contract — *an incremental result equals a
+/// clean one* — and this type adds no second notion of freshness on top of it.
 ///
 /// # What it holds, and for whom
 ///
@@ -414,6 +416,9 @@ impl SessionCache {
         let mut state = slot.lock().unwrap_or_else(|poisoned| {
             let mut state = poisoned.into_inner();
             *state = IncrementalState::new();
+            // The reset state is sound again, so the tree need not start
+            // cold forever (review R-18).
+            slot.clear_poison();
             state
         });
         let result = pipeline::run_with_cache(&tree.path, options, &mut state);

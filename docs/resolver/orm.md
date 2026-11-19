@@ -33,6 +33,7 @@ a `__tablename__` is not a model.
 | SQLAlchemy without `__tablename__` | **Unresolved** |
 | Django without `db_table`, the model's own `Meta.app_label` is a string literal | `Derived` — `<app_label>_<modelname>` |
 | Django without `db_table`, `Meta.app_label` assigned something else | **Unresolved** |
+| Django model whose base, at any depth, sets `app_label` or `db_table` in its `Meta`, or whose own `Meta` extends another class | **Unresolved** — the option is inherited |
 | Django without `db_table` or `Meta.app_label`, app package's `apps.py` states its label or name | `Derived` — `<app_label>_<modelname>` |
 | Django without `db_table`, no `apps.py`, or one that is contradictory, non-literal or names another app | **Unresolved** |
 | Django model whose `Meta` declares `abstract` or `proxy` | **Unresolved** — no table of its own |

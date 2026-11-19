@@ -89,7 +89,12 @@ The edge's evidence names the declaration and the import that led to it.
 
 Refused, leaving the node named by the reference as written:
 
-- an import that is ambiguous or leaves the project;
+- an import that is ambiguous or leaves the project, and a name imported twice
+  from different modules;
+- a name that means more than one thing in the declaring file: a function and
+  a method of the same name share one node, and a later `name = wrap(...)`
+  rebinds it;
+- a module alias reassigned in the URL conf (`views = api_views`);
 - a name that is neither a function nor a class, such as a module-scope
   `orders = OrderView.as_view()`;
 - `function.as_view`, and a bare class without `as_view`.

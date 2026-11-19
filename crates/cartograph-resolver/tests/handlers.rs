@@ -523,3 +523,79 @@ fn the_edge_says_where_the_handler_is_declared_and_how_it_was_found() {
     );
     assert!(evidence.contains("`from . import views`"), "{evidence}");
 }
+
+// ── found by independent review ─────────────────────────────────────
+
+#[test]
+fn a_view_imported_twice_from_different_modules_resolves_to_nothing() {
+    // R-01: Python binds the second import; taking the first sent the request
+    // to the wrong module's view.
+    let files = [
+        (
+            "shop/views_v1.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/views_v2.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom .views_v1 import list_orders\nfrom .views_v2 import list_orders\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+}
+
+#[test]
+fn a_view_sharing_its_name_with_a_method_resolves_to_nothing() {
+    // R-02: `detail` the function and `AdminTools.detail` the method are one
+    // node, so the request would inherit the method's model accesses.
+    let files = [
+        (
+            "shop/views.py",
+            "def detail(request):\n    return None\n\n\nclass AdminTools:\n    def detail(self):\n        return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom . import views\n\nurlpatterns = [path('d/', views.detail)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "views.detail"), None);
+}
+
+#[test]
+fn a_view_whose_name_is_rebound_after_its_def_resolves_to_nothing() {
+    // R-03: the route is served by whatever `login_required(_real)` returns.
+    let files = [
+        (
+            "shop/views.py",
+            "def _real(request):\n    return None\n\n\ndef list_orders(request):\n    return None\n\n\nlist_orders = login_required(_real)\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom . import views\n\nurlpatterns = [path('orders/', views.list_orders)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "views.list_orders"), None);
+}
+
+#[test]
+fn a_module_alias_rebound_in_the_url_conf_resolves_to_nothing() {
+    // R-04: after `views = api_views` the alias is not the imported module.
+    let files = [
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/api_views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom . import views\nfrom . import api_views\n\nviews = api_views\n\nurlpatterns = [path('orders/', views.list_orders)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "views.list_orders"), None);
+}

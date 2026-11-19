@@ -155,3 +155,24 @@ fn an_unresolved_symbol_prints_no_summary_sentence_at_all() {
     assert!(!stdout.contains("HTTP boundary"), "{stdout}");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_walk_cut_short_by_the_depth_limit_does_not_say_a_hop_was_refused() {
+    // Review R-14: the table is one hop past the limit. "A missing hop was
+    // refused, not hidden" would be untrue.
+    let root = project("depth");
+    let output = Command::new(env!("CARGO_BIN_EXE_cartograph"))
+        .args(["trace", "placeOrder", "--max-depth", "2", "--path"])
+        .arg(&root)
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("stopped at --max-depth"), "{stdout}");
+    assert!(!stdout.contains("was refused, not hidden"), "{stdout}");
+    assert!(!stdout.contains("crosses the HTTP boundary"), "{stdout}");
+    assert!(
+        stdout.contains("No database table was reached within --max-depth"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
