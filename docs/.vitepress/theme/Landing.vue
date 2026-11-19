@@ -933,7 +933,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="cg-footer-base">
         <span>© Cartograph contributors</span>
-        <a :href="repo('LICENSE')">Apache-2.0 licence</a>
+        <a :href="repo('LICENSE')">FSL-1.1-ALv2 licence</a>
         <span>Built with <a href="https://vitepress.dev/">VitePress</a></span>
       </div>
     </footer>

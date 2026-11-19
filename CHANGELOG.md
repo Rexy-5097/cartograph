@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — Cartograph is licensed under the Functional Source License
+
+Cartograph moves from Apache-2.0 to the Functional Source License, Version 1.1,
+ALv2 Future License (FSL-1.1-ALv2)
+([ADR-0023](docs/adr/ADR-0023-functional-source-license.md)). You can still use
+it for free, including on your employer's code, and read, change and share it.
+You can no longer sell it, or offer it as a product or service that competes
+with Cartograph. Each version becomes Apache-2.0 two years after it is made
+available, and every version published before this change stays Apache-2.0.
+The vendored `agentos/` framework keeps its MIT licence.
+
 ### Changed — the README is written for people using Cartograph
 
 The README now leads with the problem Cartograph solves and a three-file example

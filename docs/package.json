@@ -2,7 +2,7 @@
   "name": "cartograph-docs",
   "private": true,
   "description": "The Cartograph documentation site. Built with VitePress from the Markdown in this directory.",
-  "license": "Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",

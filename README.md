@@ -5,7 +5,7 @@
 **See how your frontend, backend and database really connect, with proof for every link.**
 
 [![CI](https://github.com/Rexy-5097/cartograph/actions/workflows/ci.yml/badge.svg)](https://github.com/Rexy-5097/cartograph/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License: FSL-1.1-ALv2](https://img.shields.io/badge/license-FSL--1.1--ALv2-blue.svg)](LICENSE)
 ![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-orange.svg)
 
 [Website](https://cartograph.co.in) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](docs/)
@@ -280,4 +280,10 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md), then [ARCHITECTURE.md](ARCHITECTU
 
 ## License
 
-[Apache-2.0](LICENSE). The vendored `agentos/` framework is MIT-licensed ([its licence](agentos/LICENSE)).
+Cartograph is released under the [Functional Source License](LICENSE) (FSL-1.1-ALv2). In plain words:
+
+- **You can** use it for free at work or at home, read the code, change it, and share your changes. That includes running it on your company's own codebases.
+- **You can't** sell it, or offer it as a product or service that competes with Cartograph.
+- **Every version becomes fully open source** (Apache-2.0) two years after it is released.
+
+Versions published before this licence was adopted remain under Apache-2.0 ([why and how it changed](docs/adr/ADR-0023-functional-source-license.md)). The vendored `agentos/` framework keeps its own MIT licence ([its licence](agentos/LICENSE)).
