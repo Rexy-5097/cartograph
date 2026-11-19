@@ -412,20 +412,23 @@ fn render_text(analysis: &Analysis, result: &TraceResult) -> String {
             out,
             "This path crosses the HTTP boundary and reaches a database table."
         );
+    } else if stopped_at_depth(result.stop, &result.steps) {
+        // The walk was cut short, so "a missing hop was refused" would be
+        // untrue: the table may be one hop past the limit (review R-14).
+        let _ = writeln!(
+            out,
+            "No path within --max-depth was found to cross the HTTP boundary and reach a"
+        );
+        let _ = writeln!(
+            out,
+            "database table, but the walk stopped at the limit: a path may continue past it."
+        );
     } else if result.reaches_table {
         let _ = writeln!(
             out,
             "This path reaches a database table without crossing the HTTP boundary:"
         );
         let _ = writeln!(out, "no HTTP-call edge is on it.");
-    } else if stopped_at_depth(result.stop, &result.steps) {
-        // The walk was cut short, so "a missing hop was refused" would be
-        // untrue: the table may be one hop past the limit (review R-14).
-        let _ = writeln!(
-            out,
-            "No database table was reached within --max-depth; the path may continue"
-        );
-        let _ = writeln!(out, "past the hops shown.");
     } else {
         let _ = writeln!(
             out,

@@ -489,7 +489,9 @@ fn a_class_based_view_is_reached_but_its_methods_are_not_joined_to_it() {
 }
 
 #[test]
-fn an_unresolved_reference_keeps_the_node_it_always_had() {
+fn an_unresolved_reference_ends_at_its_route() {
+    // Second review, S-01: a node named by the reference text would share
+    // the identity of any function of that name in the URL conf.
     let graph = graph_of(&[
         ("web/api.ts", CLIENT),
         (
@@ -497,8 +499,14 @@ fn an_unresolved_reference_keeps_the_node_it_always_had() {
             "from django.urls import path\nfrom thirdparty import views\n\nurlpatterns = [path('api/orders/', views.index)]\n",
         ),
     ]);
-    let target = graph.nodes().find(|n| n.name() == "views.index").unwrap();
+    let edge = graph
+        .edges()
+        .find(|e| e.kind() == EdgeKind::HttpCall)
+        .expect("the request still matches the route");
+    let target = graph.node(edge.target()).unwrap();
+    assert_eq!(target.kind(), NodeKind::Route);
     assert_eq!(target.location().unwrap().file(), "shop/urls.py");
+    assert!(graph.nodes().all(|n| n.name() != "views.index"));
 }
 
 #[test]
@@ -598,4 +606,54 @@ fn a_module_alias_rebound_in_the_url_conf_resolves_to_nothing() {
         ),
     ];
     assert_eq!(declared(&files, "shop/urls.py", "views.list_orders"), None);
+}
+
+#[test]
+fn a_refused_reference_never_shares_a_node_with_a_function_of_that_name() {
+    // S-01: `list_orders` is refused (the views file declares it twice), and
+    // the URL conf also has a method called `list_orders` that reads a
+    // secret table. The request must not reach it.
+    let graph = graph_of(&[
+        ("web/api.ts", CLIENT),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Secret(models.Model):\n    class Meta:\n        db_table = 'secrets'\n",
+        ),
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n\n\nclass Tools:\n    def list_orders(self):\n        return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom .views import list_orders\nfrom .models import Secret\n\n\nclass Helper:\n    def list_orders(self):\n        return Secret.objects.all()\n\n\nurlpatterns = [path('api/orders/', list_orders)]\n",
+        ),
+    ]);
+    let edge = graph
+        .edges()
+        .find(|e| e.kind() == EdgeKind::HttpCall)
+        .unwrap();
+    let target = graph.node(edge.target()).unwrap();
+    assert_eq!(target.kind(), NodeKind::Route, "got {target:?}");
+    assert_eq!(
+        graph.edges().filter(|e| e.source() == target.id()).count(),
+        0,
+        "the route node carries no model access"
+    );
+}
+
+#[test]
+fn a_view_imported_after_a_local_def_of_the_same_name_resolves_to_nothing() {
+    // S-02: Python serves the import, which rebinds the name; the resolver
+    // prefers the local def whatever the order.
+    let files = [
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nfrom .views import list_orders\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
 }

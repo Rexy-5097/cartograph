@@ -33,7 +33,8 @@ a `__tablename__` is not a model.
 | SQLAlchemy without `__tablename__` | **Unresolved** |
 | Django without `db_table`, the model's own `Meta.app_label` is a string literal | `Derived` — `<app_label>_<modelname>` |
 | Django without `db_table`, `Meta.app_label` assigned something else | **Unresolved** |
-| Django model whose base, at any depth, sets `app_label` or `db_table` in its `Meta`, or whose own `Meta` extends another class | **Unresolved** — the option is inherited |
+| Django model whose base, at any depth, sets `app_label` or `db_table` in its `Meta`; or a `Meta` in the chain extends a class outside the model's bases, or is bound by assignment; or a base inside the project does not resolve to one class | **Unresolved** — the option may be inherited |
+| `db_table`, `app_label`, or an `apps.py` `label`/`name` assigned twice, or not a whole string literal, or holding an escape | **Unresolved** |
 | Django without `db_table` or `Meta.app_label`, app package's `apps.py` states its label or name | `Derived` — `<app_label>_<modelname>` |
 | Django without `db_table`, no `apps.py`, or one that is contradictory, non-literal or names another app | **Unresolved** |
 | Django model whose `Meta` declares `abstract` or `proxy` | **Unresolved** — no table of its own |
@@ -130,6 +131,11 @@ Raw SQL mapping is a possible future milestone.
   from the `apps.py` of the model's own package (see above). An `apps.py` in a
   parent package is not used, and `abstract = False` still refuses the table,
   because the option's value is not recorded.
+- A base from outside the project (a library mixin) cannot be read. It is
+  assumed to set no `app_label` or `db_table`, and the derived table's rule
+  names it.
+- `db_table = N*"t"` written without spaces is read as `"t"`: the parser does
+  not record an assignment's syntax, only its strings and their positions.
 - A model is found through its bases only when each base resolves through
   imports to a class in this project. A base from a library other than
   `models.Model`, `AbstractUser` and `AbstractBaseUser` (for example

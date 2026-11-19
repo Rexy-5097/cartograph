@@ -1016,13 +1016,15 @@ let patchOrder = function* () {
 };
 ",
     );
+    // `let` may be reassigned, so only `const` names its function
+    // (second review, S-11).
     assert_eq!(
         calls,
         vec![
             at(1, "loadOrders"),
             at(3, "saveOrder"),
             at(7, "removeOrder"),
-            at(10, "patchOrder"),
+            (10, None),
         ]
     );
 }
@@ -1230,4 +1232,52 @@ export function b(axios) { return axios('/api/secret/'); }
         "observed a non-axios call as a request: {:?}",
         analysis.http_calls
     );
+}
+
+#[test]
+fn a_parameter_or_local_named_axios_is_not_the_imported_library() {
+    // Second review, S-12: the import binding is per file, so a parameter or
+    // local of the same name was read as axios.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import axios from 'axios';
+export function viaParam(axios: (s: string) => string) { return axios('/api/a/'); }
+export function viaLocal() {
+  const axios = (s: string) => s;
+  return axios('/api/b/');
+}
+export function viaDestructured({ axios }) { return axios('/api/c/'); }
+export function real() { return axios('/api/d/'); }
+export const realArrow = () => axios.get('/api/e/');
+",
+        )
+        .expect("analyses");
+    // `axios.get(...)` on any receiver *named* `axios` is a request by the
+    // separate, documented name rule (`HTTP_CLIENT_OBJECTS`), shadowed or not.
+    // What T-006 and S-12 govern is the import binding: lines 2, 5 and 7.
+    let lines: Vec<u32> = analysis
+        .http_calls
+        .iter()
+        .map(|c| c.span.start_line)
+        .collect();
+    assert_eq!(
+        lines,
+        vec![8, 9],
+        "only the real axios calls: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_reassigned_top_level_let_does_not_name_its_function() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "let load = () => fetch('/api/a/');
+load = () => fetch('/api/secret/');
+var other = () => fetch('/api/b/');
+",
+    );
+    assert_eq!(calls, vec![(1, None), (2, None), (3, None)]);
 }

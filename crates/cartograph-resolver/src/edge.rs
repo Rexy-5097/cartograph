@@ -97,8 +97,16 @@ pub fn add_edge_for_match_with(
         .as_deref()
         .and_then(|handler| handlers.declaration(&candidate.route.provenance.file, handler));
 
+    let refused = declaration.is_none()
+        && candidate
+            .route
+            .provenance
+            .handler
+            .as_deref()
+            .is_some_and(|handler| handlers.is_refused(&candidate.route.provenance.file, handler));
+
     let source = client_node(graph, result)?;
-    let target = backend_node(graph, candidate, declaration)?;
+    let target = backend_node(graph, candidate, declaration, refused)?;
 
     let id = graph.add_edge(EdgeSpec {
         source,
@@ -152,8 +160,22 @@ fn backend_node(
     graph: &mut ArchitectureGraph,
     candidate: &Candidate,
     declaration: Option<&HandlerDeclaration>,
+    refused: bool,
 ) -> Result<NodeId, GraphError> {
     let provenance = &candidate.route.provenance;
+
+    // A URL-conf reference that did not resolve names no declaration. Its
+    // edge ends at the route, which can share an identity with nothing else
+    // (second review, S-01).
+    if refused {
+        let location =
+            SourceLocation::new(provenance.file.clone(), provenance.span.start_line).ok();
+        return graph
+            .node_for(NodeKind::Route, candidate.route.to_string(), location)
+            .map_err(|_| GraphError::UnknownNode {
+                id: NodeId::from_raw(u64::MAX),
+            });
+    }
 
     // A URL-conf reference that resolved: the node is the declaration, in the
     // file that declares it. Identity is `(kind, name, file)`, so this is the

@@ -171,8 +171,45 @@ fn a_walk_cut_short_by_the_depth_limit_does_not_say_a_hop_was_refused() {
     assert!(!stdout.contains("was refused, not hidden"), "{stdout}");
     assert!(!stdout.contains("crosses the HTTP boundary"), "{stdout}");
     assert!(
-        stdout.contains("No database table was reached within --max-depth"),
+        stdout.contains("No path within --max-depth was found to cross the HTTP boundary"),
         "{stdout}"
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_mixed_walk_with_one_branch_cut_short_does_not_rule_out_a_crossing() {
+    // Second review, S-10: one branch reaches a table directly, another
+    // crosses the HTTP boundary and is cut by the limit. "Without crossing"
+    // would be untrue.
+    let root = std::env::temp_dir().join(format!("cartograph-trace-mixed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    write(
+        &root,
+        "jobs/sync.py",
+        "import requests\nfrom api.models import Order\n\n\ndef sync():\n    Order.objects.all()\n    return requests.post('/api/orders')\n",
+    );
+    write(
+        &root,
+        "api/routes.py",
+        "from fastapi import FastAPI\nfrom .models import Order\n\napp = FastAPI()\n\n\n@app.post(\"/api/orders\")\ndef create_order(payload: dict):\n    return Order(**payload)\n",
+    );
+    write(
+        &root,
+        "api/models.py",
+        "from sqlalchemy.orm import DeclarativeBase\n\n\nclass Base(DeclarativeBase):\n    pass\n\n\nclass Order(Base):\n    __tablename__ = \"orders\"\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_cartograph"))
+        .args(["trace", "sync", "--max-depth", "2", "--path"])
+        .arg(&root)
+        .output()
+        .expect("binary runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("HTTP-CALL"), "{stdout}");
+    assert!(
+        !stdout.contains("without crossing the HTTP boundary"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("No path within --max-depth"), "{stdout}");
     let _ = std::fs::remove_dir_all(&root);
 }

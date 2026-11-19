@@ -87,7 +87,9 @@ request can be followed to a table through the standard Django layout
 
 The edge's evidence names the declaration and the import that led to it.
 
-Refused, leaving the node named by the reference as written:
+Refused. The edge then ends at the **route** node, named by its path, and never
+at a node named by the reference: that would be the identity of any function
+of that name in the URL conf. Refused when:
 
 - an import that is ambiguous or leaves the project, and a name imported twice
   from different modules;
@@ -97,7 +99,8 @@ Refused, leaving the node named by the reference as written:
 - a module alias reassigned in the URL conf (`views = api_views`);
 - a name that is neither a function nor a class, such as a module-scope
   `orders = OrderView.as_view()`;
-- `function.as_view`, and a bare class without `as_view`.
+- `function.as_view`, and a bare class without `as_view`;
+- a name both declared in the URL conf and imported into it.
 
 Two limits are deliberate:
 

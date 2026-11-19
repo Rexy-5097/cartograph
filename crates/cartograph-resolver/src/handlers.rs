@@ -41,7 +41,7 @@
 //! class to "its" `get` would also join it to the other class's model
 //! accesses. That edge is therefore not drawn.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cartograph_core::NodeKind;
 use cartograph_parser::model::{FileAnalysis, RouteDeclarationStyle, SourceLanguage, SymbolKind};
@@ -70,6 +70,12 @@ pub struct HandlerDeclaration {
 pub struct HandlerIndex {
     /// Keyed by the URL conf's file and the reference as written there.
     declarations: HashMap<(String, String), HandlerDeclaration>,
+    /// URL-conf references that did not resolve. Their edge must end at a
+    /// route node: a node named by the reference text would be
+    /// `(Function, name, urls.py)`, the identity of any real function of that
+    /// name in the URL conf, and would join its model accesses (second
+    /// review, S-01).
+    refused: HashSet<(String, String)>,
 }
 
 impl HandlerIndex {
@@ -77,6 +83,7 @@ impl HandlerIndex {
     #[must_use]
     pub fn build(files: &[FileAnalysis], modules: &ModuleIndex<'_>) -> Self {
         let mut declarations = HashMap::new();
+        let mut refused = HashSet::new();
         for file in files {
             if file.language != SourceLanguage::Python {
                 continue;
@@ -89,15 +96,31 @@ impl HandlerIndex {
                     continue;
                 };
                 let key = (file.path.clone(), reference.clone());
-                if declarations.contains_key(&key) {
+                if declarations.contains_key(&key) || refused.contains(&key) {
                     continue;
                 }
-                if let Some(declaration) = resolve(modules, file, reference) {
-                    declarations.insert(key, declaration);
+                match resolve(modules, file, reference) {
+                    Some(declaration) => {
+                        declarations.insert(key, declaration);
+                    }
+                    None => {
+                        refused.insert(key);
+                    }
                 }
             }
         }
-        Self { declarations }
+        Self {
+            declarations,
+            refused,
+        }
+    }
+
+    /// Whether `reference` in `url_conf` is a URL-conf handler reference that
+    /// did not resolve to a declaration.
+    #[must_use]
+    pub fn is_refused(&self, url_conf: &str, reference: &str) -> bool {
+        self.refused
+            .contains(&(url_conf.to_owned(), reference.to_owned()))
     }
 
     /// The declaration behind `reference` as written in `url_conf`, if it
@@ -133,6 +156,13 @@ fn resolve(
         Some(class) => (class, true),
         None => (reference, false),
     };
+    // `def list_orders` in the URL conf and then `from .views import
+    // list_orders`: the import rebinds the name, but the resolver prefers a
+    // local declaration whatever the order. Both binding it is refused
+    // (second review, S-02).
+    if !target.contains('.') && binds_by_import(from, target) && declares(from, target) {
+        return None;
+    }
     let (file, name, line, route) = resolve_reference(modules, from, target)?;
 
     // The name must mean one thing in the declaring file. Nodes are
@@ -291,6 +321,24 @@ fn module_file(
         1 => found.pop(),
         _ => None,
     }
+}
+
+/// Whether an import in `file` binds `name`.
+fn binds_by_import(file: &FileAnalysis, name: &str) -> bool {
+    file.imports.iter().any(|import| {
+        import
+            .named
+            .iter()
+            .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+            || import.namespace_name.as_deref() == Some(name)
+    })
+}
+
+/// Whether `file` declares `name` at module scope.
+fn declares(file: &FileAnalysis, name: &str) -> bool {
+    file.symbols
+        .iter()
+        .any(|symbol| symbol.name == name && symbol.enclosing.is_none())
 }
 
 /// `shop` + `views` is `shop.views`; `.` + `views` is `.views`.

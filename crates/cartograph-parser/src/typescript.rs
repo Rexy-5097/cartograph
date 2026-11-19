@@ -209,6 +209,88 @@ enum Step<'t> {
     LeaveConcat,
 }
 
+/// Is `name` rebound between the module and this call: a parameter of an
+/// enclosing function, or a declaration in an enclosing block?
+///
+/// The import binding is per file, so without this a parameter called
+/// `axios` in a file that imports axios was read as the library (second
+/// review, S-12).
+fn is_shadowed(name: &str, call: Node<'_>, source: &str) -> bool {
+    let text = |node: Node<'_>| node.utf8_text(source.as_bytes()).unwrap_or_default();
+    let declares = |node: Node<'_>| -> bool {
+        let mut stack = vec![node];
+        while let Some(current) = stack.pop() {
+            if matches!(
+                current.kind(),
+                "identifier" | "shorthand_property_identifier_pattern"
+            ) && text(current) == name
+            {
+                return true;
+            }
+            // Do not look into default values or nested functions.
+            if matches!(
+                current.kind(),
+                "arrow_function" | "function_expression" | "function"
+            ) {
+                continue;
+            }
+            let mut cursor = current.walk();
+            for child in current.named_children(&mut cursor) {
+                if current.kind() == "assignment_pattern"
+                    && current.child_by_field_name("right") == Some(child)
+                {
+                    continue;
+                }
+                if current.kind() == "variable_declarator"
+                    && current.child_by_field_name("value") == Some(child)
+                {
+                    continue;
+                }
+                stack.push(child);
+            }
+        }
+        false
+    };
+    let mut node = call;
+    while let Some(parent) = node.parent() {
+        if parent.kind() == "program" {
+            return false;
+        }
+        if let Some(parameters) = parent.child_by_field_name("parameters") {
+            if declares(parameters) {
+                return true;
+            }
+        }
+        if let Some(parameter) = parent.child_by_field_name("parameter") {
+            if declares(parameter) {
+                return true;
+            }
+        }
+        if matches!(
+            parent.kind(),
+            "statement_block" | "class_body" | "switch_body"
+        ) {
+            let mut cursor = parent.walk();
+            for statement in parent.named_children(&mut cursor) {
+                let rebinds = match statement.kind() {
+                    "lexical_declaration" | "variable_declaration" => declares(statement),
+                    "function_declaration"
+                    | "class_declaration"
+                    | "generator_function_declaration" => statement
+                        .child_by_field_name("name")
+                        .is_some_and(|n| text(n) == name),
+                    _ => false,
+                };
+                if rebinds {
+                    return true;
+                }
+            }
+        }
+        node = parent;
+    }
+    false
+}
+
 /// Is this declarator written at the top level of the module?
 ///
 /// Its declaration's parent is the program itself, or an `export` statement
@@ -218,6 +300,17 @@ fn is_top_level_declarator(declarator: Node<'_>) -> bool {
     let Some(declaration) = declarator.parent() else {
         return false;
     };
+    // `const` only: a `let` or `var` may be reassigned, and the call then
+    // reaches whatever was assigned last (second review, S-11).
+    let mut cursor = declaration.walk();
+    let is_const = declaration.kind() == "lexical_declaration"
+        && declaration
+            .children(&mut cursor)
+            .next()
+            .is_some_and(|keyword| keyword.kind() == "const");
+    if !is_const {
+        return false;
+    }
     let Some(mut holder) = declaration.parent() else {
         return false;
     };
@@ -850,19 +943,26 @@ impl Walker<'_> {
             // literal `method` of the second argument, or not stated.
             // By binding only: a local function or parameter that happens to
             // be called `axios` is not the library (review R-11).
-            Callee::Identifier { name } if name == "fetch" || self.bound_to_http_client(name) => (
-                true,
-                arg_nodes
-                    .get(1)
-                    .and_then(|n| self.literal_method_property(*n)),
-            ),
+            Callee::Identifier { name }
+                if name == "fetch"
+                    || (self.bound_to_http_client(name)
+                        && !is_shadowed(name, call_node, self.source)) =>
+            {
+                (
+                    true,
+                    arg_nodes
+                        .get(1)
+                        .and_then(|n| self.literal_method_property(*n)),
+                )
+            }
             Callee::Member { object, property } => {
                 let Some(verb) = HttpMethodHint::from_name(property) else {
                     return;
                 };
                 let known_client = object.len() == 1
                     && (HTTP_CLIENT_OBJECTS.contains(&object[0].as_str())
-                        || self.bound_to_http_client(&object[0]));
+                        || (self.bound_to_http_client(&object[0])
+                            && !is_shadowed(&object[0], call_node, self.source)));
                 // Express and Hono register a route by passing handlers,
                 // and the syntax is identical to a client call:
                 //

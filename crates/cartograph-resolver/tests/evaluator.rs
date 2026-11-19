@@ -382,3 +382,20 @@ fn text_that_is_not_a_plain_plus_chain_stays_unsupported() {
         );
     }
 }
+
+#[test]
+fn a_constant_whose_initialiser_only_contains_a_string_is_not_bound() {
+    // Second review, S-08: the first string in the initialiser was taken.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const A = isProd ? '/api' : '/internal';\nexport const B = '/api'.replace('/api', '/v2');\nexport const C = '/api';\n",
+    );
+    assert_eq!(evaluate_expression("A + '/x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("B + '/x'", &scope).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("C + '/x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/x")
+    );
+}

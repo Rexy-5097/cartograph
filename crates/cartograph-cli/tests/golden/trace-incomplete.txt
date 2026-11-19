@@ -13,7 +13,7 @@ http.ts  (file)  http.ts:1
      │   evidence   GET /orders/latest matched UNKNOWN /orders/{pk}/ at python/django_urls.py:8 (views.order_detail); route declared no method; trailing slash differs; 1 static segment(s) equal; declared parameter(s) at position(s) 1 bound to concrete values
      │   observed   http.ts:15
      │
-   views.order_detail  (function)  python/django_urls.py:8
+   UNKNOWN /orders/{pk}/  (route)  python/django_urls.py:8
      ⊘ chain ends here — no outgoing edge from this node
 
 This path does not reach a database table. Every hop shown is an

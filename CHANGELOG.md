@@ -7,6 +7,59 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges and statements found by a second independent review
+
+A second adversarial review of the fixes above reproduced further false edges
+and false statements. Each is corrected, with a regression test:
+
+- **A URL-conf reference that does not resolve ends at its route.** Its edge
+  used to end at a node named by the reference text, which is the identity of
+  any real function of that name in the URL conf, so a refused
+  `list_orders` could inherit a helper method's model accesses. The node is
+  now the route itself (kind `route`, named by its path).
+- **A view imported after a local `def` of the same name is refused.** The
+  import rebinds the name; the local `def` was preferred whatever the order.
+- **Every `Meta` in a model's inheritance is read, or the table is refused.**
+  A `Meta` that extends a class outside the model's bases
+  (`class Meta(CommonMeta)`), `Meta` bound by assignment, and a base inside
+  the project that cannot be resolved (a star import, a `try`/`except` import)
+  now refuse the default table instead of deriving a wrong one. A base from
+  outside the project cannot be read and is *assumed* to set no table option;
+  the derived table's rule names each such base.
+- **An option assigned twice refuses.** Two assignments to `db_table`,
+  `app_label`, or an `apps.py` `label` or `name`: the last wins at runtime, and
+  the first was read.
+- **An `apps.py` label must be a whole literal**, as `Meta` options already
+  must. `LABELS["store"]` is not `store`. A literal holding an escape is not
+  read either, because escapes are not interpreted.
+- **An alias is an access to the model it names.** After
+  `from shop.models import Ledger as Order`, `Order.objects...` was drawn to
+  the model `Order`.
+- **A module constant is bound only to a whole-string initialiser.**
+  `isProd ? '/api' : '/internal'` and `'/api'.replace(…)` were read as `/api`.
+- **A `let` or `var` arrow function is not named**, because it may be
+  reassigned; only `const` is.
+- **A parameter or local called `axios` is not the imported library.** The
+  import binding is now checked against the enclosing functions' parameters
+  and blocks at the call.
+- **`trace` under `--max-depth` no longer says a path does not cross the HTTP
+  boundary** when a crossing branch was cut by the limit.
+
+Known limits that remain, each reproduced by the review:
+
+- `db_table = N*"t"` and `app_label = Q%"y"`, written without spaces around a
+  one-character left operand, are read as the literal. Telling them from
+  `name = "t"` needs the assignment's syntax, which the parser does not record.
+- A constant whose initialiser is `x || '/api'` or `x && '/api'` is read as
+  `/api`.
+- A method and a module function of the same name in one file share a node
+  (ADR-0011), so a call to the function can appear to reach the method's
+  requests.
+- Rebinding a name through a `for` target or `global` is not seen.
+- `const axios = require('axios')` is not recognised as axios. A receiver
+  *named* `axios`, `client`, `http` or `api` with a verb method is a request by
+  name, shadowed or not, as before.
+
 ### Fixed — one name imported as two different things is ambiguous, not the first import
 
 Python allows an import inside a function, so one file can bind a name twice,
