@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a model's own `Meta.app_label` names its table, and a field is not a `Meta` option
+
+Two errors in the default-table rule (T-007):
+
+- **`Meta.app_label` was not read.** A model that states its own label is in
+  that app, whatever package its module is in. Deriving the table from the
+  package's `apps.py` instead named a table that does not exist. The model's
+  own label is now used first, and it is enough on its own when the package has
+  no `apps.py`. A label that is not a string literal refuses the default table.
+- **A field was mistaken for a `Meta` option.** `abstract = models.TextField()`
+  on a model refused its table, because any assignment to `abstract`, `proxy`
+  or `db_table` anywhere in the class counted. Only an assignment inside the
+  model's `Meta` counts now.
+
 ### Fixed — `axios(url, config)` is observed as a request
 
 axios may be called as a function, `axios('/api/orders')` or

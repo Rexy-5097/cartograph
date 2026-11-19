@@ -1268,3 +1268,60 @@ fn a_sqlalchemy_model_inheriting_an_imported_abstract_base_keeps_its_declared_ta
     // No `__tablename__`: a model, and no table is derived for it.
     assert_eq!(a.models["Draft"].table.name(), None);
 }
+
+// ---- T-007: Meta.app_label, and fields that only look like Meta options ----
+
+#[test]
+fn a_models_own_app_label_overrides_the_packages() {
+    // Django names the table after Meta.app_label when a model states one.
+    // Deriving `shop_relabelled` from apps.py named a table that does not exist.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Relabelled(models.Model):\n    class Meta:\n        app_label = \"warehouse\"\n\n\nclass Plain(models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(
+        a.models["Relabelled"].table.name(),
+        Some("warehouse_relabelled")
+    );
+    assert_eq!(a.models["Plain"].table.name(), Some("shop_plain"));
+}
+
+#[test]
+fn a_models_own_app_label_is_enough_without_an_apps_py() {
+    let a = orm(&[(
+        "scripts/models.py",
+        "from django.db import models\n\n\nclass Example(models.Model):\n    class Meta:\n        app_label = 'ml_models'\n",
+    )]);
+    assert_eq!(a.models["Example"].table.name(), Some("ml_models_example"));
+}
+
+#[test]
+fn an_app_label_that_is_not_a_literal_refuses_the_default_table() {
+    // The label is overridden, and not known to what: apps.py must not be
+    // used in its place.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\nLABEL = compute()\n\n\nclass Dynamic(models.Model):\n    class Meta:\n        app_label = LABEL\n",
+        ),
+    ]);
+    assert_eq!(a.models["Dynamic"].table.name(), None);
+}
+
+#[test]
+fn a_field_named_like_a_meta_option_is_a_column_not_an_option() {
+    // `abstract`, `proxy`, `app_label` and `db_table` as *fields* say nothing
+    // about the table. `abstract = models.TextField()` used to refuse it.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Paper(models.Model):\n    abstract = models.TextField()\n    proxy = models.CharField(max_length=10)\n    app_label = models.CharField(max_length=10, default='x')\n    db_table = models.CharField(max_length=10)\n",
+        ),
+    ]);
+    assert_eq!(a.models["Paper"].table.name(), Some("shop_paper"));
+}

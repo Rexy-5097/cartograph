@@ -412,12 +412,20 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
             return;
         }
     }
-    match django_app_label(&model.file, python) {
-        Ok(label) => {
+    // `Meta.app_label` overrides the app the model's module belongs to, so it
+    // is read before the package's apps.py. Deriving from apps.py while the
+    // model states another label names a table that does not exist (T-007).
+    let label = match meta_app_label(python, model) {
+        Some(Ok(label)) => Ok((label, "Meta.app_label")),
+        Some(Err(reason)) => Err(reason),
+        None => django_app_label(&model.file, python).map(|label| (label, "the package's apps.py")),
+    };
+    match label {
+        Ok((label, source)) => {
             model.table = TableName::Derived {
                 name: format!("{label}_{}", model.name.to_lowercase()),
                 rule: format!(
-                    "Django default <app_label>_<modelname>; app label `{label}` from the package's apps.py"
+                    "Django default <app_label>_<modelname>; app label `{label}` from {source}"
                 ),
             };
         }
@@ -429,15 +437,51 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
     }
 }
 
-fn model_declares_attribute(python: &[&FileAnalysis], model: &OrmModel, attribute: &str) -> bool {
-    python.iter().filter(|f| f.path == model.file).any(|f| {
-        f.symbols.iter().any(|s| {
-            s.kind == SymbolKind::Variable
-                && s.name == attribute
-                && s.span.start_line >= model.span.start_line
-                && s.span.end_line <= model.span.end_line
-        })
+/// The app label a model's own `Meta` states, if it states one.
+///
+/// `Some(Err(..))` when `app_label` is assigned something other than a string
+/// literal: the label is then known to be overridden, and not known to what.
+fn meta_app_label(python: &[&FileAnalysis], model: &OrmModel) -> Option<Result<String, String>> {
+    let file = python.iter().find(|f| f.path == model.file)?;
+    let declaration = meta_declaration(file, model, "app_label")?;
+    let literal = file.strings.iter().find_map(|s| match s {
+        StringFact::Literal { value, span }
+            if span.start_line >= declaration.span.start_line
+                && span.end_line <= declaration.span.end_line =>
+        {
+            Some(value.clone())
+        }
+        _ => None,
+    });
+    Some(match literal {
+        Some(label) if !label.is_empty() => Ok(label),
+        _ => Err("Meta.app_label is not a string literal".to_owned()),
     })
+}
+
+/// The assignment to `attribute` inside a model's own `Meta`, if there is one.
+///
+/// Inside `Meta`, not merely inside the model: a *field* called `abstract`,
+/// `proxy` or `app_label` is a column, and says nothing about the table.
+fn meta_declaration<'f>(
+    file: &'f FileAnalysis,
+    model: &OrmModel,
+    attribute: &str,
+) -> Option<&'f Symbol> {
+    file.symbols.iter().find(|s| {
+        s.kind == SymbolKind::Variable
+            && s.name == attribute
+            && s.enclosing.as_deref() == Some("Meta")
+            && s.span.start_line >= model.span.start_line
+            && s.span.end_line <= model.span.end_line
+    })
+}
+
+fn model_declares_attribute(python: &[&FileAnalysis], model: &OrmModel, attribute: &str) -> bool {
+    python
+        .iter()
+        .filter(|f| f.path == model.file)
+        .any(|f| meta_declaration(f, model, attribute).is_some())
 }
 
 fn django_app_label(model_file: &str, python: &[&FileAnalysis]) -> Result<String, String> {
