@@ -68,3 +68,39 @@ not see.
 - `i18n_patterns`.
 - A module mounted under two prefixes is ambiguous, although Django serves it
   at both. This matches the router policy, and it is a known recall cost.
+
+## Where the handler is declared
+
+A URL-conf entry names its view by *reference*: `views.list_orders` is written
+in `urls.py` and declared in `views.py`. The request edge ends at the
+declaration, which is the node the view's own model accesses start from, so a
+request can be followed to a table through the standard Django layout
+(`cartograph_resolver::handlers`).
+
+| Written in the URL conf | Resolved to |
+|---|---|
+| `list_orders`, after `from .views import list_orders` (with or without `as`) | the function |
+| `views.list_orders`, after `from . import views` or `from shop import views as v` | the function |
+| `shop.views.list_orders`, after `import shop.views` (or `as sv`) | the function |
+| a name a `views/` package re-exports | the function, in the file that declares it |
+| `OrderView.as_view()`, `views.OrderView.as_view()` | the class |
+
+The edge's evidence names the declaration and the import that led to it.
+
+Refused, leaving the node named by the reference as written:
+
+- an import that is ambiguous or leaves the project;
+- a name that is neither a function nor a class, such as a module-scope
+  `orders = OrderView.as_view()`;
+- `function.as_view`, and a bare class without `as_view`.
+
+Two limits are deliberate:
+
+- **A wrapper call names no handler.** In `login_required(views.orders)` the
+  view is what the wrapper returns, which is not known here. The entry is
+  recorded with no handler and its edge ends at a route node.
+- **A class-based view is reached, not entered.** No edge is drawn from the
+  class to `get` or `post`. Those methods are separate nodes, and every class in
+  the file that defines a `get` shares one
+  ([ADR-0011](../adr/ADR-0011-node-identity-within-a-graph.md)), so the edge
+  would also claim the other classes' model accesses.
