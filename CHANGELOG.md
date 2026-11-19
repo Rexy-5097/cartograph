@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — the README is written for people using Cartograph
+
+The README now leads with the problem Cartograph solves and a three-file example
+whose `trace` and `blast` output anyone can reproduce. A quick start, a plain
+explanation of how it works, a glossary, what is supported today, the measured
+accuracy with its caveats, and an FAQ follow. Milestone history, the crate
+table and the governance index moved out of the way: they live in
+[ROADMAP.md](ROADMAP.md), [ARCHITECTURE.md](ARCHITECTURE.md) and a single
+maintainers' line at the end. No claim about behaviour or accuracy changed.
+
 ### Fixed — a Django model without `db_table` gets its default table when its app states its label
 
 A Django model with no `Meta.db_table` was always left without a table,
