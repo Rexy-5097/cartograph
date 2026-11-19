@@ -1621,3 +1621,84 @@ fn an_alias_is_an_access_to_the_model_it_was_imported_as() {
         a.accesses
     );
 }
+
+#[test]
+fn a_base_bound_by_a_star_import_is_read() {
+    // Found measuring NetBox: its model bases inherit mixins imported with
+    // `from netbox.models.features import *`. Following the star import keeps
+    // those models' tables; a mixin whose Meta sets a label still refuses.
+    let a = orm(&[
+        (
+            "core/features.py",
+            "class ChangeLogged:
+    pass
+
+
+class Labelled:
+    class Meta:
+        app_label = \"billing\"
+",
+        ),
+        (
+            "core/models.py",
+            "from django.db import models
+from core.features import *
+
+
+class Root(ChangeLogged, models.Model):
+    class Meta:
+        abstract = True
+",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+from core.models import Root
+from core.features import *
+
+
+class Order(Root):
+    pass
+
+
+class Bill(Labelled, models.Model):
+    pass
+",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    assert_eq!(a.models["Bill"].table.name(), None);
+}
+
+#[test]
+fn a_base_bound_by_a_star_import_from_two_modules_is_not_read() {
+    let a = orm(&[
+        (
+            "core/a.py",
+            "class Mixin:
+    pass
+",
+        ),
+        (
+            "core/b.py",
+            "class Mixin:
+    class Meta:
+        app_label = \"billing\"
+",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+from core.a import *
+from core.b import *
+
+
+class Order(Mixin, models.Model):
+    pass
+",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), None);
+}

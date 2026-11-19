@@ -22,8 +22,10 @@ and false statements. Each is corrected, with a regression test:
 - **Every `Meta` in a model's inheritance is read, or the table is refused.**
   A `Meta` that extends a class outside the model's bases
   (`class Meta(CommonMeta)`), `Meta` bound by assignment, and a base inside
-  the project that cannot be resolved (a star import, a `try`/`except` import)
-  now refuse the default table instead of deriving a wrong one. A base from
+  the project that cannot be resolved (a `try`/`except` import, a base loaded
+  from settings at runtime, a star import that two modules satisfy) now refuse
+  the default table instead of deriving a wrong one. A base bound by a star
+  import is followed to the one project module that declares it. A base from
   outside the project cannot be read and is *assumed* to set no table option;
   the derived table's rule names each such base.
 - **An option assigned twice refuses.** Two assignments to `db_table`,

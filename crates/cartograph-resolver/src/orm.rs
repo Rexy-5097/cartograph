@@ -595,6 +595,14 @@ fn classify_base(index: &ModuleIndex<'_>, at: &FileAnalysis, base: &str) -> Base
     if base == "object" {
         return BaseKind::External;
     }
+    // `from netbox.models.features import *` then `class M(ChangeLoggingMixin)`:
+    // the name is bound by the star import to whichever module declares it.
+    if !base.contains('.') && matches!(index.resolve_python(at, base), Resolution::NotBound) {
+        return match through_star_imports(index, at, base, 0, &mut HashSet::new()) {
+            Some((declared_in, name)) => BaseKind::Project(declared_in, name),
+            None => BaseKind::Unreadable,
+        };
+    }
     let head = base.split('.').next().unwrap_or(base);
     match index.resolve_python(at, head) {
         Resolution::Unresolved { reason, .. }
@@ -603,6 +611,58 @@ fn classify_base(index: &ModuleIndex<'_>, at: &FileAnalysis, base: &str) -> Base
             BaseKind::External
         }
         _ => BaseKind::Unreadable,
+    }
+}
+
+/// The class a star import binds `name` to, when exactly one module in the
+/// star chain declares it and every star import in the chain is in the
+/// project.
+///
+/// A star import that leaves the project could bind the name too, and two
+/// project modules that both declare it leave the answer to import order, so
+/// either case is `None`. A module that binds the name by a named import is
+/// followed through [`crate::handlers::resolve_reference`].
+fn through_star_imports(
+    index: &ModuleIndex<'_>,
+    at: &FileAnalysis,
+    name: &str,
+    depth: usize,
+    visited: &mut HashSet<String>,
+) -> Option<(String, String)> {
+    if depth > 8 || !visited.insert(at.path.clone()) {
+        return None;
+    }
+    let mut hits: Vec<(String, String)> = Vec::new();
+    for import in at
+        .imports
+        .iter()
+        .filter(|i| i.namespace_name.as_deref() == Some("*"))
+    {
+        let target = index.resolve_python_module(&import.specifier, &at.path)?;
+        let module = index.file(&target)?;
+        let declared: Vec<&Symbol> = module
+            .symbols
+            .iter()
+            .filter(|s| s.name == name && s.enclosing.is_none())
+            .collect();
+        let hit = match declared.as_slice() {
+            [only] if only.kind == SymbolKind::Class => Some((target.clone(), name.to_owned())),
+            [] => match crate::handlers::resolve_reference(index, module, name) {
+                Some((file, declared_name, _, _)) => Some((file, declared_name)),
+                None => through_star_imports(index, module, name, depth + 1, visited),
+            },
+            // Declared, but not as one class.
+            _ => return None,
+        };
+        if let Some(hit) = hit {
+            if !hits.contains(&hit) {
+                hits.push(hit);
+            }
+        }
+    }
+    match hits.as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
     }
 }
 
