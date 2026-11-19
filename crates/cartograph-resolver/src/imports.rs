@@ -313,7 +313,7 @@ impl<'a> ModuleIndex<'a> {
         // given use sees is not known here. Taking the first drew an edge
         // from `b` to the model (T-009). Two bindings that disagree are an
         // open question, and an edge is an answer.
-        let rivals = conflicting_python_bindings(from, name);
+        let rivals = self.conflicting_python_bindings(from, name);
         if rivals.len() > 1 {
             return Resolution::Ambiguous { candidates: rivals };
         }
@@ -378,6 +378,33 @@ impl<'a> ModuleIndex<'a> {
             },
             other => other,
         }
+    }
+
+    /// Every distinct thing `name` is imported as in `file`.
+    ///
+    /// Two imports are the same binding when they name the same name in the
+    /// same **file**: `from .models import X` and `from shop.models import X`
+    /// in `shop/api.py` are one binding written two ways. A specifier that
+    /// does not resolve to a project file is compared as written. One entry
+    /// when the name is imported once or several times identically; more than
+    /// one means the file binds the name to different targets.
+    fn conflicting_python_bindings(&self, file: &FileAnalysis, name: &str) -> Vec<String> {
+        let mut targets: Vec<String> = Vec::new();
+        for import in &file.imports {
+            for named in &import.named {
+                if named.local.as_deref().unwrap_or(named.imported.as_str()) != name {
+                    continue;
+                }
+                let module = self
+                    .resolve_python_module(&import.specifier, &file.path)
+                    .unwrap_or_else(|| import.specifier.clone());
+                let target = format!("{module}:{}", named.imported);
+                if !targets.contains(&target) {
+                    targets.push(target);
+                }
+            }
+        }
+        targets
     }
 
     /// Resolves a `TypeScript` name used in `from` to its declaration.
@@ -695,27 +722,6 @@ fn python_import_binding<'f>(
             .iter()
             .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
     })
-}
-
-/// Every distinct thing `name` is imported as in `file`, as `module.name`.
-///
-/// One entry when the name is imported once, or several times identically —
-/// the same function-local import repeated in ten functions is one binding.
-/// More than one entry means the file binds the name to different targets.
-fn conflicting_python_bindings(file: &FileAnalysis, name: &str) -> Vec<String> {
-    let mut targets: Vec<String> = Vec::new();
-    for import in &file.imports {
-        for named in &import.named {
-            if named.local.as_deref().unwrap_or(named.imported.as_str()) != name {
-                continue;
-            }
-            let target = format!("{}:{}", import.specifier, named.imported);
-            if !targets.contains(&target) {
-                targets.push(target);
-            }
-        }
-    }
-    targets
 }
 
 /// A module-scope declaration of `name` in one file.

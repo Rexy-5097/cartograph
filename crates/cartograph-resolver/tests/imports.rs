@@ -374,3 +374,29 @@ fn two_aliases_of_one_declaration_do_not_conflict_with_each_other() {
         );
     }
 }
+
+#[test]
+fn one_module_imported_relatively_and_absolutely_is_one_binding() {
+    // Found on Label Studio: `from .models import ConvertedFormat` at the top
+    // of data_export/api.py and `from data_export.models import
+    // ConvertedFormat` inside a function are the same class.
+    let files = [
+        TWO_FILTERS[0],
+        (
+            "shop/api.py",
+            "from .models import Filter
+
+
+def later():
+    from shop.models import Filter
+    return Filter.objects.all()
+",
+        ),
+    ];
+    let resolution = resolve(&files, "shop/api.py", "Filter");
+    assert_eq!(
+        resolution.declared_in(),
+        Some("shop/models.py"),
+        "got {resolution:?}"
+    );
+}
