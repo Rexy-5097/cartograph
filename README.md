@@ -1,316 +1,283 @@
+<div align="center">
+
 # Cartograph
 
-**Compute the architecture. Prove the relationships.**
+**See how your frontend, backend and database really connect, with proof for every link.**
 
-Cartograph is a local-first architectural intelligence engine. It reads a
-repository's TypeScript, TSX and Python source — symbols, imports, calls, HTTP
-requests and route declarations, and ORM models with the tables they name — and
-derives from it a symbol-level, cross-language graph of the system, showing the
-evidence behind every edge it draws. It reads only the source files under the
-path it is given: not Git history, and not a database or its migrations.
+[![CI](https://github.com/Rexy-5097/cartograph/actions/workflows/ci.yml/badge.svg)](https://github.com/Rexy-5097/cartograph/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-orange.svg)
 
-> **Status: milestones M00–M16 accepted; M17, the public launch, in progress.**
-> Version 0.1.0. One analysis core serves a CLI, a desktop application, an MCP
-> server and a pull-request review workflow, with evidence on every edge.
-> Nothing in this README describes behaviour the code does not have —
-> see [What works today](#what-works-today).
+[Website](https://cartograph.co.in) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](docs/)
 
----
-
-## Try it
-
-```bash
-cargo install --git https://github.com/Rexy-5097/cartograph cartograph-cli
-cartograph .
-```
-
-Then follow one relationship all the way down. This is real output, from
-[Apache Airflow](https://github.com/apache/airflow) at commit `9b43d6a`:
-
-```console
-$ cartograph trace enqueueConnectionTest
-
-enqueueConnectionTest  (function)  .../ui/openapi-gen/requests/services.gen.ts:834
-  │
-  ↓ HTTP-CALL   confidence 0.98   provenance route-matcher
-  │   evidence   POST /api/v2/connections/enqueue-test matched POST /api/v2/connections/enqueue-test
-  │              at .../routes/public/connections.py:383 (enqueue_connection_test);
-  │              exact HTTP method; every path segment static and equal
-  │
-enqueue_connection_test  (function)  .../core_api/routes/public/connections.py:383
-  │
-  ↓ ORM-ACCESS   confidence 0.80   provenance orm-resolution
-  │   evidence   ConnectionTestRequest(...) in enqueue_connection_test at .../connections.py:427
-  │
-ConnectionTestRequest  (class)  .../airflow/models/connection_test.py:82
-  │
-  ↓ QUERIES   confidence 0.80   provenance orm-resolution
-  │   evidence   ConnectionTestRequest maps to table "connection_test_request"
-  │
-connection_test_request  (table)
-
-This path crosses the HTTP boundary and reaches a database table.
-```
-
-A TypeScript function, an HTTP boundary, a Python handler, a SQLAlchemy model
-and a database table. Four artefacts, three languages, no shared symbol table —
-and every hop carries the evidence for itself.
-
-*(Directory paths are shortened to `...` above, and the per-hop `observed`
-line is omitted, so the block fits. Everything else is verbatim; run the
-command to see the rest.)*
-
-Add `--json` for the machine-readable graph.
-[Installation and the full command reference](docs/releases/v0.1.0.md).
+</div>
 
 ---
 
 ## The problem
 
-Every tool in this category draws a file-level import graph and calls it
-architecture. Ask one what a checkout button touches and it answers with the
-files that import each other. That is a lexical fact; the question was a causal
-one, and the gap between them is where production incidents live.
+You click **Place order** in a web app. Behind that button:
 
-## What is different
+1. a TypeScript function sends `POST /api/orders`,
+2. a Python handler receives it,
+3. the handler creates an `Order` model,
+4. and the model writes to the `orders` table.
 
-Cartograph resolves relationships **across** the stack, not merely within a
-language. A React component, an HTTP route, a Python handler and a database
-table are four artefacts in three languages with no shared symbol table:
+Those four pieces live in different files, in different languages, often maintained by different people. No single tool sees the whole chain. So when you need to know *"what does this button actually touch?"* or *"what breaks if I change this table?"*, you end up grepping and guessing.
 
-```
-CheckoutButton.tsx  onSubmit() line 34
-        │  HTTP POST /api/orders          0.94  template-eval
-        ▼
-POST /api/orders/{*}  (canonical)
-        │  route match                    0.98  route-matcher
-        ▼
-orders.py  create_order() line 12
-        │  ORM Order(...)                 0.97  orm-resolve
-        ▼
-orders — table
-```
+## What Cartograph does
 
-*Illustrative. The confidences above (0.94, 0.98, 0.97) belong to the synthetic
-fixture in `crates/cartograph-testkit`, not to an analysed repository. Across the
-seven-repository corpus M08 measured, the resolver emitted exactly seven values —
-0.98, 0.90, 0.80, 0.784, 0.72, 0.65 and 0.64 — and every ORM-resolution edge
-scored 0.80, as the Airflow trace above shows. See
-[the M08 report](docs/benchmarks/m08-report.md).*
+Cartograph reads your source code and draws that chain for you, from the button all the way to the database table.
 
-Doing this requires partial evaluation of dynamically constructed URLs,
-normalisation across four route-declaration dialects, and ORM model
-resolution — three compiler problems, none of which a GitHub API call can
-answer.
+Every link it draws comes with **evidence**: the file and line it was found at, the rule that matched it, and how confident that rule is. When it isn't sure, it **draws nothing** rather than guessing.
 
-### Never `A → B`
+It runs entirely on your machine. Your code never leaves it.
 
-Cartograph stores the claim *and how it was known*:
+---
 
-```json
-{
-  "source": "web/src/CheckoutButton.tsx:34",
-  "target": "api/orders.py:12 create_order",
-  "kind": "http-call",
-  "confidence": 0.94,
-  "provenance": "route-matcher",
-  "evidence": "POST /api/orders",
-  "commit": "a3f9c21",
-  "created_at": "2026-08-17T09:14:22Z"
+## See it in 60 seconds
+
+Take a tiny app with three files:
+
+```ts
+// web/checkout.ts
+export async function placeOrder(order) {
+  return fetch('/api/orders', { method: 'POST', body: JSON.stringify(order) });
 }
 ```
 
-*Also illustrative, from the same fixture. `commit` and `created_at` are not
-fields of Cartograph's [JSON output](docs/architecture/json-schema.md) in any
-schema version.*
+```python
+# api/routes.py
+from fastapi import FastAPI
+from .models import Order
 
-Click any edge and you get its record. Competitors assert relationships;
-Cartograph produces evidence for them.
+app = FastAPI()
 
-### The governing principle
 
-**Deterministic analysis first. Evidence second. Inference third. The model
-last, and never in the graph.**
+@app.post("/api/orders")
+def create_order(payload: dict):
+    return Order(**payload)
+```
 
-No language model constructs graph structure — ever. A model may explain a
-subgraph after static analysis has produced it (M16). It may never propose an
-edge. This is an immutable architectural principle, not a current limitation:
-see [ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md).
+```python
+# api/models.py
+from sqlalchemy.orm import DeclarativeBase
 
----
 
-## What works today
+class Base(DeclarativeBase):
+    pass
 
-M00 delivered the foundation, M01–M02 extraction, M03 canonicalisation, M04
-the first semantic join, M05 dynamic URLs, M06 ORM resolution, M07 validation
-against seven production repositories, M08 measurement of confidence and
-recall, and M09 the CLI. M10–M16 built the remaining surfaces on the same core:
 
-| Milestone | Capability |
-|---|---|
-| M10 | Incremental analysis — unchanged files are not reparsed and per-file ORM-access resolution is cached, with an incremental result equal to a clean one ([ADR-0014](docs/adr/ADR-0014-m10-scope-reconciliation.md)) |
-| M11 | **MAP** — a desktop application (Tauri) that draws the architecture graph and shows the evidence behind any edge |
-| M12 | **BLAST** — `cartograph blast`: what depends on an artefact, across language boundaries |
-| M13 | **DIFF** — `cartograph diff`: what a change did to the architecture, one tree against another |
-| M14 | A pull-request workflow that runs `cartograph diff --markdown` and posts the result as a comment. It is configured for this repository's own pull requests; no reusable `action.yml` is published |
-| M15 | `cartograph-mcp` — an MCP server exposing `map`, `trace`, `blast` and `diff` over one repository identity granted when it is launched ([ADR-0020](docs/adr/ADR-0020-mcp-boundary-and-authorization.md)) |
-| M16 | **ASK** in the desktop app — opt-in per repository, explaining already-derived evidence, with every claim required to cite that evidence verbatim ([ADR-0021](docs/adr/ADR-0021-ask-boundary-and-citation-contract.md)). No in-product way to provide an API key ships, so in practice ASK shows the evidence unexplained — the degraded path it is designed to fall back to |
+class Order(Base):
+    __tablename__ = "orders"
+```
 
-| Crate | Role |
-|---|---|
-| `cartograph-core` | Domain model: nodes, edges, evidence, provenance and confidence |
-| `cartograph-graph` | The architecture graph; `petgraph` sits underneath |
-| `cartograph-parser` | tree-sitter TypeScript/TSX **and Python** extraction |
-| `cartograph-resolver` | Cross-language resolution: canonical routes, HTTP boundaries, ORM models |
-| `cartograph-pipeline` | Repository analysis composed once for every client |
-| `cartograph-cli` | `cartograph .`, `trace`, `blast`, `diff`, `parse`, `normalize`, `match`, `version` |
-| `cartograph-desktop` | Repository lifecycle and session model for the desktop application |
-| `cartograph-mcp` | The MCP server |
-| `cartograph-ask` | The ASK boundary: a question, derived evidence, and citations checked against it |
-| `cartograph-testkit` | Test fixtures; not published, not a runtime dependency |
+Ask Cartograph where the frontend function leads:
 
 ```console
-$ cartograph match ./my-project
-web/src/CheckoutButton.tsx:5  POST /api/orders
-    ↓ MATCH (exact)   confidence 0.98   provenance route_matcher
-      api/orders.py:6  POST /api/orders  → create_order
+$ cartograph trace placeOrder
+
+placeOrder  (function)  web/checkout.ts:2
+  │
+  ↓ HTTP-CALL   confidence 0.98   provenance route-matcher
+  │   evidence   POST /api/orders matched POST /api/orders at api/routes.py:7 (create_order); exact HTTP method; every path segment static and equal
+  │   observed   web/checkout.ts:2
+  │
+create_order  (function)  api/routes.py:7
+  │
+  ↓ ORM-ACCESS   confidence 0.80   provenance orm-resolution
+  │   evidence   Order(...) in create_order at api/routes.py:9
+  │   observed   api/routes.py:9
+  │
+Order  (class)  api/models.py:8
+  │
+  ↓ QUERIES   confidence 0.80   provenance orm-resolution
+  │   evidence   Order maps to table "orders"; __tablename__ = "orders"
+  │   observed   api/models.py:8
+  │
+orders  (table)
+
+This path crosses the HTTP boundary and reaches a database table.
 ```
 
-That is the chain the product exists to produce — and it is refused rather than
-guessed when the evidence is thin: ambiguous candidates produce no edge, a
-`${BASE}` prefix that cannot be determined statically stays `{unknown}`, and a
-call to an absolute host is never joined to a local route.
+Or ask the reverse question, *"if I change the `orders` table, what depends on it?"*:
 
-`parse` reports **observed syntax** — symbols, imports, call sites, string and
-template structure, HTTP-shaped calls, and (Python) route declarations — plus
-structured diagnostics for files the grammar cannot fully parse. It walks
-mixed `.ts`/`.tsx`/`.py` trees in one pass.
+```console
+$ cartograph blast orders
 
-`normalize` canonicalises those observations — `/orders/:id`, `/orders/{id}`
-and `/orders/<int:id>` all become the shape `/orders/{*}` — while keeping each
-one's raw form and source position.
+blast radius of Table orders
 
-Neither command claims a resolved relationship. A route observation means "this
-file declares a route that looks like this", not "this endpoint exists"; an
-HTTP observation means "this file contains a call shaped like a request", not
-"it reaches that handler". Canonicalisation makes the two sides *comparable*;
-actually connecting them is the resolver's job, and that distinction is the
-whole point of the architecture.
+  3 artefacts depend on it, up to 3 hops away
 
-### Accuracy, measured
+  depth   conf  kind       artefact                           reached through
+      1  0.800  Class      Order                              Queries api/models.py:8
+      2  0.800  Function   create_order                       OrmAccess api/routes.py:9
+      3  0.800  Function   placeOrder                         HttpCall web/checkout.ts:2
+```
 
-M08 labelled every edge Cartograph produced on seven pinned production
-repositories — Superset, PostHog, Zulip, Onyx, Airflow, AutoGPT and the FastAPI
-full-stack template — re-deriving each from source with instruments that share
-no code with the analyser.
-
-| Across all seven repositories | |
-|---|---|
-| Edges produced and labelled | 14,932 |
-| False positives among 11,221 independently verified edges | **1** |
-| Edges that could not be verified from source | **24.9%** (3,711) |
-| Calibration error (ECE) | 0.18, toward **under**-confidence |
-
-Recall was measured in **one repository, inside a stated scope**. It is not
-recall across the corpus and must not be quoted as such:
-
-| Airflow only | Scope | Recall |
-|---|---|---|
-| `HttpCall` | Operations its generated client declares that a route serves | 0.907 (117/129) |
-| `OrmAccess` | Import-bound uses of models that declare a table | 0.744 (1401/1883) |
-| End-to-end chain | Chains whose every hop is independently readable | 3 of 5 |
-
-The 24.9% row is the important one: a quarter of the graph could not be checked,
-and it is not a random quarter — it concentrates where the evidence is weakest.
-Every figure above is therefore an upper bound. **Confidence values are
-uncalibrated priors, not probabilities**, and must not be thresholded as if they
-were.
-
-Method and limitations: [the M08 report](docs/benchmarks/m08-report.md) and
-[the confidence policy](docs/benchmarks/m08-confidence-policy.md). Every figure
-above is read from the committed results in
-[`benchmarks/m08/results/`](benchmarks/m08/results/).
+Both outputs are real: copy the three files, run the commands, and you get the same result (each command also prints a short footer, trimmed here). On real projects the chain can run across thousands of files. The same `trace` works on [Apache Airflow](https://github.com/apache/airflow), for example, from its generated TypeScript client to the `connection_test_request` table.
 
 ---
 
-## Product surfaces
+## Quick start
 
-Three surfaces, in build order, all delivered:
-
-| Surface | Question | Milestone |
-|---|---|---|
-| **MAP** | What is this system? | M11 |
-| **BLAST** | What breaks if I change this? | M12 |
-| **DIFF** | What did this change do to the architecture? | M13 |
-
-Each is downstream of the first finish line, one command against a real
-repository, which M09 delivered as `cartograph .`.
-
-Full plan: [ROADMAP.md](ROADMAP.md).
-
----
-
-## Privacy
-
-- No source code leaves the machine. Default and unconditional.
-- AI is opt-in, per repository, off by default. Cartograph is fully useful with
-  no API key and no network.
-- Credentials live in the OS keychain, never in configuration files.
-- Source contents, tokens and environment variable values are never logged.
-
-See [SECURITY.md](SECURITY.md).
-
----
-
-## Building
-
-Requires Rust 1.97.1, pinned in `rust-toolchain.toml` and selected
-automatically by `rustup`.
+You need [Rust](https://rustup.rs). The exact version is pinned in the repo, and `rustup` picks it up automatically.
 
 ```bash
-make check
+cargo install --git https://github.com/Rexy-5097/cartograph cartograph-cli
 ```
 
-That runs the same gates CI runs: formatting, clippy with warnings denied,
-tests, and the AgentOS validator. Individual targets are listed by `make help`.
+Then, from inside any project:
 
----
-
-## Repository layout
-
-```
-crates/          The product. Ten Rust crates.
-desktop/         The desktop application's Tauri shell and React window. No analysis lives here.
-npm/             A launcher for the native binary. No analysis lives here.
-benchmarks/      The M07 corpus and M08 calibration harness.
-docs/            Architecture, resolver design, benchmarks, security, ADRs.
-agentos/         Vendored AgentOS v1.0.0 — development governance, not product code.
-.github/         CI and pull request governance.
+```bash
+cartograph .
 ```
 
-`agentos/` orchestrates how this project is built (milestones, gates,
-checkpoints). It is deliberately separate from the implementation and ships no
-runtime code. See [AGENTOS.md](AGENTOS.md).
+That prints a summary of what was found: routes, HTTP calls, database models, and the links between them. It also shows what Cartograph *refused* to link, and why.
 
----
+> Prebuilt binaries and an npm package are not published yet, so installing from source is currently the only way. (Packages named `cartograph` on npm belong to other projects.)
 
-## Governance
+### The four questions it answers
 
-| Document | Purpose |
+| You want to know… | Run |
 |---|---|
-| [PROJECT_RULES.md](PROJECT_RULES.md) | The 26 binding rules |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
-| [ROADMAP.md](ROADMAP.md) | 17 milestones and their gates |
-| [CHECKPOINTS.md](CHECKPOINTS.md) | Reproducible rollback points |
-| [AGENTS.md](AGENTS.md) | Instructions for AI coding assistants |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [docs/adr/](docs/adr/) | Architecture decision records |
+| What's in this codebase and how is it wired? | `cartograph .` |
+| How does this function reach the database? | `cartograph trace <symbol>` |
+| What breaks if I change this? | `cartograph blast <symbol>` |
+| What did my branch change in the architecture? | `cartograph diff ../main-checkout .` |
+
+Add `--json` to any command for machine-readable output. The [full command reference](docs/development/cli.md) covers every flag and exit code.
 
 ---
 
-## Licence
+## How it works
 
-[Apache-2.0](LICENSE).
+Cartograph works in three steps. None of them uses AI.
 
-The vendored AgentOS framework under `agentos/` is MIT-licensed and retains its
-own [LICENSE](agentos/LICENSE).
+**1. Read.** It parses your TypeScript, TSX and Python files and records what they *say*: functions, imports, `fetch(...)` calls, `@app.post(...)` route decorators, ORM model classes.
+
+**2. Connect.** It joins the pieces across languages:
+- **Requests to routes.** `` fetch(`/api/orders/${id}`) `` on the frontend is matched to the route that serves it, even though each framework writes routes differently: `/orders/:id`, `/orders/{id}` and `/orders/<int:id>` all mean the same thing.
+- **Handlers to models.** A handler is linked to the ORM models it uses.
+- **Models to tables.** Each model is linked to the database table it maps to.
+
+**3. Prove.** Every link stores *why* it exists. If two routes could both match a request, Cartograph draws neither and reports the request as ambiguous. A missing link is easy to spot; a wrong one quietly misleads you.
+
+### Words you'll see in the output
+
+| Term | Meaning |
+|---|---|
+| **node** | One thing in your system: a function, a class, a route, a database table |
+| **edge** | A link between two nodes, such as "this function calls that route" |
+| **evidence** | Where and how the edge was found: file, line, matching rule |
+| **confidence** | How strong the matching rule is. It is a fixed score per kind of evidence, **not** a probability, so don't treat 0.80 as "80% likely" |
+| **refused** | A link Cartograph could have guessed but didn't, because the evidence was ambiguous or missing |
+
+---
+
+## What it supports today
+
+| Layer | Supported |
+|---|---|
+| **Frontend** | TypeScript and TSX: `fetch`, `axios` (under any import name), clients named `client` / `http` / `api`, and generated OpenAPI clients |
+| **Backend** | Python: FastAPI routes (including router prefixes), Flask routes, and Django URL configs (including `include(...)`) |
+| **Database** | SQLAlchemy and Django ORM models, linked to their tables |
+
+**Not supported yet:**
+- other languages;
+- JavaScript backends such as Express;
+- Django REST Framework routers and class-based views;
+- queries written as `session.query(Model)` or raw SQL.
+
+See the [complete list of limitations](docs/resolver/README.md#known-limitations).
+
+---
+
+## Ways to use it
+
+| | |
+|---|---|
+| **CLI** | Everything above. Start here. |
+| **Desktop app** | Draws your architecture as an interactive graph; click any edge to see its evidence. Lives in [`desktop/`](desktop/) and must be built from source for now. |
+| **AI assistants (MCP)** | `cartograph-mcp` lets an assistant such as Claude ask `trace`, `blast`, `map` and `diff` questions about one repository you choose when you launch it. The assistant reads the graph; it never builds it. |
+| **Pull-request review** | Run `cartograph diff --markdown` in CI to comment on each PR with what changed in the architecture. This repo does that for its own PRs ([workflow](.github/workflows/architecture-review.yml)); there is no packaged GitHub Action yet. |
+
+To set up the MCP server:
+
+```bash
+cargo install --git https://github.com/Rexy-5097/cartograph cartograph-mcp
+cartograph-mcp --repository /path/to/your/repo --repository-identity my-repo
+```
+
+---
+
+## How accurate is it?
+
+The edge figures come from seven pinned commits of large open-source projects: Superset, PostHog, Zulip, Onyx, Airflow, AutoGPT, and the FastAPI full-stack template. Every edge Cartograph produced there was labelled, and every one that could be was re-checked against the source by tools that share no code with Cartograph.
+
+| | |
+|---|---|
+| Edges produced | 14,932 |
+| Edges that could be independently checked | 11,221 |
+| Wrong edges among those | **1** |
+| Edges that could not be checked | 3,711 (24.9%) |
+
+Read that last row too. A quarter of the edges could not be checked, and they cluster where the evidence is weakest. So treat the result as a best case, not a guarantee.
+
+Coverage, meaning how many real connections it finds, was measured on one project only, Airflow. Of the 129 API operations that Airflow's generated frontend client declares and its backend serves, Cartograph linked 117.
+
+The method and every caveat are in the [benchmark report](docs/benchmarks/m08-report.md).
+
+---
+
+## Private by design
+
+- **Your code stays on your machine.** Always, with no setting to change it.
+- **No AI in the graph.** Every link comes from static analysis. This is a permanent design rule ([ADR-0007](docs/adr/ADR-0007-no-llm-graph-construction.md)), not a temporary limitation.
+- **AI explanations (desktop app) are opt-in**, per repository and off by default. Cartograph is fully useful with no API key and no network.
+- **Secrets stay secret.** Credentials go in your OS keychain, and source code, tokens and environment variables are never logged.
+
+More detail: [SECURITY.md](SECURITY.md).
+
+---
+
+## FAQ
+
+**Why didn't it link two things I know are connected?**
+Usually because the evidence was ambiguous, or the URL is built at runtime from something it can't see, such as an environment variable. Run `cartograph match .` to see every refusal and its reason.
+
+**What do the confidence numbers mean?**
+Which kind of evidence was used. An exact route match scores 0.98, and an ORM link scores 0.80. They are not probabilities.
+
+**Is it production-ready?**
+It's an early release (v0.1.0). It covers a focused set of TypeScript and Python web stacks, the ones listed above, and tells you plainly when something falls outside them.
+
+**Does it look at Git history or my database?**
+No. It reads only the source files under the path you give it.
+
+---
+
+## Contributing
+
+Contributions are welcome. To build and test from a clone:
+
+```bash
+cargo build --release -p cartograph-cli
+cargo test --workspace
+```
+
+| Where | What |
+|---|---|
+| [`crates/`](crates/) | The engine and CLI, in Rust |
+| [`desktop/`](desktop/) | The desktop app (Tauri + React); no analysis code lives here |
+| [`docs/`](docs/) | Architecture, design decisions and benchmarks; also published at [cartograph.co.in](https://cartograph.co.in) |
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), then [ARCHITECTURE.md](ARCHITECTURE.md) for the big picture. Planned work is in [ROADMAP.md](ROADMAP.md) and past releases are in [CHANGELOG.md](CHANGELOG.md).
+
+<sub>For maintainers: [project rules](PROJECT_RULES.md) · [design decisions](docs/adr/) · [checkpoints](CHECKPOINTS.md) · [instructions for AI coding assistants](AGENTS.md) · [development process](AGENTOS.md). The `agentos/` folder holds that process (milestones, quality gates, review checklists); you don't need it to use Cartograph.</sub>
+
+---
+
+## License
+
+[Apache-2.0](LICENSE). The vendored `agentos/` framework is MIT-licensed ([its licence](agentos/LICENSE)).
