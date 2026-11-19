@@ -310,6 +310,31 @@ impl Walker<'_> {
                 self.extract_variables(node, export);
                 // Still descend: initialisers contain calls and strings.
             }
+            // `const f = () => …` and a class field `f = () => …` are how most
+            // TypeScript functions are written. The binding is the function's
+            // name, so it encloses what the body does, exactly as a
+            // `function f() {}` would (T-004). Only a module-scope binding
+            // qualifies: inside a named function the host stays the enclosing
+            // scope, as it always has.
+            "variable_declarator" if self.scope.is_empty() => {
+                if let Some(name) = self.function_binding(node, "name") {
+                    self.scope.push(name);
+                    next.push(Step::Children(node));
+                    next.push(Step::LeaveScope);
+                    return;
+                }
+            }
+            "public_field_definition" | "field_definition" => {
+                let named = self
+                    .function_binding(node, "name")
+                    .or_else(|| self.function_binding(node, "property"));
+                if let Some(name) = named {
+                    self.scope.push(name);
+                    next.push(Step::Children(node));
+                    next.push(Step::LeaveScope);
+                    return;
+                }
+            }
             "call_expression" => self.extract_call(node, false),
             "new_expression" => self.extract_call(node, true),
             "string" => {
@@ -493,6 +518,12 @@ impl Walker<'_> {
                             ExportContext::Default,
                             value,
                         );
+                        // The symbol is named `default`, so its body is
+                        // enclosed by `default` (T-004).
+                        self.scope.push("default".to_owned());
+                        next.push(Step::Visit(value, ExportContext::None));
+                        next.push(Step::LeaveScope);
+                        return;
                     }
                     "class" => {
                         self.push_symbol(
@@ -590,6 +621,44 @@ impl Walker<'_> {
             next.push(Step::Children(body));
         }
         next.push(Step::LeaveScope);
+    }
+
+    /// The name a declarator or class field gives a function, when its value
+    /// is one.
+    ///
+    /// `field` is the grammar's name for the bound identifier: `name` on a
+    /// variable declarator and a TypeScript class field, `property` on a
+    /// JavaScript one. Parentheses and type assertions around the function are
+    /// looked through, because `(() => …) as Handler` is still that function.
+    /// A function passed to a wrapper call (`debounce(() => …)`) is **not** a
+    /// binding of this name: what the wrapper returns is not known here.
+    fn function_binding(&self, node: Node<'_>, field: &str) -> Option<String> {
+        let name = node.child_by_field_name(field)?;
+        if !matches!(
+            name.kind(),
+            "identifier" | "property_identifier" | "private_property_identifier"
+        ) {
+            return None;
+        }
+        let mut value = node.child_by_field_name("value")?;
+        loop {
+            match value.kind() {
+                "arrow_function" | "function_expression" | "function" | "generator_function" => {
+                    let name = self.text(name);
+                    return (!name.is_empty()).then_some(name);
+                }
+                "parenthesized_expression"
+                | "as_expression"
+                | "satisfies_expression"
+                | "non_null_expression"
+                | "type_assertion" => {
+                    let mut cursor = value.walk();
+                    let inner = value.named_children(&mut cursor).next()?;
+                    value = inner;
+                }
+                _ => return None,
+            }
+        }
     }
 
     fn extract_named_only(&mut self, node: Node<'_>, kind: SymbolKind, export: ExportContext) {

@@ -980,3 +980,163 @@ export function lookups(key: string, AxiosType: Map<string, string>): void {
         analysis.http_calls
     );
 }
+
+// ---- T-004: a function bound to a name encloses what its body does -------
+
+/// The enclosing scope of the request on each line, by line number.
+fn enclosing_by_line(path: &str, source: &str) -> Vec<(u32, Option<String>)> {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer.analyze_source(path, source).expect("analyses");
+    analysis
+        .http_calls
+        .iter()
+        .map(|call| (call.span.start_line, call.enclosing.clone()))
+        .collect()
+}
+
+fn named(name: &str) -> Option<String> {
+    Some(name.to_owned())
+}
+
+#[test]
+fn a_module_scope_arrow_function_encloses_its_requests() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "export const loadOrders = () => fetch('/api/orders');
+const saveOrder = async (order) => {
+  return fetch('/api/orders', { method: 'POST' });
+};
+export { saveOrder };
+export const removeOrder = async function (id) {
+  return fetch('/api/orders/1', { method: 'DELETE' });
+};
+let patchOrder = function* () {
+  yield fetch('/api/orders/2', { method: 'PATCH' });
+};
+",
+    );
+    assert_eq!(
+        calls,
+        vec![
+            (1, named("loadOrders")),
+            (3, named("saveOrder")),
+            (7, named("removeOrder")),
+            (10, named("patchOrder")),
+        ]
+    );
+}
+
+#[test]
+fn a_typed_or_asserted_arrow_function_is_still_that_function() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "type Loader = () => Promise<Response>;
+export const typed: Loader = () => fetch('/api/a');
+export const asserted = (() => fetch('/api/b')) as Loader;
+export const wrapped = ((() => fetch('/api/c')));
+export const checked = (() => fetch('/api/d')) satisfies Loader;
+",
+    );
+    assert_eq!(
+        calls,
+        vec![
+            (2, named("typed")),
+            (3, named("asserted")),
+            (4, named("wrapped")),
+            (5, named("checked")),
+        ]
+    );
+}
+
+#[test]
+fn an_anonymous_default_export_encloses_its_requests_as_default() {
+    assert_eq!(
+        enclosing_by_line("src/a.ts", "export default () => fetch('/api/orders');\n"),
+        vec![(1, named("default"))]
+    );
+    assert_eq!(
+        enclosing_by_line(
+            "src/b.ts",
+            "export default async function () {\n  return fetch('/api/orders');\n}\n"
+        ),
+        vec![(2, named("default"))]
+    );
+}
+
+#[test]
+fn a_class_field_holding_a_function_encloses_its_requests_like_a_method() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "export class OrderApi {
+  list = () => fetch('/api/orders');
+  create(order) {
+    return fetch('/api/orders', { method: 'POST' });
+  }
+  static remove = async function (id) {
+    return fetch('/api/orders/1', { method: 'DELETE' });
+  };
+}
+",
+    );
+    assert_eq!(
+        calls,
+        vec![
+            (2, named("list")),
+            (4, named("create")),
+            (7, named("remove"))
+        ]
+    );
+}
+
+#[test]
+fn a_function_nested_in_a_named_function_keeps_its_host_as_the_scope() {
+    // Unchanged behaviour: a local arrow function is part of its host.
+    let calls = enclosing_by_line(
+        "src/hooks.ts",
+        "export function useOrders() {
+  const inner = () => fetch('/api/orders');
+  return inner();
+}
+export const useItems = () => {
+  const load = async () => fetch('/api/items');
+  return load;
+};
+",
+    );
+    assert_eq!(calls, vec![(2, named("useOrders")), (6, named("useItems"))]);
+}
+
+#[test]
+fn a_binding_that_is_not_itself_a_function_encloses_nothing() {
+    // A value computed at module scope is not a function, and a function
+    // handed to a wrapper call or kept in an object literal is not bound to
+    // the declared name: what `debounce` returns is not known here. These
+    // stay at module scope rather than being given a name that may be wrong.
+    let calls = enclosing_by_line(
+        "src/misc.ts",
+        "const response = fetch('/api/a');
+export const debounced = debounce(() => fetch('/api/b'), 100);
+export const api = { load: () => fetch('/api/c') };
+",
+    );
+    assert_eq!(calls, vec![(1, None), (2, None), (3, None)]);
+}
+
+#[test]
+fn an_arrow_function_binding_keeps_its_symbol_kind_and_scope() {
+    // The symbol table is unchanged by T-004: the binding is still recorded
+    // once, as a module-scope variable.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "export const loadOrders = () => {\n  const inner = 1;\n  return fetch('/api/orders');\n};\n",
+        )
+        .expect("analyses");
+    let symbols: Vec<_> = analysis
+        .symbols
+        .iter()
+        .map(|s| (s.name.as_str(), s.kind, s.enclosing.clone()))
+        .collect();
+    assert_eq!(symbols, vec![("loadOrders", SymbolKind::Variable, None)]);
+}

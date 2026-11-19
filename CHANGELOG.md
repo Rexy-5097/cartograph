@@ -7,6 +7,26 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a request inside `const f = () => …` belongs to `f`
+
+A request made inside an arrow function or function expression bound to a
+module-scope name had no enclosing function, so it was attributed to the whole
+file and `cartograph trace f` answered `symbol-not-found` (T-004). The parser
+now treats such a binding as the function it is, as the resolver already did
+when following calls. The same holds for an anonymous `export default`
+function, named `default`, and for a class field holding a function, named like
+a method. Parentheses and type assertions around the function are looked
+through.
+
+Unchanged on purpose: a function nested inside a named function still belongs
+to its host, and a function passed to a wrapper call (`debounce(() => …)`) or
+kept in an object literal is not given the binding's name, because what the
+wrapper returns is not known. Those requests stay attributed to the file.
+
+Graphs change where requests sit in arrow functions: the request's source is
+the named function instead of the file, and callers of that function gain a
+`call` edge to it.
+
 ### Fixed — `trace` no longer claims an HTTP boundary the path does not cross
 
 `cartograph trace` closed every trace that reached a table with "This path
