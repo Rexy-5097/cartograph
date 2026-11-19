@@ -51,11 +51,12 @@
 use std::path::{Path, PathBuf};
 
 use cartograph_pipeline::authorization::{
-    AuthorizationError, AuthorizedRepository, AuthorizedTree, RepositoryIdentity,
+    AuthorizationError, AuthorizedRepository, AuthorizedTree, RepositoryIdentity, SessionCache,
 };
 use cartograph_pipeline::error::CliError;
+use cartograph_pipeline::incremental::CacheStats;
+use cartograph_pipeline::map;
 use cartograph_pipeline::pipeline::{Analysis, Options};
-use cartograph_pipeline::{authorization, map};
 
 pub mod server;
 
@@ -146,13 +147,31 @@ impl From<CliError> for QueryError {
 #[derive(Debug)]
 pub struct Session {
     authorized: AuthorizedRepository,
+    /// What earlier questions already parsed, per granted tree (T-008). It
+    /// holds only trees this session authorized, and it never decides that a
+    /// tree is unchanged: every answer is recomputed from the files as they
+    /// are now. See [`SessionCache`].
+    cache: SessionCache,
 }
 
 impl Session {
     /// Opens a session over an already-authorized repository.
     #[must_use]
-    pub const fn new(authorized: AuthorizedRepository) -> Self {
-        Self { authorized }
+    pub fn new(authorized: AuthorizedRepository) -> Self {
+        Self {
+            authorized,
+            cache: SessionCache::new(),
+        }
+    }
+
+    /// What the most recent analysis of `tree` reused and parsed.
+    ///
+    /// `None` when the tree was not granted or has not been analysed yet. The
+    /// figures are counts of files; no path leaves the session.
+    #[must_use]
+    pub fn last_analysis(&self, tree: &Path) -> Option<CacheStats> {
+        let admitted = self.authorized.authorize(tree).ok()?;
+        self.cache.last_run(&admitted)
     }
 
     /// How many trees the grant covers. Never which.
@@ -169,7 +188,7 @@ impl Session {
     /// Analyses an admitted tree.
     fn analyse(&self, tree: &Path) -> Result<Analysis, QueryError> {
         let admitted = self.admit(tree)?;
-        Ok(authorization::analyze(&admitted, Options { quiet: true })?)
+        Ok(self.cache.analyze(&admitted, Options { quiet: true })?)
     }
 
     /// **map** — what is this system?
@@ -271,7 +290,7 @@ impl Session {
 
         // Both, first. This ordering is the diff rule.
         let pair = self.authorized.authorize_pair(before, after)?;
-        let (left, right) = authorization::analyze_pair(&pair, Options { quiet: true })?;
+        let (left, right) = self.cache.analyze_pair(&pair, Options { quiet: true })?;
 
         let result = diff::diff(&left.graph, &right.graph);
         Ok(DiffAnswer {

@@ -405,3 +405,244 @@ fn the_session_never_prints_its_identity() {
     let debugged = format!("{session:?}");
     assert!(!debugged.contains("s3cr3t-identity-value"), "{debugged}");
 }
+
+// ── T-008: a session reuses what it parsed, and never answers stale ──
+
+/// Everything a session says about a tree, as one comparable string.
+fn answers(session: &Session, tree: &Path) -> String {
+    let map = serde_json::to_string(&session.map(tree).expect("map")).expect("json");
+    let blast = session.blast(tree, "orders").map_or_else(
+        |e| format!("error: {}", refusal(&e)),
+        |a| serde_json::to_string(&a).expect("json"),
+    );
+    let trace = session.trace(tree, "list_orders", 10).map_or_else(
+        |e| format!("error: {}", refusal(&e)),
+        |a| serde_json::to_string(&a).expect("json"),
+    );
+    format!("{map}\n{blast}\n{trace}")
+}
+
+/// What a session that has never seen the tree says about it now.
+fn cold_answers(tree: &Path) -> String {
+    answers(&session(vec![tree.to_path_buf()]), tree)
+}
+
+#[test]
+fn a_repeated_question_reuses_every_file_and_gives_the_same_answer() {
+    let fixture = Fixture::new("cache-repeat");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+
+    assert_eq!(session.last_analysis(&repo), None, "nothing analysed yet");
+    let first = serde_json::to_string(&session.map(&repo).expect("map")).expect("json");
+    let cold = session.last_analysis(&repo).expect("analysed");
+    assert_eq!((cold.seen, cold.parsed, cold.reused), (2, 2, 0));
+
+    let second = serde_json::to_string(&session.map(&repo).expect("map")).expect("json");
+    let warm = session.last_analysis(&repo).expect("analysed");
+    assert_eq!(
+        (warm.seen, warm.parsed, warm.reused),
+        (2, 0, 2),
+        "an unchanged tree is not parsed again"
+    );
+    assert_eq!(first, second);
+
+    // A different tool on the same tree reuses the same facts.
+    session.trace(&repo, "list_orders", 10).expect("trace");
+    assert_eq!(session.last_analysis(&repo).expect("analysed").parsed, 0);
+}
+
+#[test]
+fn a_changed_file_is_parsed_again_and_the_answer_follows_the_tree() {
+    let fixture = Fixture::new("cache-change");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+    let before = answers(&session, &repo);
+
+    // The handler stops touching the model.
+    std::fs::write(
+        repo.join("api/routes.py"),
+        "from flask import Flask\n\napp = Flask(__name__)\n\n@app.route('/api/orders')\ndef list_orders():\n    return []\n",
+    )
+    .expect("write");
+
+    let after = answers(&session, &repo);
+    assert_ne!(before, after, "the answer must follow the edit");
+    assert_eq!(after, cold_answers(&repo), "warm and cold must agree");
+
+    session.map(&repo).expect("map");
+    let stats = session.last_analysis(&repo).expect("analysed");
+    assert_eq!((stats.parsed, stats.reused), (0, 2), "and it settles again");
+}
+
+#[test]
+fn only_the_file_that_changed_is_parsed_again() {
+    let fixture = Fixture::new("cache-one");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+    session.map(&repo).expect("map");
+
+    let mut models = std::fs::read_to_string(repo.join("api/models.py")).expect("read");
+    models.push_str(
+        "\n\nclass Invoice(models.Model):\n    class Meta:\n        db_table = 'invoices'\n",
+    );
+    std::fs::write(repo.join("api/models.py"), models).expect("write");
+
+    let map = serde_json::to_string(&session.map(&repo).expect("map")).expect("json");
+    let stats = session.last_analysis(&repo).expect("analysed");
+    assert_eq!((stats.seen, stats.parsed, stats.reused), (2, 1, 1));
+    assert_eq!(
+        map,
+        serde_json::to_string(&session_map_cold(&repo)).expect("json")
+    );
+}
+
+fn session_map_cold(tree: &Path) -> impl serde::Serialize {
+    session(vec![tree.to_path_buf()]).map(tree).expect("map")
+}
+
+#[test]
+fn an_added_file_and_a_deleted_file_are_both_seen() {
+    let fixture = Fixture::new("cache-add-delete");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+    session.map(&repo).expect("map");
+
+    std::fs::write(
+        repo.join("api/extra.py"),
+        "from .models import Order\n\ndef count_orders():\n    return Order.objects.count()\n",
+    )
+    .expect("write");
+    assert_eq!(answers(&session, &repo), cold_answers(&repo));
+    let added = session.last_analysis(&repo).expect("analysed");
+    assert_eq!(added.seen, 3);
+
+    std::fs::remove_file(repo.join("api/extra.py")).expect("remove");
+    std::fs::remove_file(repo.join("api/routes.py")).expect("remove");
+    session.map(&repo).expect("map");
+    let removed = session.last_analysis(&repo).expect("analysed");
+    assert_eq!((removed.seen, removed.evicted), (1, 2), "{removed:?}");
+    assert_eq!(answers(&session, &repo), cold_answers(&repo));
+}
+
+#[test]
+fn an_edit_that_restores_the_old_content_is_answered_from_the_new_tree() {
+    // Same bytes as before, written again: the timestamp differs and the
+    // content does not. The answer is the one a cold session gives.
+    let fixture = Fixture::new("cache-restore");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+    let original = std::fs::read_to_string(repo.join("api/routes.py")).expect("read");
+    let first = answers(&session, &repo);
+
+    std::fs::write(repo.join("api/routes.py"), "x = 1\n").expect("write");
+    assert_ne!(first, answers(&session, &repo));
+    std::fs::write(repo.join("api/routes.py"), &original).expect("write");
+    assert_eq!(first, answers(&session, &repo));
+}
+
+#[test]
+fn two_trees_of_one_session_do_not_share_what_they_parsed() {
+    let fixture = Fixture::new("cache-two");
+    let a = fixture.repo("a");
+    let b = fixture.repo("b");
+    // Same relative paths, different content.
+    std::fs::write(
+        b.join("api/models.py"),
+        "from django.db import models\n\nclass Order(models.Model):\n    class Meta:\n        db_table = 'purchase_orders'\n",
+    )
+    .expect("write");
+    let session = session(vec![a.clone(), b.clone()]);
+
+    let first_a = serde_json::to_string(&session.map(&a).expect("map")).expect("json");
+    let first_b = serde_json::to_string(&session.map(&b).expect("map")).expect("json");
+    let stats_b = session.last_analysis(&b).expect("analysed");
+    assert_eq!(
+        (stats_b.parsed, stats_b.reused),
+        (2, 0),
+        "the second tree starts cold: nothing of the first is reused"
+    );
+    assert_ne!(first_a, first_b);
+    assert!(session.blast(&b, "purchase_orders").is_ok());
+    assert!(
+        session.blast(&a, "purchase_orders").is_err(),
+        "the first tree does not gain the second tree's table"
+    );
+    assert_eq!(
+        first_a,
+        serde_json::to_string(&session.map(&a).expect("map")).expect("json")
+    );
+}
+
+#[test]
+fn a_refused_tree_is_never_analysed_or_remembered() {
+    let fixture = Fixture::new("cache-refused");
+    let granted = fixture.repo("granted");
+    let other = fixture.repo("other");
+    let session = session(vec![granted.clone()]);
+
+    assert!(session.map(&other).is_err());
+    assert_eq!(session.last_analysis(&other), None);
+    session.map(&granted).expect("map");
+    assert_eq!(session.last_analysis(&other), None);
+}
+
+#[test]
+fn a_failed_analysis_leaves_nothing_behind() {
+    let fixture = Fixture::new("cache-failure");
+    let repo = fixture.repo("granted");
+    let session = session(vec![repo.clone()]);
+    let good = answers(&session, &repo);
+
+    // No supported source left: the analysis fails.
+    let models = std::fs::read_to_string(repo.join("api/models.py")).expect("read");
+    let routes = std::fs::read_to_string(repo.join("api/routes.py")).expect("read");
+    std::fs::remove_file(repo.join("api/models.py")).expect("remove");
+    std::fs::remove_file(repo.join("api/routes.py")).expect("remove");
+    assert!(session.map(&repo).is_err(), "nothing to analyse");
+
+    // The sources return. The next analysis starts cold and is correct.
+    std::fs::write(repo.join("api/models.py"), models).expect("write");
+    std::fs::write(repo.join("api/routes.py"), routes).expect("write");
+    assert_eq!(answers(&session, &repo), good);
+    assert_eq!(good, cold_answers(&repo));
+}
+
+#[test]
+fn concurrent_questions_about_one_tree_all_get_the_cold_answer() {
+    let fixture = Fixture::new("cache-concurrent");
+    let repo = fixture.repo("granted");
+    let expected = cold_answers(&repo);
+    let session = std::sync::Arc::new(session(vec![repo.clone()]));
+
+    let workers: Vec<_> = (0..8)
+        .map(|_| {
+            let session = std::sync::Arc::clone(&session);
+            let repo = repo.clone();
+            std::thread::spawn(move || answers(&session, &repo))
+        })
+        .collect();
+    for worker in workers {
+        assert_eq!(worker.join().expect("no panic"), expected);
+    }
+}
+
+#[test]
+fn a_diff_uses_the_cache_and_still_sees_an_edit() {
+    let fixture = Fixture::new("cache-diff");
+    let before = fixture.repo("before");
+    let after = fixture.repo("after");
+    let session = session(vec![before.clone(), after.clone()]);
+
+    let same = session.diff(&before, &after).expect("diff");
+    assert_eq!((same.added, same.removed, same.changed), (0, 0, 0));
+
+    std::fs::write(
+        after.join("api/routes.py"),
+        "from flask import Flask\n\napp = Flask(__name__)\n\n@app.route('/api/orders')\ndef list_orders():\n    return []\n",
+    )
+    .expect("write");
+    let edited = session.diff(&before, &after).expect("diff");
+    assert!(edited.removed > 0, "the removed model access is reported");
+    assert_eq!(session.last_analysis(&before).expect("analysed").parsed, 0);
+}

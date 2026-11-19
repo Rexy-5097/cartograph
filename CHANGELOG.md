@@ -7,6 +7,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — the MCP server no longer re-parses an unchanged repository on every call
+
+Every `map`, `trace`, `blast` and `diff` call analysed its repository from
+nothing: the incremental engine was handed a new, empty cache each time
+(T-008). A session now keeps one cache per granted tree for as long as it
+lives, so a repeated question re-parses only the files whose content changed.
+On CVAT (1,295 files) a repeated `map` call went from 5.2 s to 0.85 s, for
+about 18 MB more memory.
+
+It cannot answer from a stale tree. Every call still lists the tree and reads
+every file; cached facts are reused only when a file's bytes hash to what they
+hashed to before, a deleted file is dropped, and routes, matches, models and
+edges are rebuilt on every call. The answer is the one a cold analysis gives.
+The cache holds only trees the session authorized, lives in memory only, and
+is discarded for a tree whose analysis fails. Two requests for the same tree
+run one after the other.
+
+`Session::new` is no longer a `const fn`.
+
 ### Fixed — a model's own `Meta.app_label` names its table, and a field is not a `Meta` option
 
 Two errors in the default-table rule (T-007):
