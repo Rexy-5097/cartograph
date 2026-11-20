@@ -88,7 +88,7 @@ pub type ExportedConstants = HashMap<String, HashMap<String, SymbolicValue>>;
 pub fn collect_exported_constants(files: &[FileAnalysis]) -> ExportedConstants {
     let mut out = ExportedConstants::new();
     for file in files {
-        let scope = Scope::from_file(&file.symbols, &file.strings);
+        let scope = Scope::from_analysis(file);
         let mut exported = HashMap::new();
         for symbol in &file.symbols {
             if symbol.enclosing.is_some() {
@@ -120,7 +120,7 @@ pub fn collect_exported_constants(files: &[FileAnalysis]) -> ExportedConstants {
 /// package, not a project file, and is not followed.
 #[must_use]
 pub fn scope_for_file(file: &FileAnalysis, exported: &ExportedConstants) -> Scope {
-    let mut scope = Scope::from_file(&file.symbols, &file.strings);
+    let mut scope = Scope::from_analysis(file);
 
     for import in &file.imports {
         if !import.specifier.starts_with('.') {

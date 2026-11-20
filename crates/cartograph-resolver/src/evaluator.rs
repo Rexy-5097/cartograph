@@ -26,9 +26,11 @@
 //! definition (`const A = B; const B = A;`) terminates as `Unknown` rather
 //! than exhausting the stack.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use cartograph_parser::model::{ConcatPart, StringFact, Symbol, SymbolKind, TemplatePart};
+use cartograph_parser::model::{
+    ConcatPart, FileAnalysis, SourceLanguage, StringFact, Symbol, SymbolKind, TemplatePart,
+};
 
 use crate::symbolic::SymbolicValue;
 
@@ -47,6 +49,10 @@ const MAX_DEPTH: usize = 8;
 #[derive(Debug, Default, Clone)]
 pub struct Scope {
     bindings: HashMap<String, SymbolicValue>,
+    /// Names the file itself binds, whether or not to a known value. An
+    /// import of the same name must not supply them (fifth review, W-05,
+    /// W-06): the file's own binding, or its uncertainty, wins.
+    declared: HashSet<String>,
 }
 
 impl Scope {
@@ -81,36 +87,97 @@ impl Scope {
 
     /// Collects module-scope string constants from one file's facts.
     ///
-    /// A module-scope variable is bound when its initialiser is a string fact
-    /// at the same source position. Anything else — a function result, an
-    /// object, a computed value — is left unbound, so referencing it yields
-    /// [`SymbolicValue::Unknown`] rather than a guess.
+    /// A module-scope variable is bound when its value *is* a string fact
+    /// (the fact's span is the value span the parser records) and nothing
+    /// else in the module binds the name. Anything else is left unbound, so
+    /// referencing it yields [`SymbolicValue::Unknown`] rather than a guess.
     ///
-    /// Only module scope: a local variable's value depends on control flow this
-    /// analysis does not model.
+    /// Without the file's imports, a constant also bound by an import is not
+    /// seen as rebound; [`Scope::from_analysis`] sees it.
     #[must_use]
     pub fn from_file(symbols: &[Symbol], strings: &[StringFact]) -> Self {
-        let mut scope = Self::new();
-        let module_variables = || {
-            symbols
-                .iter()
-                .filter(|s| s.kind == SymbolKind::Variable && s.enclosing.is_none())
-        };
-        for symbol in module_variables() {
-            // Assigned twice (`BASE = BASE.replace(…)`), or declared again in
-            // a block (`if (x) { const A = … }`): which value a use sees is
-            // not decided by the declaration (fourth review, V-02, V-03).
-            if module_variables().filter(|s| s.name == symbol.name).count() > 1 {
-                continue;
+        Self::collect(symbols, strings, &HashSet::new(), &[], false)
+    }
+
+    /// Collects module-scope string constants, as [`Scope::from_file`], also
+    /// refusing a name the file's imports bind: `try: from cfg import P`
+    /// `except ImportError: P = "/api"` makes `P` whichever ran (fifth
+    /// review, W-06). A star import after the assignment may rebind it.
+    #[must_use]
+    pub fn from_analysis(file: &FileAnalysis) -> Self {
+        let mut imported = HashSet::new();
+        let mut star_lines = Vec::new();
+        for import in &file.imports {
+            for named in &import.named {
+                imported.insert(
+                    named
+                        .local
+                        .clone()
+                        .unwrap_or_else(|| named.imported.clone()),
+                );
             }
-            // The initialiser is the string fact whose span is the value's
-            // own span, which the parser records with parentheses and type
-            // assertions looked through (T-010). `x ? A : '/b'` and
-            // `'/api'.replace(…)` contain a string and are not one.
+            match import.namespace_name.as_deref() {
+                Some("*") => star_lines.push(import.span.start_line),
+                Some(name) => {
+                    imported.insert(name.to_owned());
+                }
+                None => {}
+            }
+            if let Some(name) = &import.default_name {
+                imported.insert(name.clone());
+            }
+        }
+        let python = file.language == SourceLanguage::Python;
+        Self::collect(&file.symbols, &file.strings, &imported, &star_lines, python)
+    }
+
+    fn collect(
+        symbols: &[Symbol],
+        strings: &[StringFact],
+        imported: &HashSet<String>,
+        star_lines: &[u32],
+        python: bool,
+    ) -> Self {
+        let mut scope = Self::new();
+        // Every module-level binding of a name counts: a variable, a `def`,
+        // a class, and a `const` inside a block or callback, which the lookup
+        // cannot tell from the module's own (R-05). Two exceptions bind no
+        // value: a TypeScript `interface` or `type`, which lives in the type
+        // namespace, and a Python bare annotation `P: str` (fifth review,
+        // W-07). Every name the file binds blocks an import of that name.
+        let mut bindings: HashMap<&str, usize> = HashMap::new();
+        for symbol in symbols.iter().filter(|s| s.enclosing.is_none()) {
+            scope.declared.insert(symbol.name.clone());
+            let binds_no_value =
+                matches!(symbol.kind, SymbolKind::Interface | SymbolKind::TypeAlias)
+                    || (python
+                        && symbol.kind == SymbolKind::Variable
+                        && symbol.value_span.is_none());
+            if !binds_no_value {
+                *bindings.entry(symbol.name.as_str()).or_default() += 1;
+            }
+        }
+        let strings_by_span: HashMap<_, _> = strings.iter().map(|s| (s.span(), s)).collect();
+        for symbol in symbols
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Variable && s.enclosing.is_none())
+        {
+            // The value span is the value's own span, with parentheses and
+            // type assertions looked through (T-010).
             let Some(value) = symbol.value_span else {
                 continue;
             };
-            if let Some(fact) = strings.iter().find(|s| s.span() == value) {
+            // Bound twice at module level (`BASE = BASE.replace(…)`, a `def`
+            // of the same name), by an import, or possibly by a later star
+            // import: which value a use sees is not decided here (V-02, V-03,
+            // W-06).
+            if bindings.get(symbol.name.as_str()).copied().unwrap_or(0) > 1
+                || imported.contains(&symbol.name)
+                || star_lines.iter().any(|line| *line > symbol.span.start_line)
+            {
+                continue;
+            }
+            if let Some(fact) = strings_by_span.get(&value) {
                 scope.bind(&symbol.name, from_string_fact(fact));
             }
         }
@@ -127,6 +194,9 @@ impl Scope {
         imported: impl IntoIterator<Item = (String, SymbolicValue)>,
     ) {
         for (name, value) in imported {
+            if self.declared.contains(&name) {
+                continue;
+            }
             self.bindings.entry(name).or_insert(value);
         }
     }

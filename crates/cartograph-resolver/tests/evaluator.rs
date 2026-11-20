@@ -529,14 +529,17 @@ export const C = '/api/c/';
 #[test]
 fn a_name_declared_twice_at_module_level_is_not_a_constant() {
     // V-02, V-03: a later assignment, or a block declaration of the same name.
+    // The lookup ignores scope (R-05), so both are refused. A block's own
+    // `const` is not a module constant (fifth review, W-05).
     let ts = scope_of(
         "src/c.ts",
         "const A = '/api/a/';
 if (isProd) { const A = '/api/x/'; }
-{ let B = '/api/b/'; }
+{ const B = '/api/b/'; }
 ",
     );
     assert_eq!(evaluate_expression("A + 'x'", &ts).as_literal(), None);
+    assert_eq!(evaluate_expression("B + 'x'", &ts).as_literal(), None);
     let py = scope_of(
         "svc/c.py",
         "BASE2 = \"/api/a/\"
@@ -579,4 +582,94 @@ fn a_comment_or_a_non_null_assertion_does_not_hide_the_string() {
             .as_deref(),
         Some("/api/a/x")
     );
+}
+
+// ── Fifth review ─────────────────────────────────────────────────────────
+
+fn file_scope(path: &str, src: &str) -> Scope {
+    Scope::from_analysis(&analyze(path, src))
+}
+
+#[test]
+fn a_python_constant_rebound_by_a_def_class_or_import_is_not_a_constant() {
+    // W-06: `try: from cfg import P` / `except ImportError: P = "/api"` is a
+    // common Django fallback; whichever ran is the value.
+    for src in [
+        "try:\n    from svc.cfg import P\nexcept ImportError:\n    P = \"/api/a/\"\n",
+        "P = \"/api/a/\"\nfrom svc.cfg import P\n",
+        "P = \"/api/a/\"\nfrom svc.cfg import *\n",
+        "P = \"/api/a/\"\n\n\ndef P():\n    return 1\n",
+        "P = \"/api/a/\"\n\n\nclass P:\n    pass\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+    // A star import before the assignment is overridden by it.
+    let scope = file_scope("svc/c.py", "from svc.cfg import *\nP = \"/api/a/\"\n");
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_bare_annotation_binds_no_value() {
+    // W-07: `P: str` declares a type, not a second value.
+    for src in [
+        "P: str\nP = \"/api/a/\"\n",
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    P: str\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_type_of_the_same_name_does_not_rebind_a_const() {
+    // TypeScript keeps types and values apart.
+    for src in [
+        "export const A = '/api/a/';\nexport interface A { x: number }\n",
+        "export const A = '/api/a/';\nexport type A = string;\n",
+    ] {
+        let scope = file_scope("src/c.ts", src);
+        assert_eq!(
+            evaluate_expression("A + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_name_the_file_declares_is_not_supplied_by_an_import() {
+    // W-05: an imported `A` and a `const A` in a block or callback. The
+    // import must not be read in place of the local, nor the local in place
+    // of the import.
+    for src in [
+        "import { A } from './cfg';\nif (isProd) { const A = '/api/x/'; }\n",
+        "import { A } from './cfg';\nwrap(() => { const A = '/api/x/'; });\n",
+    ] {
+        let mut scope = file_scope("src/c.ts", src);
+        let imported = evaluate_expression("'/api/a/'", &Scope::new());
+        scope.extend_with_imports([("A".to_owned(), imported)]);
+        assert_eq!(
+            evaluate_expression("A + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
 }

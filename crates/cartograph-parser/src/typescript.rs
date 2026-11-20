@@ -875,16 +875,6 @@ impl Walker<'_> {
         if !self.scope.is_empty() {
             return;
         }
-        // A `let` or `var` may be reassigned at module load, so its
-        // declared value is not its value (fourth review, V-01).
-        let is_const = {
-            let mut cursor = node.walk();
-            node.kind() == "lexical_declaration"
-                && node
-                    .children(&mut cursor)
-                    .next()
-                    .is_some_and(|keyword| keyword.kind() == "const")
-        };
         let mut cursor = node.walk();
         for declarator in node.named_children(&mut cursor) {
             if declarator.kind() != "variable_declarator" {
@@ -894,10 +884,14 @@ impl Walker<'_> {
                 if name.kind() == "identifier" {
                     let name = self.text(name);
                     self.push_symbol(SymbolKind::Variable, &name, false, export, declarator);
+                    // A `let` or `var` may be reassigned at module load (fourth
+                    // review, V-01), and a `const` inside a block or a callback
+                    // is not the module's (fifth review, W-05): only a
+                    // top-level `const` has a value of its own.
                     if let (Some(symbol), Some(value), true) = (
                         self.analysis.symbols.last_mut(),
                         declarator.child_by_field_name("value"),
-                        is_const,
+                        is_top_level_declarator(declarator),
                     ) {
                         symbol.value_span = Some(span_of(unwrap_typescript_value(value)));
                     }

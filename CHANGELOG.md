@@ -7,6 +7,45 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges found by a fifth independent review
+
+A fifth review found two false edges introduced by the fourth round's URL-conf
+rule, one correct edge it had lost, and older false edges in constant
+binding. Corrected, each with a regression test:
+
+- **A URL conf's use sees the last binding before it.** A view defined
+  *after* `urlpatterns`, behind a star import, was drawn to the local `def`;
+  Python built the list with the star import's function. A `def` under a
+  module-level `if`, `try` or `with` after a star import is refused, because
+  the star import's binding is used when the branch does not run. A star
+  import written after the use does not affect it.
+- **A star chain that cannot bind the view keeps the local view**: a nested
+  star module that binds no such name, or a chain that leads back to the URL
+  conf itself.
+- **A constant rebound by a `def`, a `class` or an import is not a
+  constant**, including the common `try: from cfg import P` /
+  `except ImportError: P = "/api"` fallback, and a star import written after
+  the assignment.
+- **A name the file declares is never supplied by an import of the same
+  name**, so a `const` inside a block or callback no longer replaces an
+  imported constant, and the import no longer replaces it either.
+- **A bare annotation (`P: str`) binds no value**, so `P: str` followed by
+  `P = "/api"` is bound again. A TypeScript `interface` or `type` of the same
+  name as a `const` does not rebind it.
+- **Constant collection is linear again.** The fourth round's duplicate check
+  was quadratic in a file's constants (30,000 constants: about 6 s).
+
+Known limits, each reproduced by the review on constructed code:
+
+- A URL-conf star module that binds the view by a tuple assignment, a `for`
+  target or `global` is not seen.
+- A Python constant rebound by `with … as P` or `:=` keeps its value.
+- A `const` inside a block or callback is not a constant, so a request inside
+  that callback using it is not resolved (a recall cost).
+- A function-local or parameter with the same name as a module constant is
+  still read as the constant (the scope-insensitive lookup, documented
+  above).
+
 ### Fixed — false edges found by a fourth independent review
 
 A fourth review found no false edge introduced by the third round's
@@ -18,12 +57,17 @@ functions. Corrected, each with a regression test:
 - **A name declared twice at module level is not a constant.**
   `BASE = BASE.replace(…)`, a reassignment under `if`, and a `const` of the
   same name declared again inside a block made the first, or the last, value
-  win.
+  win. *(Extended to `def`, `class` and import rebindings by the fifth
+  review's corrections, above.)*
 - **A star import written before a local view does not rebind it**, nor does
   a star module that has the name only as a method. Both were refused by the
-  third round's rule; they are drawn to the local view again.
+  third round's rule; they are drawn to the local view again. *(Narrowed by
+  the fifth review's corrections, above: it holds when the view is defined
+  unconditionally before its use.)*
 - **A star module that binds the view by import, or through a star import of
-  its own, may rebind it**, and the view is refused.
+  its own, may rebind it**, and the view is refused. *(A star chain that
+  cannot bind it, or that leads back to the URL conf, no longer refuses;
+  see above.)*
 - **A comment inside parentheses, or a non-null `!`, does not hide the
   string.** `( # legacy\n "t")` and `'/api'!` are read again.
 
@@ -32,7 +76,9 @@ Known limits, each reproduced by the review on constructed code:
 - A Python constant changed by `+=`, a `for` target, `global`, or an
   `import … as` of the same name keeps its string value.
 - A `Meta` option set inside an `if`, by a tuple assignment, by `+=` or as a
-  `for` target is not seen, and neither is a `Meta` rebound after its class.
+  `for` target is not seen, and neither is a `Meta` rebound after its class,
+  nor a model's whole `class Meta` declared under `if`/`else`.
+- A model base bound in a star module by a tuple assignment is not seen.
 - A model base rebound after its class declaration (`Mix = Labelled`, a later
   import of the same name, or a later project star import) is read as the
   class. A star module that declares the base and then star-imports another
@@ -72,7 +118,9 @@ corrected, with a regression test:
   (`{ client: Ax }`).
 - **A star module that binds a base by assignment, or by an import from
   outside the project, is not skipped.** Another star module's class of the
-  same name used to win; the table is now refused.
+  same name used to win; the table is now refused. A tuple assignment
+  (`Mix, Other = Labelled, None`) is not seen (a limit, listed in the fourth
+  review's entry).
 - **A base declared twice in its module (`if`/`else`) is not read**, and the
   table is refused.
 - **`class Meta(object):`** in a base is a plain `Meta` again; it had refused

@@ -101,9 +101,13 @@ of that name in the URL conf. Refused when:
   `orders = OrderView.as_view()`;
 - `function.as_view`, and a bare class without `as_view`;
 - a name both declared in the URL conf and imported into it;
-- a name declared in the URL conf and followed by a star import whose module
-  is outside the project, or binds the name at module level by declaration,
-  by import, or through its own star import. `__all__` is not read.
+- a name declared in the URL conf where a star import may supply the
+  binding the `urlpatterns` entry sees: a star import between the declaration
+  and the use, or before the use when the declaration is conditional or comes
+  after it. A star module may bind the name when it is outside the project,
+  or binds it at module level by declaration, by import, or through a star
+  chain that may (a chain back to the URL conf adds nothing). `__all__` is
+  not read, and bindings by a tuple, `for` or `global` are not seen.
 
 Two limits are deliberate:
 

@@ -44,7 +44,9 @@
 use std::collections::{HashMap, HashSet};
 
 use cartograph_core::NodeKind;
-use cartograph_parser::model::{FileAnalysis, RouteDeclarationStyle, SourceLanguage, SymbolKind};
+use cartograph_parser::model::{
+    FileAnalysis, RouteDeclarationStyle, SourceLanguage, Symbol, SymbolKind,
+};
 
 use crate::imports::{ModuleIndex, Resolution};
 
@@ -337,46 +339,86 @@ fn binds_by_import(file: &FileAnalysis, name: &str) -> bool {
     })
 }
 
-/// Whether a star import in `file`, written after its last module-level
-/// declaration of `name`, may rebind it (third review, U-10).
+/// Whether the local declaration of `name` may not be what the URL conf's
+/// use of it sees, because a star import may bind it instead (third review,
+/// U-10).
 ///
-/// A star import before the `def` is overridden by it, and a star module binds
-/// only module-level names, so neither counts (fourth review, V-07). A module
-/// outside the project, or one that binds the name by import or through a
-/// star import of its own, may (V-06). `__all__` is not read, so a module that
-/// declares the name but excludes it still counts.
+/// Python runs the module top to bottom, so the use sees the last binding
+/// before it. A star import counts when it comes before the use and after
+/// the declaration (fourth review, V-07), or anywhere before the use when the
+/// declaration is conditional (under `if`, `try`, `with`) or comes after the
+/// use (fifth review, W-01, W-02). A star module may bind the name when it is
+/// outside the project, or binds it at module level by declaration, by
+/// import, or through a star import that may (V-06, W-03). `__all__` is not
+/// read, so a module that declares the name but excludes it still counts.
 fn star_may_bind(modules: &ModuleIndex<'_>, file: &FileAnalysis, name: &str) -> bool {
-    let Some(last_declaration) = file
+    let declarations: Vec<&Symbol> = file
         .symbols
         .iter()
         .filter(|s| s.name == name && s.enclosing.is_none())
-        .map(|s| s.span.start_line)
-        .max()
-    else {
+        .collect();
+    let Some(last_declaration) = declarations.iter().map(|s| s.span.start_line).max() else {
         return false;
     };
+    // A module-level statement starts in column 1; anything further in is
+    // inside a compound statement and may not run.
+    let conditional = declarations.iter().any(|s| s.span.start_column != 1);
+    let first_use = file
+        .routes
+        .iter()
+        .filter(|route| {
+            route
+                .handler
+                .as_deref()
+                .is_some_and(|h| h.strip_suffix(".as_view").unwrap_or(h) == name)
+        })
+        .map(|route| route.span.start_line)
+        .min()
+        .unwrap_or(u32::MAX);
+    let after_use = last_declaration > first_use;
     file.imports
         .iter()
         .filter(|import| {
+            let line = import.span.start_line;
             import.namespace_name.as_deref() == Some("*")
-                && import.span.start_line > last_declaration
+                && line < first_use
+                && (conditional || after_use || line > last_declaration)
         })
         .any(|import| {
-            modules
-                .resolve_python_module(&import.specifier, &file.path)
-                .and_then(|target| modules.file(&target))
-                .is_none_or(|module| {
-                    module
-                        .symbols
-                        .iter()
-                        .any(|s| s.name == name && s.enclosing.is_none())
-                        || binds_by_import(module, name)
-                        || module
-                            .imports
-                            .iter()
-                            .any(|i| i.namespace_name.as_deref() == Some("*"))
-                })
+            // A chain back to this URL conf supplies only its own binding
+            // (fifth review, W-03).
+            let mut visited = HashSet::from([file.path.clone()]);
+            module_may_bind(modules, file, &import.specifier, name, &mut visited)
         })
+}
+
+/// Whether `from <specifier> import *`, written in `from`, may bind `name`.
+fn module_may_bind(
+    modules: &ModuleIndex<'_>,
+    from: &FileAnalysis,
+    specifier: &str,
+    name: &str,
+    visited: &mut HashSet<String>,
+) -> bool {
+    let Some(module) = modules
+        .resolve_python_module(specifier, &from.path)
+        .and_then(|target| modules.file(&target))
+    else {
+        return true; // outside the project: unknown
+    };
+    if !visited.insert(module.path.clone()) {
+        return false; // a cycle adds nothing new
+    }
+    module
+        .symbols
+        .iter()
+        .any(|s| s.name == name && s.enclosing.is_none())
+        || binds_by_import(module, name)
+        || module
+            .imports
+            .iter()
+            .filter(|i| i.namespace_name.as_deref() == Some("*"))
+            .any(|i| module_may_bind(modules, module, &i.specifier, name, visited))
 }
 
 /// Whether `file` declares `name` at module scope.

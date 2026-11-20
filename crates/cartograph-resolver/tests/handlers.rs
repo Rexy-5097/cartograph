@@ -735,3 +735,57 @@ fn a_star_module_that_imports_the_name_may_rebind_it() {
         );
     }
 }
+
+// ── Fifth review ─────────────────────────────────────────────────────────
+
+fn star_files(urls: &'static str) -> [(&'static str, &'static str); 2] {
+    [
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        ("shop/urls.py", urls),
+    ]
+}
+
+#[test]
+fn the_binding_a_use_sees_is_the_last_one_before_it() {
+    // W-01: the list is built before the def runs, so it holds the star
+    // import's function.
+    let files = star_files(
+        "from django.urls import path\nfrom .views import *\n\nurlpatterns = [path('orders/', list_orders)]\n\n\ndef list_orders(request):\n    return None\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+    // A star import after the use cannot change what the use saw.
+    let files = star_files(
+        "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = [path('orders/', list_orders)]\nfrom .views import *\n",
+    );
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}
+
+#[test]
+fn a_conditional_def_after_a_star_import_is_refused() {
+    // W-02: when the condition is false the name is the star import's.
+    let files = star_files(
+        "from django.conf import settings\nfrom django.urls import path\nfrom .views import *\n\nif settings.DEBUG:\n    def list_orders(request):\n        return None\n\nurlpatterns = [path('orders/', list_orders)]\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+}
+
+#[test]
+fn a_star_chain_that_cannot_bind_the_name_keeps_the_local_view() {
+    // W-03: the nested star module binds no `list_orders`, or leads back to
+    // the URL conf itself.
+    let urls = "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nfrom .views import *\n\nurlpatterns = [path('orders/', list_orders)]\n";
+    for views in ["from .models import *\n", "from .urls import *\n"] {
+        let files = [
+            ("shop/models.py", "class Order:\n    pass\n"),
+            ("shop/views.py", views),
+            ("shop/urls.py", urls),
+        ];
+        assert!(
+            declared(&files, "shop/urls.py", "list_orders").is_some(),
+            "{views}"
+        );
+    }
+}
