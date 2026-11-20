@@ -77,7 +77,10 @@ counts as a module-level read, because that body runs while the module loads.
 In a Python f-string, a substitution with a format spec, a conversion or a
 self-documenting `=` (`{n:03d}`, `{x!r}`, `{x=}`) is not evaluated, and an
 f-string operand of a `+` chain keeps its substitutions. An implicitly
-concatenated string (`"/api/a/" "sub/"`) is not bound.
+concatenated string (`"/api/a/" "sub/"`) is not bound. A lambda in a class body
+or at module level counts as a load-time read. After a Python star import, an
+assignment not in column 1 (under `if`, `try`, `with`, or after `;`) is not a
+constant.
 
 A Python import inside a function or class body does not refuse the constant;
 it hides it for requests in the innermost body containing the import (an

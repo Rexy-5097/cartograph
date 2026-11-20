@@ -150,8 +150,7 @@ impl Scope {
         // body. It is found by position, not by name: a method named like a
         // class is not a class body (tenth review, AB-04).
         let runs_at_load = |line: u32| -> bool {
-            let mut containing: Vec<&Symbol> = file
-                .symbols
+            file.symbols
                 .iter()
                 .filter(|s| s.span.start_line <= line && line <= s.span.end_line)
                 .filter(|s| {
@@ -160,14 +159,25 @@ impl Scope {
                         SymbolKind::Function | SymbolKind::Method | SymbolKind::Class
                     )
                 })
-                .collect();
-            containing.sort_by_key(|s| s.span.end_line - s.span.start_line);
-            containing.iter().all(|s| s.kind == SymbolKind::Class)
+                .all(|s| s.kind == SymbolKind::Class)
         };
+        // A request in a class body has that class as its innermost
+        // enclosing name, so only those need the position check, which
+        // keeps this linear in practice (eleventh review, AC-05).
+        let class_names: HashSet<&str> = file
+            .symbols
+            .iter()
+            .filter(|s| s.kind == SymbolKind::Class)
+            .map(|s| s.name.as_str())
+            .collect();
         reads.extend(
             file.http_calls
                 .iter()
-                .filter(|c| c.enclosing.is_none() || runs_at_load(c.span.start_line))
+                .filter(|c| {
+                    c.enclosing
+                        .as_deref()
+                        .is_none_or(|e| class_names.contains(e) && runs_at_load(c.span.start_line))
+                })
                 .map(|c| (c.span.start_line, url_sources(&c.url))),
         );
         let mut imported = Vec::new();

@@ -14,12 +14,13 @@ corrections and three needless refusals. Corrected, each with a regression
 test:
 
 - **A self-documenting substitution (`f"{x=}"`) is not the bare name.** It
-  renders `x='value'`. Any interpolation with more than its braces and its
+  renders `x=` followed by the value's representation. Any interpolation with more than its braces and its
   expression keeps its whole text, which no evaluator form accepts.
 - **A class body is found by position, not by name.** A method named like a
-  class, or a class written inside a function, does not run while the module
-  loads, and its request is not a load-time read. A class inside a
-  module-level class still is.
+  class, or a class written inside a function, is not a module-level class
+  body, and its request is not a load-time read. A class inside a
+  module-level class still is. (A function called while the module loads runs
+  its class bodies then; that is the documented module-level call limit.)
 - **A read after the assignment on its own line sees the new value**, so it
   no longer refuses the constant.
 
@@ -27,7 +28,10 @@ Known limits, each reproduced by the review:
 
 - After a star import, an assignment in a `try` or `with` body is refused,
   as one under `if` is, although it always runs.
-- A lambda in a class body counts as running while the module loads.
+- A lambda in a class body, or at module level, counts as running while the
+  module loads.
+- After a star import, a constant assigned after `;` on a line is refused, as
+  any assignment not in column 1 is.
 - An implicitly concatenated string (`"/api/a/" "sub/"`, with or without an
   f-string) is never bound as a constant.
 - An f-string operand of a `+` chain is read as a direct f-string is, so a
