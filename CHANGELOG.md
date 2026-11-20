@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges found by a ninth independent review
+
+A ninth review found no false edge introduced by the eighth round's
+corrections outside the documented `global` limit. It found an older parser
+defect and three small gaps. Corrected, each with a regression test:
+
+- **An f-string operand of a Python `+` chain keeps its substitutions.**
+  `f"/api/{VERSION}/" + "orders/"` was read as `/api/orders/`, dropping
+  `{VERSION}`, and matched a shorter route with confidence. Its substitutions
+  are now operands of the chain. A substitution with a format spec or a
+  conversion (`{n:03d}`, `{x!r}`) is not read as the bare name, in any
+  f-string.
+- **A request in a class body runs while the module loads**, so it is a read
+  between an import and the assignment, as a module-level request is.
+- **A conditional assignment after a Python star import is not a constant**,
+  as one after a named import already was.
+- **A read on the assignment's own line, after `;`, sees the earlier
+  import.**
+
+Known limits, each reproduced by the review:
+
+- An import under `global` or `nonlocal` in a nested function or another
+  method rebinds the name beyond the body that imports it, and is not seen
+  (the documented `global` limit).
+- A read that names the constant between its import and its assignment
+  refuses it for every use, including requests made after the module loads.
+
 ### Fixed — lost edges found by an eighth independent review
 
 An eighth review found no false edge introduced by the seventh round's
@@ -57,7 +84,7 @@ test was added with the eighth review's corrections):
   names the constant counts.)*
 - **A function-local import hides the module constant only inside its
   body.** A request in that body no longer reads the module constant; a
-  request elsewhere still does. *(Made exact by the eighth review's
+  request elsewhere still does. *(Narrowed by the eighth review's
   corrections, above: the innermost body.)*
 
 Known limits, each reproduced by the review:

@@ -826,3 +826,88 @@ fn a_local_import_hides_the_constant_only_in_its_innermost_body() {
         Some("/api/a/x")
     );
 }
+
+// ── Ninth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn an_f_string_operand_of_a_plus_chain_keeps_its_substitutions() {
+    // AA-01: `{VERSION}` was dropped, so the value read `/api/orders/`.
+    let scope = file_scope(
+        "svc/c.py",
+        "VERSION = \"v1\"\nORDERS_URL = f\"/api/{VERSION}/\" + \"orders/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("ORDERS_URL", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/v1/orders/")
+    );
+    // A substitution with a format spec or conversion is not the bare name.
+    for src in [
+        "N = \"5\"\nURL = f\"/api/{N:>3}/\" + \"x/\"\n",
+        "N = \"5\"\nURL = f\"/api/{N!r}/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("URL", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn every_kind_of_load_time_read_sees_the_import() {
+    // AA-06: an f-string constant and a module-level request between the
+    // import and the assignment; AA-03: a request in a class body; AA-05: a
+    // read on the assignment's own line.
+    for src in [
+        "from svc.cfg import P\nURL = f\"{P}sub/\"\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\nrequests.get(P)\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\n\n\nclass C:\n    r = requests.get(P)\n\n\nP = \"/api/a/\"\n",
+        "from svc.cfg import *\nURL = P + \"sub/\"; P = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+    // Whole-token matching: `PREFIX` is not `P`.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P\nPX = PREFIX + \"x\"\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_conditional_assignment_after_a_star_import_is_not_a_constant() {
+    // AA-04: when the condition is false, the star import's value is used.
+    let scope = file_scope(
+        "svc/c.py",
+        "import os\nfrom svc.star_cfg import *\nif os.environ.get(\"X\"):\n    P = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_local_import_hides_the_constant_in_its_whole_body_and_closures() {
+    // AA-06: a read before the import in the same function, and a closure
+    // reading the outer function's import.
+    let src = "P = \"/api/a/\"\n\n\ndef f():\n    x = P\n    from svc.cfg import P\n\n    def g():\n        return P\n    return g\n";
+    let scope = file_scope("svc/c.py", src);
+    for line in [5, 9] {
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope.at_line(line)).as_literal(),
+            None,
+            "line {line}"
+        );
+    }
+}

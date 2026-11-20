@@ -69,7 +69,13 @@ nothing else in the file is seen to bind the name:
   the constant (another string constant's expression, a module-level
   request's URL) lies between them, or on the import's line;
 - **a Python star import** written after it, or before it with such a read
-  between (a TypeScript `export * from` binds nothing locally).
+  between or with the assignment conditional (a TypeScript `export * from`
+  binds nothing locally).
+
+A request in a class body counts as a module-level read, because a class body
+runs while the module loads. In a Python f-string, a substitution with a
+format spec or conversion (`{n:03d}`, `{x!r}`) is not evaluated, and an
+f-string operand of a `+` chain keeps its substitutions.
 
 A Python import inside a function or class body does not refuse the constant;
 it hides it for requests in the innermost body containing the import (an

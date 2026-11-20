@@ -1156,9 +1156,27 @@ impl Walker<'_> {
             }
             if node.kind() == "string" {
                 *has_string = true;
-                parts.push(ConcatPart::Literal {
-                    value: string_content(node, self.source),
-                });
+                // An f-string operand keeps its substitutions: dropping them
+                // turned `f"/api/{VERSION}/" + "orders/"` into
+                // `/api/orders/` (ninth review, AA-01).
+                let template = template_parts(node, self.source);
+                if template
+                    .iter()
+                    .any(|part| matches!(part, TemplatePart::Expression { .. }))
+                {
+                    for part in template {
+                        parts.push(match part {
+                            TemplatePart::Text { value } => ConcatPart::Literal { value },
+                            TemplatePart::Expression { source, .. } => {
+                                ConcatPart::Expression { source }
+                            }
+                        });
+                    }
+                } else {
+                    parts.push(ConcatPart::Literal {
+                        value: string_content(node, self.source),
+                    });
+                }
             } else {
                 parts.push(ConcatPart::Expression {
                     source: self.text(node),
@@ -1240,10 +1258,23 @@ fn template_parts(node: Node<'_>, source: &str) -> Vec<TemplatePart> {
             }
             "interpolation" => {
                 let mut inner = child.walk();
-                if let Some(expr) = child.named_children(&mut inner).next() {
+                let named: Vec<Node<'_>> = child.named_children(&mut inner).collect();
+                if let Some(expr) = named.first() {
+                    // `{n:03d}` and `{x!r}` change the text: keep the whole
+                    // substitution, which no evaluator form accepts, rather
+                    // than the bare name (ninth review, AA-01 neighbour).
+                    let text = if named.len() > 1 {
+                        let whole = text_of(child, source);
+                        whole
+                            .trim_start_matches('{')
+                            .trim_end_matches('}')
+                            .to_owned()
+                    } else {
+                        text_of(*expr, source)
+                    };
                     parts.push(TemplatePart::Expression {
-                        source: text_of(expr, source),
-                        span: span_of(expr),
+                        source: text,
+                        span: span_of(*expr),
                     });
                 }
             }
