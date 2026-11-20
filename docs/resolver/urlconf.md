@@ -100,7 +100,10 @@ of that name in the URL conf. Refused when:
 - a name that is neither a function nor a class, such as a module-scope
   `orders = OrderView.as_view()`;
 - `function.as_view`, and a bare class without `as_view`;
-- a name both declared in the URL conf and imported into it.
+- a name both declared in the URL conf and imported into it;
+- a name declared in the URL conf and followed by a star import whose module
+  is outside the project, or binds the name at module level by declaration,
+  by import, or through its own star import. `__all__` is not read.
 
 Two limits are deliberate:
 

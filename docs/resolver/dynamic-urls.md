@@ -60,7 +60,8 @@ Only **module-scope** constants bind: a local's value depends on control flow
 this analysis does not model. Constant chains resolve transitively through a
 depth limit, so a cycle terminates as `Unknown`.
 
-A constant binds only when its value *is* one of the forms above. The parser
+A constant binds only when it is a TypeScript `const` or a Python assignment
+made once at module level, and its value *is* one of the forms above. The parser
 records each variable's value span, with parentheses, `as` and `satisfies`
 looked through, and the string must cover it exactly: `'/api' as const`
 binds, while `isProd ? PROD : '/api'`, `base ?? '/api'` and

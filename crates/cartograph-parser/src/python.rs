@@ -1330,8 +1330,10 @@ fn unwrap_python_value(mut node: Node<'_>) -> Node<'_> {
     loop {
         let inner = match node.kind() {
             "parenthesized_expression" => {
+                // `(  # legacy\n "t")`: the comment is a named child (V-10).
                 let mut cursor = node.walk();
-                node.named_children(&mut cursor).next()
+                node.named_children(&mut cursor)
+                    .find(|child| child.kind() != "comment")
             }
             "assignment" => node.child_by_field_name("right"),
             _ => None,

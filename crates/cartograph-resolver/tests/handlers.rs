@@ -680,3 +680,58 @@ fn a_view_defined_locally_and_star_imported_is_refused() {
     ];
     assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
 }
+
+#[test]
+fn a_star_import_before_the_local_def_does_not_rebind_it() {
+    // Fourth review, V-07: the def runs last, so it is the view.
+    let files = [
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\nfrom .views import *\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        ),
+    ];
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}
+
+#[test]
+fn a_star_module_with_only_a_method_of_that_name_does_not_rebind_it() {
+    // V-07: a star import binds module-level names only.
+    let files = [
+        (
+            "shop/views.py",
+            "class Api:\n    def list_orders(self, request):\n        return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nfrom .views import *\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        ),
+    ];
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}
+
+#[test]
+fn a_star_module_that_imports_the_name_may_rebind_it() {
+    // V-06: `views.py` binds it by import, or through its own star import.
+    for views in ["from .impl import list_orders\n", "from .impl import *\n"] {
+        let files = [
+            (
+                "shop/impl.py",
+                "def list_orders(request):\n    return None\n",
+            ),
+            ("shop/views.py", views),
+            (
+                "shop/urls.py",
+                "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nfrom .views import *\n\nurlpatterns = [path('orders/', list_orders)]\n",
+            ),
+        ];
+        assert_eq!(
+            declared(&files, "shop/urls.py", "list_orders"),
+            None,
+            "{views}"
+        );
+    }
+}

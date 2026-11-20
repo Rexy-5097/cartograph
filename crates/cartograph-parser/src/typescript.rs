@@ -214,15 +214,22 @@ enum Step<'t> {
 fn unwrap_typescript_value(mut node: Node<'_>) -> Node<'_> {
     while matches!(
         node.kind(),
-        "parenthesized_expression" | "as_expression" | "satisfies_expression" | "type_assertion"
+        "parenthesized_expression"
+            | "as_expression"
+            | "satisfies_expression"
+            | "non_null_expression"
+            | "type_assertion"
     ) {
+        // Comments are named children too: `(/* base */ '/api')` (V-10).
+        let mut cursor = node.walk();
+        let mut children = node
+            .named_children(&mut cursor)
+            .filter(|child| child.kind() != "comment");
         let inner = if node.kind() == "type_assertion" {
             // `<string>'/api'`: the expression follows the type.
-            let mut cursor = node.walk();
-            node.named_children(&mut cursor).last()
+            children.last()
         } else {
-            let mut cursor = node.walk();
-            node.named_children(&mut cursor).next()
+            children.next()
         };
         let Some(inner) = inner else {
             break;
@@ -868,6 +875,16 @@ impl Walker<'_> {
         if !self.scope.is_empty() {
             return;
         }
+        // A `let` or `var` may be reassigned at module load, so its
+        // declared value is not its value (fourth review, V-01).
+        let is_const = {
+            let mut cursor = node.walk();
+            node.kind() == "lexical_declaration"
+                && node
+                    .children(&mut cursor)
+                    .next()
+                    .is_some_and(|keyword| keyword.kind() == "const")
+        };
         let mut cursor = node.walk();
         for declarator in node.named_children(&mut cursor) {
             if declarator.kind() != "variable_declarator" {
@@ -877,9 +894,10 @@ impl Walker<'_> {
                 if name.kind() == "identifier" {
                     let name = self.text(name);
                     self.push_symbol(SymbolKind::Variable, &name, false, export, declarator);
-                    if let (Some(symbol), Some(value)) = (
+                    if let (Some(symbol), Some(value), true) = (
                         self.analysis.symbols.last_mut(),
                         declarator.child_by_field_name("value"),
+                        is_const,
                     ) {
                         symbol.value_span = Some(span_of(unwrap_typescript_value(value)));
                     }

@@ -337,17 +337,45 @@ fn binds_by_import(file: &FileAnalysis, name: &str) -> bool {
     })
 }
 
-/// Whether a star import in `file` may bind `name`: its module is outside the
-/// project, or declares the name (third review, U-10).
+/// Whether a star import in `file`, written after its last module-level
+/// declaration of `name`, may rebind it (third review, U-10).
+///
+/// A star import before the `def` is overridden by it, and a star module binds
+/// only module-level names, so neither counts (fourth review, V-07). A module
+/// outside the project, or one that binds the name by import or through a
+/// star import of its own, may (V-06). `__all__` is not read, so a module that
+/// declares the name but excludes it still counts.
 fn star_may_bind(modules: &ModuleIndex<'_>, file: &FileAnalysis, name: &str) -> bool {
+    let Some(last_declaration) = file
+        .symbols
+        .iter()
+        .filter(|s| s.name == name && s.enclosing.is_none())
+        .map(|s| s.span.start_line)
+        .max()
+    else {
+        return false;
+    };
     file.imports
         .iter()
-        .filter(|import| import.namespace_name.as_deref() == Some("*"))
+        .filter(|import| {
+            import.namespace_name.as_deref() == Some("*")
+                && import.span.start_line > last_declaration
+        })
         .any(|import| {
             modules
                 .resolve_python_module(&import.specifier, &file.path)
                 .and_then(|target| modules.file(&target))
-                .is_none_or(|module| module.symbols.iter().any(|s| s.name == name))
+                .is_none_or(|module| {
+                    module
+                        .symbols
+                        .iter()
+                        .any(|s| s.name == name && s.enclosing.is_none())
+                        || binds_by_import(module, name)
+                        || module
+                            .imports
+                            .iter()
+                            .any(|i| i.namespace_name.as_deref() == Some("*"))
+                })
         })
 }
 

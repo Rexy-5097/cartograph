@@ -502,3 +502,81 @@ BASE_O = settings.BASE or \"/internal\"
         );
     }
 }
+
+// ── Fourth review ────────────────────────────────────────────────────────
+
+#[test]
+fn a_let_or_var_is_not_a_constant() {
+    // V-01: a top-level `API = …` runs at module load, before any call.
+    let scope = scope_of(
+        "src/c.ts",
+        "export let A = '/api/a/';
+A = A + 'secret/';
+export var B = '/api/b/';
+export const C = '/api/c/';
+",
+    );
+    assert_eq!(evaluate_expression("A + 'x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("B + 'x'", &scope).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("C + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/c/x")
+    );
+}
+
+#[test]
+fn a_name_declared_twice_at_module_level_is_not_a_constant() {
+    // V-02, V-03: a later assignment, or a block declaration of the same name.
+    let ts = scope_of(
+        "src/c.ts",
+        "const A = '/api/a/';
+if (isProd) { const A = '/api/x/'; }
+{ let B = '/api/b/'; }
+",
+    );
+    assert_eq!(evaluate_expression("A + 'x'", &ts).as_literal(), None);
+    let py = scope_of(
+        "svc/c.py",
+        "BASE2 = \"/api/a/\"
+BASE2 = BASE2.replace(\"a\", \"x\")
+BASE3 = \"/api/a/\"
+if DEBUG:
+    BASE3 = \"/api/x/\"
+BASE4 = \"/api/a/\"
+",
+    );
+    assert_eq!(evaluate_expression("BASE2 + 'x'", &py).as_literal(), None);
+    assert_eq!(evaluate_expression("BASE3 + 'x'", &py).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("BASE4 + 'x'", &py)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_comment_or_a_non_null_assertion_does_not_hide_the_string() {
+    // V-10.
+    let ts = scope_of(
+        "src/c.ts",
+        "export const K = (/* base */ '/api/k/');\nexport const N = '/api/n/'!;\n",
+    );
+    for name in ["K", "N"] {
+        assert!(
+            evaluate_expression(&format!("{name} + 'x'"), &ts)
+                .as_literal()
+                .is_some(),
+            "{name}"
+        );
+    }
+    let py = scope_of("svc/c.py", "BASE = (  # c\n    \"/api/a/\"\n)\n");
+    assert_eq!(
+        evaluate_expression("BASE + 'x'", &py)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}

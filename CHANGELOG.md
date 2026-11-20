@@ -7,6 +7,47 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges found by a fourth independent review
+
+A fourth review found no false edge introduced by the third round's
+corrections, one correct edge they had lost, and older false edges in the same
+functions. Corrected, each with a regression test:
+
+- **A `let` or `var` is not a constant.** `let API = '/api'` followed by a
+  module-level `API = …` was read as `/api`. Only a TypeScript `const` binds.
+- **A name declared twice at module level is not a constant.**
+  `BASE = BASE.replace(…)`, a reassignment under `if`, and a `const` of the
+  same name declared again inside a block made the first, or the last, value
+  win.
+- **A star import written before a local view does not rebind it**, nor does
+  a star module that has the name only as a method. Both were refused by the
+  third round's rule; they are drawn to the local view again.
+- **A star module that binds the view by import, or through a star import of
+  its own, may rebind it**, and the view is refused.
+- **A comment inside parentheses, or a non-null `!`, does not hide the
+  string.** `( # legacy\n "t")` and `'/api'!` are read again.
+
+Known limits, each reproduced by the review on constructed code:
+
+- A Python constant changed by `+=`, a `for` target, `global`, or an
+  `import … as` of the same name keeps its string value.
+- A `Meta` option set inside an `if`, by a tuple assignment, by `+=` or as a
+  `for` target is not seen, and neither is a `Meta` rebound after its class.
+- A model base rebound after its class declaration (`Mix = Labelled`, a later
+  import of the same name, or a later project star import) is read as the
+  class. A star module that declares the base and then star-imports another
+  module is read as declaring it.
+- `__all__` is not read: a star module that declares a view but excludes it
+  from `__all__` still refuses the local view.
+- Further rare TypeScript rebindings of an imported axios are not seen: a
+  `for (var …)` used after the loop, a declaration in a different `switch`
+  case, a generator function's own name, `using`, and declarations inside a
+  `namespace`.
+- An f-string's doubled braces are not collapsed: `f"ord{{ers}}"` is read as
+  written.
+- `export let API = '/api'` is no longer bound even when it is never
+  reassigned: a recall cost of the `const`-only rule.
+
 ### Fixed — false edges found by a third independent review
 
 A third review of the corrections above reproduced false edges in the same
@@ -25,7 +66,7 @@ corrected, with a regression test:
 - **A default value or a type does not shadow axios.** `function f(c = Ax)`,
   `{ k = Ax }` and `k: typeof Ax` *use* the imported name; they were counted
   as rebinding it and the request was dropped.
-- **Every rebinding form shadows axios:** a `for … of`/`in` target, a `for`
+- **More rebinding forms shadow axios:** a `for … of`/`in` target, a `for`
   initialiser, a declaration in a `switch` case, a `var` anywhere in the
   function, a named function expression, and a renamed destructuring
   (`{ client: Ax }`).
@@ -36,8 +77,11 @@ corrected, with a regression test:
   table is refused.
 - **`class Meta(object):`** in a base is a plain `Meta` again; it had refused
   the child's table.
-- **A view defined in the URL conf and star-imported over is refused**, when
-  the star module declares the name or is outside the project.
+- **A view defined in the URL conf and star-imported over is refused**: a
+  star import written after the `def` whose module is outside the project, or
+  binds the name at module level by declaration, by import, or through a star
+  import of its own. A star import written before the `def` does not rebind
+  it.
 - **`import shop.legacy as Order` conflicts with `from shop.models import
   Order`**, so neither is drawn.
 - **A library base named `Model` is named as an assumption** in the derived
@@ -68,8 +112,9 @@ and false statements. Each is corrected, with a regression test:
   now the route itself (kind `route`, named by its path).
 - **A view imported after a local `def` of the same name is refused.** The
   import rebinds the name; the local `def` was preferred whatever the order.
-- **Every `Meta` in a model's inheritance is read, or the table is refused.**
-  A `Meta` that extends a class outside the model's bases
+- **Each `Meta` in a model's inheritance is read, or the table is refused**,
+  for `Meta` options assigned directly in the class body (see the limits in
+  the fourth review's entry). A `Meta` that extends a class outside the model's bases
   (`class Meta(CommonMeta)`), `Meta` bound by assignment, and a base inside
   the project that cannot be resolved (a `try`/`except` import, a base loaded
   from settings at runtime, a star import that two modules satisfy) now refuse
@@ -101,15 +146,16 @@ Known limits that remain, each reproduced by the review:
 
 - `db_table = N*"t"` and `app_label = Q%"y"`, written without spaces around a
   one-character left operand, are read as the literal. *(Fixed by the third
-  review's corrections, below.)*
+  review's corrections, above.)*
 - A constant whose initialiser is `x || '/api'` or `x && '/api'` is read as
-  `/api`. *(Fixed by the third review's corrections, below.)*
+  `/api`. *(Fixed by the third review's corrections, above.)*
 - A method and a module function of the same name in one file share a node
   (ADR-0011), so a call to the function can appear to reach the method's
   requests.
 - Rebinding a name through a `for` target or `global` is not seen. *(For a
-  TypeScript `for` target, fixed below; for a Python URL conf, still a
-  limit.)*
+  TypeScript `for` target in scope at the call, fixed above. Still a limit for
+  a Python URL conf or module constant, and for a TypeScript `for (var …)`
+  used after its loop.)*
 - `const axios = require('axios')` is not recognised as axios. A receiver
   *named* `axios`, `client`, `http` or `api` with a verb method is a request by
   name, shadowed or not, as before.

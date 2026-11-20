@@ -91,8 +91,16 @@ impl Scope {
     #[must_use]
     pub fn from_file(symbols: &[Symbol], strings: &[StringFact]) -> Self {
         let mut scope = Self::new();
-        for symbol in symbols {
-            if symbol.kind != SymbolKind::Variable || symbol.enclosing.is_some() {
+        let module_variables = || {
+            symbols
+                .iter()
+                .filter(|s| s.kind == SymbolKind::Variable && s.enclosing.is_none())
+        };
+        for symbol in module_variables() {
+            // Assigned twice (`BASE = BASE.replace(…)`), or declared again in
+            // a block (`if (x) { const A = … }`): which value a use sees is
+            // not decided by the declaration (fourth review, V-02, V-03).
+            if module_variables().filter(|s| s.name == symbol.name).count() > 1 {
                 continue;
             }
             // The initialiser is the string fact whose span is the value's
