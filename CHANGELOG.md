@@ -7,6 +7,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges and lost edges found by a sixth independent review
+
+A sixth review found no false edge in the constant rules, two uncommon false
+edges introduced by the fifth round's URL-conf rule, and correct constants it
+refused. Corrected, each with a regression test:
+
+- **A URL conf's star import counts until the last use of the name.** One
+  answer serves every route that names a view, so a second route after the
+  star import (`urlpatterns += [...]` under `if settings.DEBUG:`) refuses the
+  local view; an earlier route that did see it is refused with it.
+- **A route written inside a function runs when the function is called**,
+  which is treated as the end of the module: a star import after the `def` of
+  that function may rebind the view, and a view defined after the function
+  but before the call is its binding.
+- **A TypeScript `export * from` binds nothing locally**, so a barrel
+  `index.ts` that declares a base URL and then re-exports modules keeps the
+  constant, for itself and for its importers.
+- **A Python import inside a function or class body binds that body's name**,
+  not the module's, and an unconditional import written before the
+  assignment is overridden by it. Either kept a module constant from being
+  read.
+- **An object-literal method is not a binding** of its name at module level.
+
+Known limits, each reproduced by the review:
+
+- A Python constant rebound by a tuple assignment (`P, Q = "/x", 1`) keeps its
+  first value, as do the forms listed above (`for`, `global`, `+=`, `with`,
+  `:=`).
+- An import under `if TYPE_CHECKING:` refuses a module constant of the same
+  name, although it never runs.
+- A Python star import after a module constant refuses it, even when the star
+  module binds no such name.
+- A function or class declared inside a top-level callback counts as a
+  module binding of its name, as a `const` there does.
+
 ### Fixed — false edges found by a fifth independent review
 
 A fifth review found two false edges introduced by the fourth round's URL-conf
@@ -18,7 +53,9 @@ binding. Corrected, each with a regression test:
   Python built the list with the star import's function. A `def` under a
   module-level `if`, `try` or `with` after a star import is refused, because
   the star import's binding is used when the branch does not run. A star
-  import written after the use does not affect it.
+  import written after the use does not affect it. *(Narrowed by the sixth
+  review's corrections, above: after the last use, and a use inside a
+  function counts as running at the end of the module.)*
 - **A star chain that cannot bind the view keeps the local view**: a nested
   star module that binds no such name, or a chain that leads back to the URL
   conf itself.
@@ -74,7 +111,8 @@ functions. Corrected, each with a regression test:
 Known limits, each reproduced by the review on constructed code:
 
 - A Python constant changed by `+=`, a `for` target, `global`, or an
-  `import … as` of the same name keeps its string value.
+  `import … as` of the same name keeps its string value. *(`import … as` is
+  refused since the fifth review's corrections; the rest remain.)*
 - A `Meta` option set inside an `if`, by a tuple assignment, by `+=` or as a
   `for` target is not seen, and neither is a `Meta` rebound after its class,
   nor a model's whole `class Meta` declared under `if`/`else`.

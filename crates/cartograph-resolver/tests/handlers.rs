@@ -789,3 +789,46 @@ fn a_star_chain_that_cannot_bind_the_name_keeps_the_local_view() {
         );
     }
 }
+
+// ── Sixth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_later_use_after_a_star_import_refuses_the_name() {
+    // X-01: one answer serves every use of the name, so a use after the star
+    // import, here a DEBUG-only route, refuses it.
+    let files = star_files(
+        "from django.conf import settings\nfrom django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = [path('a/', list_orders)]\nfrom .views import *\nif settings.DEBUG:\n    urlpatterns += [path('b/', list_orders)]\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+}
+
+#[test]
+fn a_use_inside_a_function_runs_when_the_function_is_called() {
+    // X-02: called after the star import, so the star import's binding.
+    let files = star_files(
+        "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\nfrom .views import *\nurlpatterns = get_patterns()\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+    // X-03: the star import comes first, so the def is the binding when
+    // the function runs.
+    let files = star_files(
+        "from django.urls import path\nfrom .views import *\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = get_patterns()\n",
+    );
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}
+
+#[test]
+fn a_def_under_try_or_with_after_a_star_import_is_refused() {
+    // X-09: `try` and `with` are conditional as `if` is.
+    for urls in [
+        "from django.urls import path\nfrom .views import *\n\ntry:\n    def list_orders(request):\n        return None\nexcept ImportError:\n    pass\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        "from django.urls import path\nfrom .views import *\n\nwith open('x') as f:\n    def list_orders(request):\n        return None\n\nurlpatterns = [path('orders/', list_orders)]\n",
+    ] {
+        let files = star_files(urls);
+        assert_eq!(
+            declared(&files, "shop/urls.py", "list_orders"),
+            None,
+            "{urls}"
+        );
+    }
+}

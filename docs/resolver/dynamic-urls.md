@@ -61,11 +61,18 @@ this analysis does not model. Constant chains resolve transitively through a
 depth limit, so a cycle terminates as `Unknown`.
 
 A constant binds only when it is a top-level TypeScript `const` or a Python
-assignment at module level; nothing else in the file binds the name (another
-assignment, a `def` or `class`, an import, or a star import after it); and
-its value *is* one of the forms above. A name the file binds in any way is
-never taken from an import. Bindings by `with … as`, `:=`, `global` and `+=`
-are not seen. The parser
+assignment at module level, and its value *is* one of the forms above, and
+nothing else in the file is seen to bind the name:
+- **another assignment, `def` or `class`**;
+- **an import** of the name, except that in Python an import inside a
+  function or class body does not count, and neither does an unconditional
+  import written before the assignment;
+- **a Python star import** written after it (a TypeScript `export * from`
+  binds nothing locally).
+
+A name the file declares at module level is never taken from an import.
+Bindings by a tuple assignment, a `for` target, `with … as`, `:=`, `global`
+and `+=` are not seen, so they do not refuse the constant. The parser
 records each variable's value span, with parentheses, `as` and `satisfies`
 looked through, and the string must cover it exactly: `'/api' as const`
 binds, while `isProd ? PROD : '/api'`, `base ?? '/api'` and

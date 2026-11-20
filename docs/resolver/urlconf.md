@@ -102,9 +102,12 @@ of that name in the URL conf. Refused when:
 - `function.as_view`, and a bare class without `as_view`;
 - a name both declared in the URL conf and imported into it;
 - a name declared in the URL conf where a star import may supply the
-  binding the `urlpatterns` entry sees: a star import between the declaration
-  and the use, or before the use when the declaration is conditional or comes
-  after it. A star module may bind the name when it is outside the project,
+  binding a route sees: a star import between the declaration and the
+  *last* route using the name, or before it when the declaration is
+  conditional or comes after the first route. A route written inside a
+  function counts as running at the end of the module. One answer serves
+  every route of a name, so a route that saw the local view is refused with
+  the rest. A star module may bind the name when it is outside the project,
   or binds it at module level by declaration, by import, or through a star
   chain that may (a chain back to the URL conf adds nothing). `__all__` is
   not read, and bindings by a tuple, `for` or `global` are not seen.

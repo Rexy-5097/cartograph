@@ -96,45 +96,68 @@ impl Scope {
     /// seen as rebound; [`Scope::from_analysis`] sees it.
     #[must_use]
     pub fn from_file(symbols: &[Symbol], strings: &[StringFact]) -> Self {
-        Self::collect(symbols, strings, &HashSet::new(), &[], false)
+        Self::collect(symbols, strings, &[], &[], false)
     }
 
     /// Collects module-scope string constants, as [`Scope::from_file`], also
-    /// refusing a name the file's imports bind: `try: from cfg import P`
+    /// refusing a name the file's imports rebind: `try: from cfg import P`
     /// `except ImportError: P = "/api"` makes `P` whichever ran (fifth
-    /// review, W-06). A star import after the assignment may rebind it.
+    /// review, W-06).
+    ///
+    /// A Python import rebinds a module constant when it is at module level
+    /// (not inside a `def` or `class` body) and comes after the assignment,
+    /// or either of them is conditional. A Python star import after the
+    /// assignment may rebind it. A TypeScript `export * from` binds nothing
+    /// locally (sixth review, X-04, X-05).
     #[must_use]
     pub fn from_analysis(file: &FileAnalysis) -> Self {
-        let mut imported = HashSet::new();
+        let python = file.language == SourceLanguage::Python;
+        // Python imports inside a function or class body bind that body's
+        // names, not the module's.
+        let bodies: Vec<(u32, u32)> = file
+            .symbols
+            .iter()
+            .filter(|s| {
+                s.enclosing.is_none() && matches!(s.kind, SymbolKind::Function | SymbolKind::Class)
+            })
+            .map(|s| (s.span.start_line, s.span.end_line))
+            .collect();
+        let mut imported = Vec::new();
         let mut star_lines = Vec::new();
         for import in &file.imports {
+            let line = import.span.start_line;
+            if python
+                && bodies
+                    .iter()
+                    .any(|(start, end)| *start < line && line <= *end)
+            {
+                continue;
+            }
+            let conditional = python && import.span.start_column != 1;
+            let mut bind = |name: &str| imported.push((name.to_owned(), line, conditional));
             for named in &import.named {
-                imported.insert(
-                    named
-                        .local
-                        .clone()
-                        .unwrap_or_else(|| named.imported.clone()),
-                );
+                bind(named.local.as_deref().unwrap_or(named.imported.as_str()));
             }
             match import.namespace_name.as_deref() {
-                Some("*") => star_lines.push(import.span.start_line),
-                Some(name) => {
-                    imported.insert(name.to_owned());
+                Some("*") => {
+                    if python {
+                        star_lines.push(line);
+                    }
                 }
+                Some(name) => bind(name),
                 None => {}
             }
             if let Some(name) = &import.default_name {
-                imported.insert(name.clone());
+                bind(name);
             }
         }
-        let python = file.language == SourceLanguage::Python;
         Self::collect(&file.symbols, &file.strings, &imported, &star_lines, python)
     }
 
     fn collect(
         symbols: &[Symbol],
         strings: &[StringFact],
-        imported: &HashSet<String>,
+        imported: &[(String, u32, bool)],
         star_lines: &[u32],
         python: bool,
     ) -> Self {
@@ -146,7 +169,12 @@ impl Scope {
         // namespace, and a Python bare annotation `P: str` (fifth review,
         // W-07). Every name the file binds blocks an import of that name.
         let mut bindings: HashMap<&str, usize> = HashMap::new();
-        for symbol in symbols.iter().filter(|s| s.enclosing.is_none()) {
+        // An object-literal method has no enclosing symbol but is a property,
+        // not a binding (sixth review, X-06).
+        for symbol in symbols
+            .iter()
+            .filter(|s| s.enclosing.is_none() && s.kind != SymbolKind::Method)
+        {
             scope.declared.insert(symbol.name.clone());
             let binds_no_value =
                 matches!(symbol.kind, SymbolKind::Interface | SymbolKind::TypeAlias)
@@ -171,9 +199,17 @@ impl Scope {
             // of the same name), by an import, or possibly by a later star
             // import: which value a use sees is not decided here (V-02, V-03,
             // W-06).
+            let line = symbol.span.start_line;
+            // A Python statement not in column 1 is inside a compound
+            // statement (`try`, `if`) and may not run.
+            let conditional = python && symbol.span.start_column != 1;
+            let rebound_by_import = imported.iter().any(|(name, at, import_conditional)| {
+                name == &symbol.name
+                    && (!python || *at > line || *import_conditional || conditional)
+            });
             if bindings.get(symbol.name.as_str()).copied().unwrap_or(0) > 1
-                || imported.contains(&symbol.name)
-                || star_lines.iter().any(|line| *line > symbol.span.start_line)
+                || rebound_by_import
+                || star_lines.iter().any(|at| *at > line)
             {
                 continue;
             }

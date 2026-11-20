@@ -673,3 +673,64 @@ fn a_name_the_file_declares_is_not_supplied_by_an_import() {
         );
     }
 }
+
+// ── Sixth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_typescript_export_star_binds_nothing_locally() {
+    // X-04: a barrel `index.ts` that declares a base and re-exports modules.
+    for src in [
+        "export const BASE = '/api/a/';\nexport * from './types';\n",
+        "export const BASE = '/api/a/';\nexport * as T from './types';\n",
+    ] {
+        let scope = file_scope("src/api/index.ts", src);
+        assert_eq!(
+            evaluate_expression("BASE + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_python_import_that_cannot_rebind_the_constant_does_not_refuse_it() {
+    // X-05: an import inside a function binds that function's local; an
+    // unconditional import before the assignment is overridden by it.
+    for src in [
+        "P = \"/api/a/\"\n\n\ndef helper():\n    from svc.cfg import P\n    return P\n",
+        "from svc.cfg import P\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // A conditional import before a conditional assignment is the fallback
+    // idiom, and stays refused (W-06).
+    let scope = file_scope(
+        "svc/c.py",
+        "try:\n    from svc.cfg import P\nexcept ImportError:\n    P = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn an_object_literal_method_is_not_a_binding() {
+    // X-06.
+    let scope = file_scope(
+        "src/c.ts",
+        "export const D = '/api/a/';\nexport const handlers = { D() { return 1; } };\n",
+    );
+    assert_eq!(
+        evaluate_expression("D + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
