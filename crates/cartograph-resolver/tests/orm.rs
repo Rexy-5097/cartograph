@@ -1603,8 +1603,10 @@ fn a_literal_holding_an_escape_is_not_read_as_a_name() {
 }
 
 #[test]
-fn an_alias_is_an_access_to_the_model_it_was_imported_as() {
-    // S-09: `Ledger as Order` makes `Order` mean Ledger.
+fn an_alias_is_not_read_as_the_model_whose_name_it_reuses() {
+    // S-09: `Ledger as Order` makes `Order` mean Ledger. The access is not
+    // drawn to `Order`; drawing it to Ledger through the alias is not
+    // supported (third review, U-12).
     let a = orm(&[
         (
             "shop/models.py",
@@ -1618,6 +1620,11 @@ fn an_alias_is_an_access_to_the_model_it_was_imported_as() {
     assert!(
         a.accesses.iter().all(|x| x.model != "Order"),
         "an access to Ledger was attributed to Order: {:?}",
+        a.accesses
+    );
+    assert!(
+        a.accesses.iter().all(|x| x.model != "Ledger"),
+        "the alias is now followed; update this test and the CHANGELOG: {:?}",
         a.accesses
     );
 }
@@ -1701,4 +1708,100 @@ class Order(Mixin, models.Model):
         ),
     ]);
     assert_eq!(a.models["Order"].table.name(), None);
+}
+
+// ── Third review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_star_module_that_binds_a_base_by_assignment_is_not_skipped() {
+    // U-07: `core/b.py` binds `Mixin` by assignment; it was read as "not here",
+    // and `core/a.py`'s class won although `b`'s star import comes last.
+    let a = orm(&[
+        ("core/a.py", "class Mixin:\n    pass\n"),
+        (
+            "core/c.py",
+            "class Labelled:\n    class Meta:\n        app_label = \"billing\"\n",
+        ),
+        (
+            "core/b.py",
+            "from core.c import Labelled\n\nMixin = Labelled\n",
+        ),
+        ("core/d.py", "from extlib.mixins import Mixin\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.a import *\nfrom core.b import *\n\n\nclass S1(Mixin, models.Model):\n    pass\n",
+        ),
+        (
+            "shop/more.py",
+            "from django.db import models\nfrom core.a import *\nfrom core.d import *\n\n\nclass S19(Mixin, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S1"].table.name(), None);
+    assert_eq!(a.models["S19"].table.name(), None);
+}
+
+#[test]
+fn a_base_declared_twice_is_not_read() {
+    // U-08: `if …: class Base … else: class Base …`.
+    let a = orm(&[
+        (
+            "core/bases.py",
+            "import os\n\nif os.environ.get('X'):\n    class Mixin:\n        pass\nelse:\n    class Mixin:\n        class Meta:\n            app_label = \"billing\"\n",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.bases import Mixin\n\n\nclass S15(Mixin, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S15"].table.name(), None);
+}
+
+#[test]
+fn a_base_meta_extending_object_sets_nothing() {
+    // U-09: `class Meta(object):` is the Python 2 spelling of a plain Meta.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Stamped(models.Model):\n    class Meta(object):\n        abstract = True\n\n\nclass S10(Stamped):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S10"].table.name(), Some("shop_s10"));
+}
+
+#[test]
+fn a_library_base_named_model_is_an_assumption_unless_it_is_djangos() {
+    // U-13: only Django's own `Model` is silent.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom extlib.orm import Model\n\n\nclass E1(Model, models.Model):\n    pass\n\n\nclass E2(models.Model):\n    pass\n",
+        ),
+    ]);
+    let TableName::Derived { rule, .. } = &a.models["E1"].table else {
+        panic!("E1: {:?}", a.models["E1"].table);
+    };
+    assert!(rule.contains("assumes Model"), "{rule}");
+    let TableName::Derived { rule, .. } = &a.models["E2"].table else {
+        panic!("E2: {:?}", a.models["E2"].table);
+    };
+    assert!(!rule.contains("assumes"), "{rule}");
+}
+
+#[test]
+fn an_option_is_read_whatever_its_spacing_or_form() {
+    // U-16 and T-010: alignment, parentheses, annotations and a chained
+    // assignment all leave the value a literal; `N*"t"` does not.
+    let a = orm(&[(
+        "shop/models.py",
+        "from django.db import models\n\n\nclass Al(models.Model):\n    class Meta:\n        db_table     = \"aligned\"\n\n\nclass P(models.Model):\n    class Meta:\n        db_table = (\n            \"paren\"\n        )\n\n\nclass An(models.Model):\n    class Meta:\n        db_table: str = \"annotated\"\n\n\nclass Ch(models.Model):\n    class Meta:\n        db_table = x = \"chained\"\n\n\nclass Op(models.Model):\n    class Meta:\n        db_table = N*\"t\"\n",
+    )]);
+    assert_eq!(a.models["Al"].table.name(), Some("aligned"));
+    assert_eq!(a.models["P"].table.name(), Some("paren"));
+    assert_eq!(a.models["An"].table.name(), Some("annotated"));
+    assert_eq!(a.models["Ch"].table.name(), Some("chained"));
+    assert_ne!(a.models["Op"].table.name(), Some("t"));
 }

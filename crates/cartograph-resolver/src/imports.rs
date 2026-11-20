@@ -391,6 +391,15 @@ impl<'a> ModuleIndex<'a> {
     fn conflicting_python_bindings(&self, file: &FileAnalysis, name: &str) -> Vec<String> {
         let mut targets: Vec<String> = Vec::new();
         for import in &file.imports {
+            // `import shop.legacy as Order` binds `Order` to a module, which
+            // conflicts with `from shop.models import Order` (third review,
+            // U-11).
+            if import.namespace_name.as_deref() == Some(name) {
+                let target = format!("{}:*", import.specifier);
+                if !targets.contains(&target) {
+                    targets.push(target);
+                }
+            }
             for named in &import.named {
                 if named.local.as_deref().unwrap_or(named.imported.as_str()) != name {
                     continue;

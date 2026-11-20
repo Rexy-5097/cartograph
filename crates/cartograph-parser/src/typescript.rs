@@ -209,6 +209,29 @@ enum Step<'t> {
     LeaveConcat,
 }
 
+/// The value inside parentheses and type assertions: `('/api' as const)` is
+/// the string.
+fn unwrap_typescript_value(mut node: Node<'_>) -> Node<'_> {
+    while matches!(
+        node.kind(),
+        "parenthesized_expression" | "as_expression" | "satisfies_expression" | "type_assertion"
+    ) {
+        let inner = if node.kind() == "type_assertion" {
+            // `<string>'/api'`: the expression follows the type.
+            let mut cursor = node.walk();
+            node.named_children(&mut cursor).last()
+        } else {
+            let mut cursor = node.walk();
+            node.named_children(&mut cursor).next()
+        };
+        let Some(inner) = inner else {
+            break;
+        };
+        node = inner;
+    }
+    node
+}
+
 /// Is `name` rebound between the module and this call: a parameter of an
 /// enclosing function, or a declaration in an enclosing block?
 ///
@@ -216,79 +239,143 @@ enum Step<'t> {
 /// `axios` in a file that imports axios was read as the library (second
 /// review, S-12).
 fn is_shadowed(name: &str, call: Node<'_>, source: &str) -> bool {
-    let text = |node: Node<'_>| node.utf8_text(source.as_bytes()).unwrap_or_default();
-    let declares = |node: Node<'_>| -> bool {
-        let mut stack = vec![node];
-        while let Some(current) = stack.pop() {
-            if matches!(
-                current.kind(),
-                "identifier" | "shorthand_property_identifier_pattern"
-            ) && text(current) == name
-            {
-                return true;
-            }
-            // Do not look into default values or nested functions.
-            if matches!(
-                current.kind(),
-                "arrow_function" | "function_expression" | "function"
-            ) {
-                continue;
-            }
-            let mut cursor = current.walk();
-            for child in current.named_children(&mut cursor) {
-                if current.kind() == "assignment_pattern"
-                    && current.child_by_field_name("right") == Some(child)
-                {
-                    continue;
-                }
-                if current.kind() == "variable_declarator"
-                    && current.child_by_field_name("value") == Some(child)
-                {
-                    continue;
-                }
-                stack.push(child);
-            }
-        }
-        false
+    let named = |node: Node<'_>| {
+        node.child_by_field_name("name")
+            .is_some_and(|n| n.utf8_text(source.as_bytes()).unwrap_or_default() == name)
     };
     let mut node = call;
     while let Some(parent) = node.parent() {
         if parent.kind() == "program" {
             return false;
         }
-        if let Some(parameters) = parent.child_by_field_name("parameters") {
-            if declares(parameters) {
-                return true;
-            }
-        }
-        if let Some(parameter) = parent.child_by_field_name("parameter") {
-            if declares(parameter) {
-                return true;
-            }
-        }
-        if matches!(
-            parent.kind(),
-            "statement_block" | "class_body" | "switch_body"
-        ) {
-            let mut cursor = parent.walk();
-            for statement in parent.named_children(&mut cursor) {
-                let rebinds = match statement.kind() {
-                    "lexical_declaration" | "variable_declaration" => declares(statement),
-                    "function_declaration"
-                    | "class_declaration"
-                    | "generator_function_declaration" => statement
-                        .child_by_field_name("name")
-                        .is_some_and(|n| text(n) == name),
-                    _ => false,
-                };
-                if rebinds {
-                    return true;
+        let binds_here = |field: &str| {
+            parent
+                .child_by_field_name(field)
+                .is_some_and(|n| binds(n, name, source))
+        };
+        let shadowed = binds_here("parameters")
+            || binds_here("parameter")
+            || match parent.kind() {
+                // `function Ax() { Ax(...) }` names itself inside its body.
+                "function_expression" | "function" => named(parent),
+                // `for (const Ax of xs)`, `for (let Ax = …; …)`.
+                "for_in_statement" => binds_here("left"),
+                "for_statement" => binds_here("initializer"),
+                "statement_block" | "class_body" | "switch_case" | "switch_default" => {
+                    declares(parent, name, source)
                 }
+                _ => false,
             }
+            // `var` anywhere in a function body binds for the whole function.
+            || (is_function_like(parent.kind())
+                && parent
+                    .child_by_field_name("body")
+                    .is_some_and(|body| hoists_var(body, name, source)));
+        if shadowed {
+            return true;
         }
         node = parent;
     }
     false
+}
+
+fn is_function_like(kind: &str) -> bool {
+    matches!(
+        kind,
+        "arrow_function"
+            | "function_expression"
+            | "function"
+            | "function_declaration"
+            | "generator_function_declaration"
+            | "method_definition"
+    )
+}
+
+/// Whether the pattern or declaration `node` binds `name`.
+///
+/// Only binding positions count: a default value (`c = Ax`), a type
+/// (`typeof Ax`), an initialiser and a member target (`for (o.Ax of xs)`)
+/// *use* the name, and counting them refused real requests (third review,
+/// U-04).
+fn binds(node: Node<'_>, name: &str, source: &str) -> bool {
+    let mut stack = vec![node];
+    while let Some(current) = stack.pop() {
+        let kind = current.kind();
+        if matches!(kind, "identifier" | "shorthand_property_identifier_pattern") {
+            if current.utf8_text(source.as_bytes()).unwrap_or_default() == name {
+                return true;
+            }
+            continue;
+        }
+        if is_function_like(kind)
+            || matches!(
+                kind,
+                "type_annotation"
+                    | "type_arguments"
+                    | "type_parameters"
+                    | "type_query"
+                    | "member_expression"
+                    | "subscript_expression"
+                    | "call_expression"
+            )
+        {
+            continue;
+        }
+        // The fields that hold an expression rather than a pattern. A
+        // `pair_pattern`'s `value` *is* a pattern (`{ a: Ax }`).
+        let expression_fields: &[&str] = match kind {
+            "variable_declarator" | "required_parameter" | "optional_parameter" => {
+                &["value", "type"]
+            }
+            "assignment_pattern" | "object_assignment_pattern" => &["right"],
+            "pair_pattern" => &["key"],
+            _ => &["type", "return_type"],
+        };
+        let skip: Vec<Node<'_>> = expression_fields
+            .iter()
+            .filter_map(|field| current.child_by_field_name(field))
+            .collect();
+        let mut cursor = current.walk();
+        for child in current.named_children(&mut cursor) {
+            if !skip.contains(&child) {
+                stack.push(child);
+            }
+        }
+    }
+    false
+}
+
+/// Whether a `var` anywhere in this function body, outside nested functions,
+/// binds `name`.
+fn hoists_var(body: Node<'_>, name: &str, source: &str) -> bool {
+    let mut stack = vec![body];
+    while let Some(current) = stack.pop() {
+        if current.kind() == "variable_declaration" && binds(current, name, source) {
+            return true;
+        }
+        if is_function_like(current.kind()) && current != body {
+            continue;
+        }
+        let mut cursor = current.walk();
+        stack.extend(current.named_children(&mut cursor));
+    }
+    false
+}
+
+/// Whether a statement directly in `container` declares `name`.
+fn declares(container: Node<'_>, name: &str, source: &str) -> bool {
+    let mut cursor = container.walk();
+    container
+        .named_children(&mut cursor)
+        .any(|statement| match statement.kind() {
+            "lexical_declaration" | "variable_declaration" => binds(statement, name, source),
+            "function_declaration" | "class_declaration" | "generator_function_declaration" => {
+                statement
+                    .child_by_field_name("name")
+                    .is_some_and(|n| n.utf8_text(source.as_bytes()).unwrap_or_default() == name)
+            }
+            _ => false,
+        })
 }
 
 /// Is this declarator written at the top level of the module?
@@ -790,6 +877,12 @@ impl Walker<'_> {
                 if name.kind() == "identifier" {
                     let name = self.text(name);
                     self.push_symbol(SymbolKind::Variable, &name, false, export, declarator);
+                    if let (Some(symbol), Some(value)) = (
+                        self.analysis.symbols.last_mut(),
+                        declarator.child_by_field_name("value"),
+                    ) {
+                        symbol.value_span = Some(span_of(unwrap_typescript_value(value)));
+                    }
                 }
                 // Destructuring patterns are skipped in M01 (documented).
             }
@@ -817,6 +910,7 @@ impl Walker<'_> {
             // shared and TS fills it when a milestone needs it.
             bases: Vec::new(),
             span: span_of(node),
+            value_span: None,
         });
     }
 

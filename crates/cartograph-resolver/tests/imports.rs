@@ -400,3 +400,21 @@ def later():
         "got {resolution:?}"
     );
 }
+
+#[test]
+fn a_module_imported_under_a_models_name_conflicts_with_it() {
+    // Third review, U-11: `import shop.legacy as Order` rebinds `Order`.
+    let files = [
+        TWO_FILTERS[0],
+        ("shop/legacy.py", "X = 1\n"),
+        (
+            "shop/views.py",
+            "from shop.models import Filter\nimport shop.legacy as Filter\n\n\ndef v(request):\n    return Filter.objects.all()\n",
+        ),
+    ];
+    let resolution = resolve(&files, "shop/views.py", "Filter");
+    assert!(
+        matches!(resolution, Resolution::Ambiguous { .. }),
+        "got {resolution:?}"
+    );
+}

@@ -95,26 +95,15 @@ impl Scope {
             if symbol.kind != SymbolKind::Variable || symbol.enclosing.is_some() {
                 continue;
             }
-            // The initialiser is the string fact inside the declaration's own
-            // span. Position is what ties them together; M01/M02 do not record
-            // the link directly. It must be the *whole* initialiser: exactly
-            // one string fact, ending where the declaration ends.
-            // `isProd ? '/api' : '/internal'` holds two and
-            // `'/api'.replace(…)` ends early; binding the first string read
-            // both as `/api` (second review, S-08).
-            let mut inside = strings.iter().filter(|s| {
-                let span = s.span();
-                span.start_line >= symbol.span.start_line
-                    && span.end_line <= symbol.span.end_line
-                    && span.start_column >= symbol.span.start_column
-            });
-            if let (Some(fact), None) = (inside.next(), inside.next()) {
-                let span = fact.span();
-                if span.end_line == symbol.span.end_line
-                    && span.end_column == symbol.span.end_column
-                {
-                    scope.bind(&symbol.name, from_string_fact(fact));
-                }
+            // The initialiser is the string fact whose span is the value's
+            // own span, which the parser records with parentheses and type
+            // assertions looked through (T-010). `x ? A : '/b'` and
+            // `'/api'.replace(…)` contain a string and are not one.
+            let Some(value) = symbol.value_span else {
+                continue;
+            };
+            if let Some(fact) = strings.iter().find(|s| s.span() == value) {
+                scope.bind(&symbol.name, from_string_fact(fact));
             }
         }
         scope

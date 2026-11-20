@@ -487,28 +487,18 @@ fn meta_app_label(python: &[&FileAnalysis], model: &OrmModel) -> Option<Result<S
 /// (review R-13). The literal must be the only string in the assignment,
 /// start straight after `name =` and end where the assignment ends.
 fn assigned_literal(file: &FileAnalysis, declaration: &Symbol) -> Option<String> {
-    let within = |span: &cartograph_parser::model::Span| {
-        span.start_line >= declaration.span.start_line && span.end_line <= declaration.span.end_line
-    };
-    let mut strings = file.strings.iter().filter(|fact| match fact {
-        StringFact::Literal { span, .. }
-        | StringFact::Template { span, .. }
-        | StringFact::Concatenation { span, .. } => within(span),
-    });
-    let (Some(StringFact::Literal { value, span }), None) = (strings.next(), strings.next()) else {
-        return None;
-    };
-    let name_width = u32::try_from(declaration.name.chars().count()).ok()?;
-    let gap = span
-        .start_column
-        .checked_sub(declaration.span.start_column + name_width)?;
-    let whole_value = span.start_line == declaration.span.start_line
-        && (1..=3).contains(&gap)
-        && span.end_line == declaration.span.end_line
-        && span.end_column == declaration.span.end_column;
-    // An escape (`"ord\x65rs"`) is not interpreted here, so the text is not
-    // the name (second review, S-18).
-    (whole_value && !value.contains('\\')).then(|| value.clone())
+    // The literal is the whole value when its span is the value's span, which
+    // the parser records from the syntax (T-010). Positions alone mistook
+    // `N*"t"` for `"t"` and refused `db_table     = "x"`.
+    let value = declaration.value_span?;
+    file.strings.iter().find_map(|fact| match fact {
+        // An escape (`"ord\x65rs"`) is not interpreted here, so the text is
+        // not the name (second review, S-18).
+        StringFact::Literal { value: text, span } if *span == value && !text.contains('\\') => {
+            Some(text.clone())
+        }
+        _ => None,
+    })
 }
 
 /// Whether the table options a model inherits cannot be shown to be its own.
@@ -565,9 +555,14 @@ fn inherits_table_options(
                     let Some(base_file) = python.iter().find(|f| f.path == declared_in) else {
                         return true;
                     };
-                    let Some(base_class) = base_file.symbols.iter().find(|s| {
+                    let mut declarations = base_file.symbols.iter().filter(|s| {
                         s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == name
-                    }) else {
+                    });
+                    // Declared twice (`if …: class X … else: class X …`), the
+                    // base is whichever runs; neither can be read as the one
+                    // (third review, U-08).
+                    let (Some(base_class), None) = (declarations.next(), declarations.next())
+                    else {
                         return true;
                     };
                     pending.push((base_file, base_class, true));
@@ -629,8 +624,36 @@ fn through_star_imports(
     depth: usize,
     visited: &mut HashSet<String>,
 ) -> Option<(String, String)> {
-    if depth > 8 || !visited.insert(at.path.clone()) {
-        return None;
+    match star_binding(index, at, name, depth, visited) {
+        StarBinding::Class(file, declared) => Some((file, declared)),
+        StarBinding::Absent | StarBinding::Unknown => None,
+    }
+}
+
+/// What a module's star imports bind a name to.
+enum StarBinding {
+    /// Exactly one class, in the project.
+    Class(String, String),
+    /// Nothing in the star chain binds the name.
+    Absent,
+    /// Something binds it that is not one readable class: a variable, an
+    /// import leaving the project, two candidates. It must not be ignored, or
+    /// another star module's class would win (third review, U-07).
+    Unknown,
+}
+
+fn star_binding(
+    index: &ModuleIndex<'_>,
+    at: &FileAnalysis,
+    name: &str,
+    depth: usize,
+    visited: &mut HashSet<String>,
+) -> StarBinding {
+    if depth > 8 {
+        return StarBinding::Unknown;
+    }
+    if !visited.insert(at.path.clone()) {
+        return StarBinding::Absent;
     }
     let mut hits: Vec<(String, String)> = Vec::new();
     for import in at
@@ -638,31 +661,48 @@ fn through_star_imports(
         .iter()
         .filter(|i| i.namespace_name.as_deref() == Some("*"))
     {
-        let target = index.resolve_python_module(&import.specifier, &at.path)?;
-        let module = index.file(&target)?;
+        let Some(target) = index.resolve_python_module(&import.specifier, &at.path) else {
+            return StarBinding::Unknown; // a star import that leaves the project
+        };
+        let Some(module) = index.file(&target) else {
+            return StarBinding::Unknown;
+        };
         let declared: Vec<&Symbol> = module
             .symbols
             .iter()
             .filter(|s| s.name == name && s.enclosing.is_none())
             .collect();
+        let binds_by_name = module.imports.iter().any(|i| {
+            i.named
+                .iter()
+                .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+        });
         let hit = match declared.as_slice() {
-            [only] if only.kind == SymbolKind::Class => Some((target.clone(), name.to_owned())),
-            [] => match crate::handlers::resolve_reference(index, module, name) {
-                Some((file, declared_name, _, _)) => Some((file, declared_name)),
-                None => through_star_imports(index, module, name, depth + 1, visited),
-            },
-            // Declared, but not as one class.
-            _ => return None,
-        };
-        if let Some(hit) = hit {
-            if !hits.contains(&hit) {
-                hits.push(hit);
+            [only] if only.kind == SymbolKind::Class && !binds_by_name => {
+                (target.clone(), name.to_owned())
             }
+            [] if binds_by_name => match crate::handlers::resolve_reference(index, module, name) {
+                Some((file, declared_name, _, _)) => (file, declared_name),
+                None => return StarBinding::Unknown,
+            },
+            [] => match star_binding(index, module, name, depth + 1, visited) {
+                StarBinding::Class(file, declared_name) => (file, declared_name),
+                StarBinding::Absent => continue,
+                StarBinding::Unknown => return StarBinding::Unknown,
+            },
+            _ => return StarBinding::Unknown,
+        };
+        if !hits.contains(&hit) {
+            hits.push(hit);
         }
     }
-    match hits.as_slice() {
-        [only] => Some(only.clone()),
-        _ => None,
+    match hits.len() {
+        0 => StarBinding::Absent,
+        1 => {
+            let (file, declared) = hits.remove(0);
+            StarBinding::Class(file, declared)
+        }
+        _ => StarBinding::Unknown,
     }
 }
 
@@ -690,9 +730,10 @@ fn external_bases(
         for base in &current.bases {
             match classify_base(index, at, base) {
                 BaseKind::External => {
-                    let tail = base.rsplit('.').next().unwrap_or(base);
-                    let django = base == "object"
-                        || matches!(tail, "Model" | "AbstractUser" | "AbstractBaseUser");
+                    // Silent only for Django's own bases, judged by the module
+                    // the name is imported from, not by the name (U-13).
+                    let head = base.split('.').next().unwrap_or(base);
+                    let django = base == "object" || imported_from_django(at, head);
                     if !django && !out.contains(base) {
                         out.push(base.clone());
                     }
@@ -716,6 +757,22 @@ fn external_bases(
     }
     out.sort();
     out
+}
+
+/// Whether `name` is bound in `file` by an import from a `django` module.
+fn imported_from_django(file: &FileAnalysis, name: &str) -> bool {
+    file.imports.iter().any(|import| {
+        let from_django = import.specifier == "django" || import.specifier.starts_with("django.");
+        from_django
+            && (import
+                .named
+                .iter()
+                .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+                || import.namespace_name.as_deref() == Some(name)
+                || (import.named.is_empty()
+                    && import.namespace_name.is_none()
+                    && import.specifier.split('.').next() == Some(name)))
+    })
 }
 
 /// The `Meta` classes nested directly in `class`.
@@ -747,9 +804,12 @@ fn meta_is_unreadable(file: &FileAnalysis, class: &Symbol) -> bool {
     assigned
         || metas_of(file, class).any(|meta| {
             meta.bases.iter().any(|meta_base| {
-                meta_base
-                    .strip_suffix(".Meta")
-                    .is_none_or(|owner| !class.bases.iter().any(|base| base == owner))
+                // `class Meta(object):` is the Python 2 spelling of no base
+                // (third review, U-09).
+                meta_base != "object"
+                    && meta_base
+                        .strip_suffix(".Meta")
+                        .is_none_or(|owner| !class.bases.iter().any(|base| base == owner))
             })
         })
 }

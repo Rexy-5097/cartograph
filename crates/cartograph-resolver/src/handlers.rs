@@ -160,7 +160,10 @@ fn resolve(
     // list_orders`: the import rebinds the name, but the resolver prefers a
     // local declaration whatever the order. Both binding it is refused
     // (second review, S-02).
-    if !target.contains('.') && binds_by_import(from, target) && declares(from, target) {
+    if !target.contains('.')
+        && declares(from, target)
+        && (binds_by_import(from, target) || star_may_bind(modules, from, target))
+    {
         return None;
     }
     let (file, name, line, route) = resolve_reference(modules, from, target)?;
@@ -332,6 +335,20 @@ fn binds_by_import(file: &FileAnalysis, name: &str) -> bool {
             .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
             || import.namespace_name.as_deref() == Some(name)
     })
+}
+
+/// Whether a star import in `file` may bind `name`: its module is outside the
+/// project, or declares the name (third review, U-10).
+fn star_may_bind(modules: &ModuleIndex<'_>, file: &FileAnalysis, name: &str) -> bool {
+    file.imports
+        .iter()
+        .filter(|import| import.namespace_name.as_deref() == Some("*"))
+        .any(|import| {
+            modules
+                .resolve_python_module(&import.specifier, &file.path)
+                .and_then(|target| modules.file(&target))
+                .is_none_or(|module| module.symbols.iter().any(|s| s.name == name))
+        })
 }
 
 /// Whether `file` declares `name` at module scope.

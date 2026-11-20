@@ -259,6 +259,17 @@ pub struct Symbol {
     pub decorators: Vec<String>,
     /// Where the declaration is.
     pub span: Span,
+    /// For a variable, where the value it is assigned is, with parentheses and
+    /// type assertions (`as`, `satisfies`) looked through. `None` for anything
+    /// else, and for a variable declared without a value.
+    ///
+    /// Recorded so that "this value *is* a string" can be decided from the
+    /// syntax: a string fact is the whole value exactly when its span is this
+    /// span. Deciding it from positions alone mistook `x ? A : '/b'`,
+    /// `N * "t"` and a value split over lines for a literal (remediation
+    /// T-010).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_span: Option<Span>,
 }
 
 /// The callee shape of a call site, as written.

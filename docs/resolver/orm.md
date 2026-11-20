@@ -134,8 +134,11 @@ Raw SQL mapping is a possible future milestone.
 - A base from outside the project (a library mixin) cannot be read. It is
   assumed to set no `app_label` or `db_table`, and the derived table's rule
   names it.
-- `db_table = N*"t"` written without spaces is read as `"t"`: the parser does
-  not record an assignment's syntax, only its strings and their positions.
+- An option is read only when its value *is* a string literal: the parser
+  records the value's span, and the literal must cover it. Parentheses, an
+  annotation (`db_table: str = "t"`) and a chained assignment are looked
+  through; `N*"t"` and `PREFIX + "t"` are not literals.
+- A base declared twice in its module (under `if`/`else`) refuses the table.
 - A model is found through its bases only when each base resolves through
   imports to a class in this project. A base from a library other than
   `models.Model`, `AbstractUser` and `AbstractBaseUser` (for example

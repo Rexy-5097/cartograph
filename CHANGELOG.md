@@ -7,6 +7,55 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges found by a third independent review
+
+A third review of the corrections above reproduced false edges in the same
+classes they claimed to close, and correct edges they had lost. Each is
+corrected, with a regression test:
+
+- **A constant is bound only when its value *is* a string** (T-010). The
+  parser now records where each variable's value is, with parentheses,
+  `as` and `satisfies` looked through, and a string is the value exactly when
+  its span is that span. Positions alone had mistaken `isProd ? PROD :
+  '/internal'`, `cfg.base ?? '/internal'`, `x || '/internal'`, a value split
+  over lines and `db_table = N*"t"` for the literal, and refused
+  `'/api' as const`, `('/api')`, `const A = '/api', B = '/x'` and an aligned
+  `db_table     = "t"`. A chained `db_table = x = "t"` and an annotated
+  `db_table: str = "t"` are read.
+- **A default value or a type does not shadow axios.** `function f(c = Ax)`,
+  `{ k = Ax }` and `k: typeof Ax` *use* the imported name; they were counted
+  as rebinding it and the request was dropped.
+- **Every rebinding form shadows axios:** a `for … of`/`in` target, a `for`
+  initialiser, a declaration in a `switch` case, a `var` anywhere in the
+  function, a named function expression, and a renamed destructuring
+  (`{ client: Ax }`).
+- **A star module that binds a base by assignment, or by an import from
+  outside the project, is not skipped.** Another star module's class of the
+  same name used to win; the table is now refused.
+- **A base declared twice in its module (`if`/`else`) is not read**, and the
+  table is refused.
+- **`class Meta(object):`** in a base is a plain `Meta` again; it had refused
+  the child's table.
+- **A view defined in the URL conf and star-imported over is refused**, when
+  the star module declares the name or is outside the project.
+- **`import shop.legacy as Order` conflicts with `from shop.models import
+  Order`**, so neither is drawn.
+- **A library base named `Model` is named as an assumption** in the derived
+  table's rule unless it is imported from Django.
+
+Public interface: the parse JSON gains an optional `value_span` on variable
+symbols. It is additive; existing fields are unchanged.
+
+Known limits that remain:
+
+- For a method call, any receiver with a verb method and a path literal is a
+  request (`f(Ax) { return Ax.get('/api/x/') }`), shadowed or not.
+- A top-level `var` or `let` arrow function is not named, even if it is never
+  reassigned; its request starts at the file.
+- A name imported twice in one file is refused even when the later import
+  is the one Python uses.
+- `blast` on a handler whose route was refused says nothing depends on it.
+
 ### Fixed — false edges and statements found by a second independent review
 
 A second adversarial review of the fixes above reproduced further false edges
@@ -34,9 +83,10 @@ and false statements. Each is corrected, with a regression test:
 - **An `apps.py` label must be a whole literal**, as `Meta` options already
   must. `LABELS["store"]` is not `store`. A literal holding an escape is not
   read either, because escapes are not interpreted.
-- **An alias is an access to the model it names.** After
+- **An alias is not read as the model whose name it reuses.** After
   `from shop.models import Ledger as Order`, `Order.objects...` was drawn to
-  the model `Order`.
+  the model `Order`. It is now not drawn; following the alias to `Ledger` is
+  not supported.
 - **A module constant is bound only to a whole-string initialiser.**
   `isProd ? '/api' : '/internal'` and `'/api'.replace(…)` were read as `/api`.
 - **A `let` or `var` arrow function is not named**, because it may be
@@ -50,14 +100,16 @@ and false statements. Each is corrected, with a regression test:
 Known limits that remain, each reproduced by the review:
 
 - `db_table = N*"t"` and `app_label = Q%"y"`, written without spaces around a
-  one-character left operand, are read as the literal. Telling them from
-  `name = "t"` needs the assignment's syntax, which the parser does not record.
+  one-character left operand, are read as the literal. *(Fixed by the third
+  review's corrections, below.)*
 - A constant whose initialiser is `x || '/api'` or `x && '/api'` is read as
-  `/api`.
+  `/api`. *(Fixed by the third review's corrections, below.)*
 - A method and a module function of the same name in one file share a node
   (ADR-0011), so a call to the function can appear to reach the method's
   requests.
-- Rebinding a name through a `for` target or `global` is not seen.
+- Rebinding a name through a `for` target or `global` is not seen. *(For a
+  TypeScript `for` target, fixed below; for a Python URL conf, still a
+  limit.)*
 - `const axios = require('axios')` is not recognised as axios. A receiver
   *named* `axios`, `client`, `http` or `api` with a verb method is a request by
   name, shadowed or not, as before.

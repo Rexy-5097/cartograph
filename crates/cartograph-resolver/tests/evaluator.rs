@@ -399,3 +399,106 @@ fn a_constant_whose_initialiser_only_contains_a_string_is_not_bound() {
         Some("/api/x")
     );
 }
+
+// ── T-010: a constant is bound only when its value *is* a string ─────────
+
+#[test]
+fn a_value_holding_one_string_at_its_end_is_not_that_string() {
+    // Third review, U-01: the last string ended where the declaration ended,
+    // so `isProd ? PROD : '/internal'` was read as `/internal`.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const F1 = isProd ? PROD : '/internal';
+export const F2 = cfg.base ?? '/internal';
+export const F3 = x || '/internal';
+export const F4 = import.meta.env.PROD ? import.meta.env.VITE_API : '/internal';
+export const F5 = () => '/internal';
+",
+    );
+    for name in ["F1", "F2", "F3", "F4", "F5"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope).as_literal(),
+            None,
+            "{name} was bound"
+        );
+    }
+}
+
+#[test]
+fn a_value_split_over_lines_is_not_its_last_string() {
+    // Third review, U-02: a string left of the declarator's column on a later
+    // line was not seen.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const F3 = isProd
+  ? '/prod' : '/internal';
+export const F4 =
+  isProd ? PROD
+: '/internal';
+",
+    );
+    assert_eq!(evaluate_expression("F3 + '/x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("F4 + '/x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_string_in_parentheses_or_a_type_assertion_is_still_the_value() {
+    // Third review, U-03: these were bound before the second review's fix and
+    // refused after it.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const A = '/api' as const;
+export const B = '/api' satisfies string;
+export const C = ('/api');
+export const D = '/api', E = '/x';
+export const T = `/api/v1`;
+",
+    );
+    for name in ["A", "B", "C", "D"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/x"),
+            "{name} was not bound"
+        );
+    }
+    assert_eq!(
+        evaluate_expression("E", &scope).as_literal().as_deref(),
+        Some("/x")
+    );
+    assert_eq!(
+        evaluate_expression("T + '/x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/v1/x")
+    );
+}
+
+#[test]
+fn python_constants_are_bound_by_the_same_rule() {
+    let scope = scope_of(
+        "svc/c.py",
+        "BASE_A = \"/api\"
+BASE_B = (\"/api\")
+BASE_T = settings.BASE if DEBUG else \"/internal\"
+BASE_O = settings.BASE or \"/internal\"
+",
+    );
+    for name in ["BASE_A", "BASE_B"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/x"),
+            "{name}"
+        );
+    }
+    for name in ["BASE_T", "BASE_O"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope).as_literal(),
+            None,
+            "{name} was bound"
+        );
+    }
+}

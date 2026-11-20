@@ -657,3 +657,26 @@ fn a_view_imported_after_a_local_def_of_the_same_name_resolves_to_nothing() {
     ];
     assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
 }
+
+#[test]
+fn a_view_defined_locally_and_star_imported_is_refused() {
+    // Third review, U-10: `from .views import *` after the local def rebinds
+    // the name.
+    let files = [
+        (
+            "shop/views.py",
+            "def list_orders(request):\n    return None\n",
+        ),
+        (
+            "shop/urls.py",
+            "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nfrom .views import *\n\nurlpatterns = [path('orders/', list_orders)]\n",
+        ),
+    ];
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+    // A star module that does not declare the name leaves the local def.
+    let files = [
+        ("shop/views.py", "def other(request):\n    return None\n"),
+        files[1],
+    ];
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}

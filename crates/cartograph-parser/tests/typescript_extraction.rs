@@ -1281,3 +1281,53 @@ var other = () => fetch('/api/b/');
     );
     assert_eq!(calls, vec![(1, None), (2, None), (3, None)]);
 }
+
+fn request_lines(path: &str, src: &str) -> Vec<u32> {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer.analyze_source(path, src).expect("analyses");
+    analysis
+        .http_calls
+        .iter()
+        .map(|c| c.span.start_line)
+        .collect()
+}
+
+#[test]
+fn a_default_value_or_a_type_that_mentions_axios_does_not_shadow_it() {
+    // Third review, U-04: a default value and a type *use* the name; counting
+    // them as a binding refused real requests.
+    let lines = request_lines(
+        "src/api.ts",
+        "import Ax from 'axios';
+export function a(c = Ax) { return Ax('/api/a/'); }
+export function b(c = Ax.create()) { return Ax('/api/b/'); }
+export const c = (k = Ax) => Ax('/api/c/');
+export function d({ k = Ax }) { return Ax('/api/d/'); }
+export function e(k: typeof Ax) { return Ax('/api/e/'); }
+export function f() { const k: typeof Ax = Ax; return Ax('/api/f/'); }
+export function g(k: ReturnType<typeof Ax>) { return Ax('/api/g/'); }
+export function h() { const { data = Ax } = cfg; return Ax('/api/h/'); }
+",
+    );
+    assert_eq!(lines, vec![2, 3, 4, 5, 6, 7, 8, 9]);
+}
+
+#[test]
+fn every_rebinding_form_shadows_the_imported_axios() {
+    // Third review, U-05: `for` targets, `switch` cases, `var` in a nested
+    // block, a named function expression and a renamed destructuring.
+    let lines = request_lines(
+        "src/api.ts",
+        "import Ax from 'axios';
+export function a(xs) { for (const Ax of xs) { Ax('/api/secret/'); } }
+export function b(xs) { for (const Ax in xs) { Ax('/api/secret/'); } }
+export function c() { for (let Ax = mk(); ; ) { Ax('/api/secret/'); } }
+export function d(k) { switch (k) { case 1: const Ax = mk(); Ax('/api/secret/'); } }
+export function e() { if (ok) { var Ax = mk(); } return Ax('/api/secret/'); }
+export const f = function Ax() { return Ax('/api/secret/'); };
+export function g(cfg) { const { client: Ax } = cfg; return Ax('/api/secret/'); }
+export function real() { return Ax('/api/real/'); }
+",
+    );
+    assert_eq!(lines, vec![9]);
+}

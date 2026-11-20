@@ -464,6 +464,12 @@ impl Walker<'_> {
             }
         }
         self.push_symbol(SymbolKind::Variable, &name, false, Vec::new(), node);
+        if let (Some(symbol), Some(right)) = (
+            self.analysis.symbols.last_mut(),
+            node.child_by_field_name("right"),
+        ) {
+            symbol.value_span = Some(span_of(unwrap_python_value(right)));
+        }
     }
 
     /// `urlpatterns += [...]` at module scope. Nothing else an augmented
@@ -541,6 +547,7 @@ impl Walker<'_> {
             decorators,
             bases,
             span: span_of(node),
+            value_span: None,
         });
     }
 
@@ -1315,4 +1322,24 @@ fn collect_error_diagnostics(root: Node<'_>, analysis: &mut FileAnalysis) {
             span: None,
         });
     }
+}
+
+/// The value inside any parentheses, and at the end of a chained assignment:
+/// `("orders")` and `x = "orders"` are the string.
+fn unwrap_python_value(mut node: Node<'_>) -> Node<'_> {
+    loop {
+        let inner = match node.kind() {
+            "parenthesized_expression" => {
+                let mut cursor = node.walk();
+                node.named_children(&mut cursor).next()
+            }
+            "assignment" => node.child_by_field_name("right"),
+            _ => None,
+        };
+        let Some(inner) = inner else {
+            break;
+        };
+        node = inner;
+    }
+    node
 }
