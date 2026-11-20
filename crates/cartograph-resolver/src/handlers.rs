@@ -363,18 +363,18 @@ fn star_may_bind(modules: &ModuleIndex<'_>, file: &FileAnalysis, name: &str) -> 
     // A module-level statement starts in column 1; anything further in is
     // inside a compound statement and may not run.
     let conditional = declarations.iter().any(|s| s.span.start_column != 1);
-    // When each use runs. A route written inside a `def` or `class` body runs
-    // when that body is called, which may be after any later statement, so
-    // it counts as the end of the module (sixth review, X-02, X-03).
+    // When each use runs. A route written inside a function body runs when
+    // the function is called, which may be any time after its `def`: before
+    // or after a later statement. So it spans from its own line to the end of
+    // the module (sixth review, X-02; seventh review, Y-01). A class body
+    // runs where it is written (Y-02, Y-03); a method's body is a function.
     let bodies: Vec<(u32, u32)> = file
         .symbols
         .iter()
-        .filter(|s| {
-            s.enclosing.is_none() && matches!(s.kind, SymbolKind::Function | SymbolKind::Class)
-        })
+        .filter(|s| matches!(s.kind, SymbolKind::Function | SymbolKind::Method))
         .map(|s| (s.span.start_line, s.span.end_line))
         .collect();
-    let uses: Vec<u32> = file
+    let uses: Vec<(u32, u32)> = file
         .routes
         .iter()
         .filter(|route| {
@@ -385,20 +385,21 @@ fn star_may_bind(modules: &ModuleIndex<'_>, file: &FileAnalysis, name: &str) -> 
         })
         .map(|route| {
             let line = route.span.start_line;
+            // `<=`: a one-line `def f(): return [path(...)]` (Y-04).
             if bodies
                 .iter()
-                .any(|(start, end)| *start < line && line <= *end)
+                .any(|(start, end)| *start <= line && line <= *end)
             {
-                u32::MAX
+                (line, u32::MAX)
             } else {
-                line
+                (line, line)
             }
         })
         .collect();
-    let first_use = uses.iter().copied().min().unwrap_or(u32::MAX);
+    let first_use = uses.iter().map(|u| u.0).min().unwrap_or(u32::MAX);
     // One answer serves every use of the name, so a star import before the
     // *last* use counts (sixth review, X-01).
-    let last_use = uses.iter().copied().max().unwrap_or(u32::MAX);
+    let last_use = uses.iter().map(|u| u.1).max().unwrap_or(u32::MAX);
     let after_use = last_declaration > first_use;
     file.imports
         .iter()

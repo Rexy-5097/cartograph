@@ -734,3 +734,50 @@ fn an_object_literal_method_is_not_a_binding() {
         Some("/api/a/x")
     );
 }
+
+// ── Seventh review ───────────────────────────────────────────────────────
+
+#[test]
+fn a_module_level_read_between_an_import_and_the_assignment_refuses_it() {
+    // Y-05, Y-09: `URL = P + "sub/"` runs while `P` is still the import.
+    for src in [
+        "from svc.cfg import P\nURL = P + \"sub/\"\nP = \"/api/a/\"\n",
+        "from svc.cfg import *\nURL = P + \"sub/\"\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_function_local_import_hides_the_constant_only_in_its_body() {
+    // Y-06: the read inside `uses_import` sees the import; the read in
+    // `uses_constant` sees the module constant.
+    let src = "P = \"/api/a/\"\n\n\ndef uses_import():\n    from svc.cfg import P\n    return P\n\n\ndef uses_constant():\n    return P\n";
+    let scope = file_scope("svc/c.py", src);
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(6)).as_literal(),
+        None
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(10))
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+    // A one-line `def` is a body too.
+    let scope = file_scope(
+        "svc/c.py",
+        "P = \"/api/a/\"\n\n\ndef helper(): from svc.cfg import P\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}

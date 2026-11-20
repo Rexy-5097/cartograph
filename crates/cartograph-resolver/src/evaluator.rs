@@ -53,6 +53,10 @@ pub struct Scope {
     /// import of the same name must not supply them (fifth review, W-05,
     /// W-06): the file's own binding, or its uncertainty, wins.
     declared: HashSet<String>,
+    /// Names a Python import rebinds inside a function or class body, with
+    /// the body's lines: a read there sees the import, not the module
+    /// constant (seventh review, Y-06).
+    shadows: Vec<(String, u32, u32)>,
 }
 
 impl Scope {
@@ -96,7 +100,7 @@ impl Scope {
     /// seen as rebound; [`Scope::from_analysis`] sees it.
     #[must_use]
     pub fn from_file(symbols: &[Symbol], strings: &[StringFact]) -> Self {
-        Self::collect(symbols, strings, &[], &[], false)
+        Self::collect(symbols, strings, &[], &[], &[], false)
     }
 
     /// Collects module-scope string constants, as [`Scope::from_file`], also
@@ -104,11 +108,13 @@ impl Scope {
     /// `except ImportError: P = "/api"` makes `P` whichever ran (fifth
     /// review, W-06).
     ///
-    /// A Python import rebinds a module constant when it is at module level
-    /// (not inside a `def` or `class` body) and comes after the assignment,
-    /// or either of them is conditional. A Python star import after the
-    /// assignment may rebind it. A TypeScript `export * from` binds nothing
-    /// locally (sixth review, X-04, X-05).
+    /// A Python import at module level rebinds a module constant when it
+    /// comes after the assignment, or either of them is conditional, or a
+    /// module-level read (another constant's value, a request) lies between
+    /// them and sees the import (seventh review, Y-05). A Python star import
+    /// counts the same way. An import inside a `def` or `class` body rebinds
+    /// the name only within that body ([`Scope::at_line`]). A TypeScript
+    /// `export * from` binds nothing locally (sixth review, X-04, X-05).
     #[must_use]
     pub fn from_analysis(file: &FileAnalysis) -> Self {
         let python = file.language == SourceLanguage::Python;
@@ -122,16 +128,39 @@ impl Scope {
             })
             .map(|s| (s.span.start_line, s.span.end_line))
             .collect();
+        // Lines where the module itself reads names while it loads.
+        let mut reads: Vec<u32> = file
+            .symbols
+            .iter()
+            .filter(|s| s.enclosing.is_none() && s.kind == SymbolKind::Variable)
+            .map(|s| s.span.start_line)
+            .collect();
+        reads.extend(
+            file.http_calls
+                .iter()
+                .filter(|c| c.enclosing.is_none())
+                .map(|c| c.span.start_line),
+        );
         let mut imported = Vec::new();
         let mut star_lines = Vec::new();
+        let mut shadows = Vec::new();
         for import in &file.imports {
             let line = import.span.start_line;
-            if python
-                && bodies
+            // `<=`: a one-line `def f(): from cfg import P` (Y-12).
+            if python {
+                if let Some((start, end)) = bodies
                     .iter()
-                    .any(|(start, end)| *start < line && line <= *end)
-            {
-                continue;
+                    .find(|(start, end)| *start <= line && line <= *end)
+                {
+                    for named in &import.named {
+                        let name = named.local.as_deref().unwrap_or(named.imported.as_str());
+                        shadows.push((name.to_owned(), *start, *end));
+                    }
+                    if let Some(name) = import.namespace_name.as_deref().filter(|n| *n != "*") {
+                        shadows.push((name.to_owned(), *start, *end));
+                    }
+                    continue;
+                }
             }
             let conditional = python && import.span.start_column != 1;
             let mut bind = |name: &str| imported.push((name.to_owned(), line, conditional));
@@ -151,7 +180,36 @@ impl Scope {
                 bind(name);
             }
         }
-        Self::collect(&file.symbols, &file.strings, &imported, &star_lines, python)
+        let mut scope = Self::collect(
+            &file.symbols,
+            &file.strings,
+            &imported,
+            &star_lines,
+            &reads,
+            python,
+        );
+        scope.shadows = shadows;
+        scope
+    }
+
+    /// This scope as seen from `line`: a name a function-local import rebinds
+    /// in the body containing `line` is unknown there.
+    #[must_use]
+    pub fn at_line(&self, line: u32) -> std::borrow::Cow<'_, Self> {
+        let hidden: Vec<&str> = self
+            .shadows
+            .iter()
+            .filter(|(_, start, end)| *start <= line && line <= *end)
+            .map(|(name, _, _)| name.as_str())
+            .collect();
+        if hidden.is_empty() {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut scope = self.clone();
+        for name in hidden {
+            scope.bindings.remove(name);
+        }
+        std::borrow::Cow::Owned(scope)
     }
 
     fn collect(
@@ -159,6 +217,7 @@ impl Scope {
         strings: &[StringFact],
         imported: &[(String, u32, bool)],
         star_lines: &[u32],
+        reads: &[u32],
         python: bool,
     ) -> Self {
         let mut scope = Self::new();
@@ -203,13 +262,20 @@ impl Scope {
             // A Python statement not in column 1 is inside a compound
             // statement (`try`, `if`) and may not run.
             let conditional = python && symbol.span.start_column != 1;
+            // A module-level read between an earlier import and this
+            // assignment sees the import's value (Y-05, Y-09).
+            let read_between = |at: u32| reads.iter().any(|r| at < *r && *r < line);
             let rebound_by_import = imported.iter().any(|(name, at, import_conditional)| {
                 name == &symbol.name
-                    && (!python || *at > line || *import_conditional || conditional)
+                    && (!python
+                        || *at > line
+                        || *import_conditional
+                        || conditional
+                        || read_between(*at))
             });
             if bindings.get(symbol.name.as_str()).copied().unwrap_or(0) > 1
                 || rebound_by_import
-                || star_lines.iter().any(|at| *at > line)
+                || star_lines.iter().any(|at| *at > line || read_between(*at))
             {
                 continue;
             }

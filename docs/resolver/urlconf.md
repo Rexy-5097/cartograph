@@ -105,9 +105,11 @@ of that name in the URL conf. Refused when:
   binding a route sees: a star import between the declaration and the
   *last* route using the name, or before it when the declaration is
   conditional or comes after the first route. A route written inside a
-  function counts as running at the end of the module. One answer serves
-  every route of a name, so a route that saw the local view is refused with
-  the rest. A star module may bind the name when it is outside the project,
+  function may run at any time after the function's `def`, so it counts from
+  its own line to the end of the module; a route in a class body counts at
+  its line, where the body runs. One answer serves every route of a name, so
+  a route that saw the local view is refused with the rest. A route built in
+  a `lambda` is taken at its line. A star module may bind the name when it is outside the project,
   or binds it at module level by declaration, by import, or through a star
   chain that may (a chain back to the URL conf adds nothing). `__all__` is
   not read, and bindings by a tuple, `for` or `global` are not seen.

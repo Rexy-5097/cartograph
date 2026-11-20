@@ -803,16 +803,50 @@ fn a_later_use_after_a_star_import_refuses_the_name() {
 }
 
 #[test]
-fn a_use_inside_a_function_runs_when_the_function_is_called() {
+fn a_use_inside_a_function_may_run_at_any_time_after_its_def() {
     // X-02: called after the star import, so the star import's binding.
     let files = star_files(
         "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\nfrom .views import *\nurlpatterns = get_patterns()\n",
     );
     assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
-    // X-03: the star import comes first, so the def is the binding when
-    // the function runs.
+    // Y-01: the analysis does not read where the function is called. Here it
+    // is called after the def (local is right); called before it, the star
+    // import's binding is used. Both are refused.
+    for call in ["", "urlpatterns = get_patterns()\n"] {
+        let urls = format!(
+            "from django.urls import path\nfrom .views import *\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\n{call}def list_orders(request):\n    return None\n\n\nurlpatterns = get_patterns()\n"
+        );
+        let files = [
+            (
+                "shop/views.py",
+                "def list_orders(request):\n    return None\n",
+            ),
+            ("shop/urls.py", urls.as_str()),
+        ];
+        assert_eq!(
+            declared(&files, "shop/urls.py", "list_orders"),
+            None,
+            "{call}"
+        );
+    }
+    // The def before the function and no star import after it: the function
+    // can only see the def.
     let files = star_files(
-        "from django.urls import path\nfrom .views import *\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = get_patterns()\n",
+        "from django.urls import path\nfrom .views import *\n\n\ndef list_orders(request):\n    return None\n\n\ndef get_patterns():\n    return [path('x/', list_orders)]\n\n\nurlpatterns = get_patterns()\n",
+    );
+    assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
+}
+
+#[test]
+fn a_class_body_runs_where_it_is_written() {
+    // Y-02: before the def, the class body sees the star import's binding.
+    let files = star_files(
+        "from django.urls import path\nfrom .views import *\n\n\nclass Patterns:\n    urls = [path('x/', list_orders)]\n\n\ndef list_orders(request):\n    return None\n\n\nurlpatterns = Patterns.urls\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+    // Y-03: after the def and before the star import, it sees the def.
+    let files = star_files(
+        "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\nclass Patterns:\n    urls = [path('x/', list_orders)]\n\n\nfrom .views import *\nurlpatterns = Patterns.urls\n",
     );
     assert!(declared(&files, "shop/urls.py", "list_orders").is_some());
 }

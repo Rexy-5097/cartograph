@@ -194,6 +194,8 @@ pub fn resolve_url(
     file: &FileAnalysis,
     scope: &Scope,
 ) -> Option<ResolvedUrl> {
+    // A function-local import hides the module constant in its body.
+    let scope = &*scope.at_line(call.span.start_line);
     let (value, derivation) = match &call.url {
         // Already determined; M05 has nothing to add.
         UrlObservation::Literal { .. } => return None,

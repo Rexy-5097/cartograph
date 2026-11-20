@@ -64,15 +64,19 @@ A constant binds only when it is a top-level TypeScript `const` or a Python
 assignment at module level, and its value *is* one of the forms above, and
 nothing else in the file is seen to bind the name:
 - **another assignment, `def` or `class`**;
-- **an import** of the name, except that in Python an import inside a
-  function or class body does not count, and neither does an unconditional
-  import written before the assignment;
-- **a Python star import** written after it (a TypeScript `export * from`
-  binds nothing locally).
+- **an import** of the name. In Python, an unconditional import written
+  before the assignment does not count unless a module-level read (another
+  constant's value, a request) lies between them; an import inside a
+  function or class body hides the constant only for reads inside that body;
+- **a Python star import** written after it, or before it with a
+  module-level read between (a TypeScript `export * from` binds nothing
+  locally).
 
 A name the file declares at module level is never taken from an import.
 Bindings by a tuple assignment, a `for` target, `with … as`, `:=`, `global`
-and `+=` are not seen, so they do not refuse the constant. The parser
+(including an import under `global`) and `+=` are not seen, so they do not
+refuse the constant. A function-local name or parameter of the same name is
+read as the constant (the lookup ignores scope). The parser
 records each variable's value span, with parentheses, `as` and `satisfies`
 looked through, and the string must cover it exactly: `'/api' as const`
 binds, while `isProd ? PROD : '/api'`, `base ?? '/api'` and

@@ -7,11 +7,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — false edges found by a seventh independent review
+
+A seventh review found that the sixth round's two rules guessed in uncommon
+cases. Corrected, each with a regression test:
+
+- **A route inside a function may run at any time after its `def`.** Its use
+  now spans from its own line to the end of the module. A star import before
+  a local view that the function may see refuses the view, whether the
+  function is called before or after the view's `def`, by a later statement or
+  by a decorator. A one-line `def` counts as a body.
+- **A class body runs where it is written**, so a route in it sees the
+  binding at that line.
+- **A module-level read between an import and the assignment sees the
+  import.** `from cfg import P`, then `URL = P + "sub/"`, then `P = "/api"`:
+  `P` is no longer read as `/api`. The same holds for a star import.
+- **A function-local import hides the module constant only inside its
+  body.** A request in that body no longer reads the module constant; a
+  request elsewhere still does.
+
+Known limits, each reproduced by the review:
+
+- A route built in a `lambda` is taken at its line.
+- An import under `global` in a function rebinds the module constant, and is
+  not seen.
+- A statement written after a backslash continuation of a compound statement
+  header (`if x: \` then a line in column 1) is read as unconditional.
+- `try: from cfg import P` / `except ImportError: pass` before an
+  unconditional `P = "/api"` refuses `P`, although the assignment always wins.
+
 ### Fixed — false edges and lost edges found by a sixth independent review
 
-A sixth review found no false edge in the constant rules, two uncommon false
-edges introduced by the fifth round's URL-conf rule, and correct constants it
-refused. Corrected, each with a regression test:
+A sixth review found two uncommon false edges introduced by the fifth round's
+URL-conf rule, correct constants that round refused, and one older false edge
+in the constant rules (a tuple rebinding, listed below as a limit). Corrected, each with a regression test:
 
 - **A URL conf's star import counts until the last use of the name.** One
   answer serves every route that names a view, so a second route after the
@@ -20,14 +49,19 @@ refused. Corrected, each with a regression test:
 - **A route written inside a function runs when the function is called**,
   which is treated as the end of the module: a star import after the `def` of
   that function may rebind the view, and a view defined after the function
-  but before the call is its binding.
+  but before the call is its binding. *(Corrected by the seventh review's
+  corrections, above: the call's position is not read, so such a use may run
+  at any time after the function's `def`; and a class body runs where it is
+  written.)*
 - **A TypeScript `export * from` binds nothing locally**, so a barrel
   `index.ts` that declares a base URL and then re-exports modules keeps the
   constant, for itself and for its importers.
 - **A Python import inside a function or class body binds that body's name**,
   not the module's, and an unconditional import written before the
   assignment is overridden by it. Either kept a module constant from being
-  read.
+  read. *(Narrowed by the seventh review's corrections, above: reads inside
+  that body, and module-level reads between the import and the assignment,
+  see the import.)*
 - **An object-literal method is not a binding** of its name at module level.
 
 Known limits, each reproduced by the review:
