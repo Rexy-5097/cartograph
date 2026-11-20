@@ -1260,10 +1260,12 @@ fn template_parts(node: Node<'_>, source: &str) -> Vec<TemplatePart> {
                 let mut inner = child.walk();
                 let named: Vec<Node<'_>> = child.named_children(&mut inner).collect();
                 if let Some(expr) = named.first() {
-                    // `{n:03d}` and `{x!r}` change the text: keep the whole
-                    // substitution, which no evaluator form accepts, rather
-                    // than the bare name (ninth review, AA-01 neighbour).
-                    let text = if named.len() > 1 {
+                    // `{n:03d}`, `{x!r}` and `{x=}` change the text: keep the
+                    // whole substitution, which no evaluator form accepts,
+                    // rather than the bare name (ninth review, AA-01
+                    // neighbour; tenth review, AB-01). Anything besides the
+                    // braces and the expression is such a change.
+                    let text = if named.len() > 1 || child.child_count() > 3 {
                         let whole = text_of(child, source);
                         whole
                             .trim_start_matches('{')

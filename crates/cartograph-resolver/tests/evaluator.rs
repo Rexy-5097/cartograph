@@ -911,3 +911,61 @@ fn a_local_import_hides_the_constant_in_its_whole_body_and_closures() {
         );
     }
 }
+
+// ── Tenth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_self_documenting_substitution_is_not_the_bare_name() {
+    // AB-01: `f"{V=}"` renders `V='a'`.
+    for src in [
+        "V = \"a\"\nURL = f\"/api/{V=}/\" + \"sub/\"\n",
+        "V = \"a\"\nURL = f\"/api/{V = }/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("URL", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_read_after_the_assignment_on_its_line_sees_the_new_value() {
+    // AB-02: `P = "/api/a/"; URL = P + "sub/"` reads the assignment.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P\nP = \"/api/a/\"; URL = P + \"sub/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn only_a_class_body_that_runs_at_load_is_a_read() {
+    // AB-04: a method named like a class, and a class inside a function, do
+    // not run while the module loads.
+    for src in [
+        "import requests\nfrom svc.cfg import P\n\n\nclass Fetch:\n    pass\n\n\nclass Client:\n    def Fetch(self):\n        return requests.get(P)\n\n\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\n\n\ndef make():\n    class K:\n        r = requests.get(P)\n    return K\n\n\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // A class nested in a module-level class runs at load.
+    let scope = file_scope(
+        "svc/c.py",
+        "import requests\nfrom svc.cfg import P\n\n\nclass Outer:\n    class Inner:\n        r = requests.get(P)\n\n\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}

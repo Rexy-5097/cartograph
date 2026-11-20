@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a false edge and refusals found by a tenth independent review
+
+A tenth review found one false edge introduced by the ninth round's
+corrections and three needless refusals. Corrected, each with a regression
+test:
+
+- **A self-documenting substitution (`f"{x=}"`) is not the bare name.** It
+  renders `x='value'`. Any interpolation with more than its braces and its
+  expression keeps its whole text, which no evaluator form accepts.
+- **A class body is found by position, not by name.** A method named like a
+  class, or a class written inside a function, does not run while the module
+  loads, and its request is not a load-time read. A class inside a
+  module-level class still is.
+- **A read after the assignment on its own line sees the new value**, so it
+  no longer refuses the constant.
+
+Known limits, each reproduced by the review:
+
+- After a star import, an assignment in a `try` or `with` body is refused,
+  as one under `if` is, although it always runs.
+- A lambda in a class body counts as running while the module loads.
+- An implicitly concatenated string (`"/api/a/" "sub/"`, with or without an
+  f-string) is never bound as a constant.
+- An f-string operand of a `+` chain is read as a direct f-string is, so a
+  runtime prefix (`f"{HOST}/api/" + "x/"`) now refuses the value instead of
+  being dropped.
+
 ### Fixed — false edges found by a ninth independent review
 
 A ninth review found no false edge introduced by the eighth round's
@@ -24,7 +51,9 @@ defect and three small gaps. Corrected, each with a regression test:
 - **A conditional assignment after a Python star import is not a constant**,
   as one after a named import already was.
 - **A read on the assignment's own line, after `;`, sees the earlier
-  import.**
+  import.** *(This holds through the column rule: such an assignment is not
+  in column 1. The tenth review's corrections, above, withdraw the separate
+  line rule, which also refused reads after the assignment.)*
 
 Known limits, each reproduced by the review:
 

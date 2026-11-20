@@ -72,19 +72,23 @@ nothing else in the file is seen to bind the name:
   between or with the assignment conditional (a TypeScript `export * from`
   binds nothing locally).
 
-A request in a class body counts as a module-level read, because a class body
-runs while the module loads. In a Python f-string, a substitution with a
-format spec or conversion (`{n:03d}`, `{x!r}`) is not evaluated, and an
-f-string operand of a `+` chain keeps its substitutions.
+A request in a class body written at module level (or in such a class body)
+counts as a module-level read, because that body runs while the module loads.
+In a Python f-string, a substitution with a format spec, a conversion or a
+self-documenting `=` (`{n:03d}`, `{x!r}`, `{x=}`) is not evaluated, and an
+f-string operand of a `+` chain keeps its substitutions. An implicitly
+concatenated string (`"/api/a/" "sub/"`) is not bound.
 
 A Python import inside a function or class body does not refuse the constant;
 it hides it for requests in the innermost body containing the import (an
 import in a class body also hides it from that class's methods, which is
 conservative).
 
-A name the file declares at module level is never taken from an import.
+A name the file declares at module level is never taken from an import. A
+read that names the constant between its import and its assignment refuses
+the constant for every use, including requests made after the module loads.
 Bindings by a tuple assignment, a `for` target, `with … as`, `:=`, `global`
-(including an import under `global`) and `+=` are not seen, so they do not
+or `nonlocal` (including an import under them) and `+=` are not seen, so they do not
 refuse the constant. A function-local assignment or parameter of the same
 name is read as the constant (the lookup ignores scope); a function-local
 import is not. The parser

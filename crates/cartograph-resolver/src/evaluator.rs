@@ -145,17 +145,29 @@ impl Scope {
                 Some((s.span.start_line, fact_sources(fact)))
             })
             .collect();
-        // A class body runs while the module loads too (ninth review, AA-03).
-        let classes: HashSet<&str> = file
-            .symbols
-            .iter()
-            .filter(|s| s.kind == SymbolKind::Class)
-            .map(|s| s.name.as_str())
-            .collect();
+        // A class body runs while the module loads too (ninth review, AA-03),
+        // when the class is written at module level or in another such class
+        // body. It is found by position, not by name: a method named like a
+        // class is not a class body (tenth review, AB-04).
+        let runs_at_load = |line: u32| -> bool {
+            let mut containing: Vec<&Symbol> = file
+                .symbols
+                .iter()
+                .filter(|s| s.span.start_line <= line && line <= s.span.end_line)
+                .filter(|s| {
+                    matches!(
+                        s.kind,
+                        SymbolKind::Function | SymbolKind::Method | SymbolKind::Class
+                    )
+                })
+                .collect();
+            containing.sort_by_key(|s| s.span.end_line - s.span.start_line);
+            containing.iter().all(|s| s.kind == SymbolKind::Class)
+        };
         reads.extend(
             file.http_calls
                 .iter()
-                .filter(|c| c.enclosing.as_deref().is_none_or(|e| classes.contains(e)))
+                .filter(|c| c.enclosing.is_none() || runs_at_load(c.span.start_line))
                 .map(|c| (c.span.start_line, url_sources(&c.url))),
         );
         let mut imported = Vec::new();
@@ -287,7 +299,7 @@ impl Scope {
             let read_between = |at: u32| {
                 reads
                     .iter()
-                    .any(|(r, text)| at <= *r && *r <= line && mentions(text, &symbol.name))
+                    .any(|(r, text)| at <= *r && *r < line && mentions(text, &symbol.name))
             };
             let rebound_by_import = imported.iter().any(|(name, at, import_conditional)| {
                 name == &symbol.name
