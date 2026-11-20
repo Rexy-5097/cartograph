@@ -781,3 +781,48 @@ fn a_function_local_import_hides_the_constant_only_in_its_body() {
         Some("/api/a/x")
     );
 }
+
+// ── Eighth review ────────────────────────────────────────────────────────
+
+#[test]
+fn only_a_read_that_names_the_constant_sees_the_import() {
+    // Z-01: an unrelated module-level assignment between the import and the
+    // assignment reads nothing of the constant.
+    for src in [
+        "from svc.cfg import *\nimport logging\nlogger = logging.getLogger(__name__)\nTIMEOUT = 10\nP = \"/api/a/\"\n",
+        "from svc.cfg import P\nOTHER = \"/x/\"\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // Z-04: a read on the import's own line, after `;`, sees the import.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P; URL = P + \"sub/\"\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_local_import_hides_the_constant_only_in_its_innermost_body() {
+    // Z-02: the import in `a` does not hide the constant from `b`, a sibling
+    // method of the same class.
+    let src = "P = \"/api/a/\"\n\n\nclass C:\n    def a(self):\n        from svc.cfg import P\n        return P\n\n    def b(self):\n        return P\n";
+    let scope = file_scope("svc/c.py", src);
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(7)).as_literal(),
+        None
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(10))
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}

@@ -109,7 +109,9 @@ of that name in the URL conf. Refused when:
   its own line to the end of the module; a route in a class body counts at
   its line, where the body runs. One answer serves every route of a name, so
   a route that saw the local view is refused with the rest. A route built in
-  a `lambda` is taken at its line. A star module may bind the name when it is outside the project,
+  a `lambda` is taken at its line. A view name used inside the function that
+  builds the routes is resolved at module level: a parameter or a nested
+  `def` of that name is not seen. A star module may bind the name when it is outside the project,
   or binds it at module level by declaration, by import, or through a star
   chain that may (a chain back to the URL conf adds nothing). `__all__` is
   not read, and bindings by a tuple, `for` or `global` are not seen.

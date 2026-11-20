@@ -119,27 +119,37 @@ impl Scope {
     pub fn from_analysis(file: &FileAnalysis) -> Self {
         let python = file.language == SourceLanguage::Python;
         // Python imports inside a function or class body bind that body's
-        // names, not the module's.
+        // names, not the module's. The innermost body is the one whose names
+        // they are (eighth review, Z-02).
         let bodies: Vec<(u32, u32)> = file
             .symbols
             .iter()
             .filter(|s| {
-                s.enclosing.is_none() && matches!(s.kind, SymbolKind::Function | SymbolKind::Class)
+                matches!(
+                    s.kind,
+                    SymbolKind::Function | SymbolKind::Method | SymbolKind::Class
+                )
             })
             .map(|s| (s.span.start_line, s.span.end_line))
             .collect();
-        // Lines where the module itself reads names while it loads.
-        let mut reads: Vec<u32> = file
+        // Module-level reads made while the module loads that can feed a
+        // URL: a string constant's expressions and a module-level request's
+        // URL. Each is kept with the source text it reads (Z-01).
+        let strings_by_span: HashMap<_, _> = file.strings.iter().map(|s| (s.span(), s)).collect();
+        let mut reads: Vec<(u32, String)> = file
             .symbols
             .iter()
             .filter(|s| s.enclosing.is_none() && s.kind == SymbolKind::Variable)
-            .map(|s| s.span.start_line)
+            .filter_map(|s| {
+                let fact = strings_by_span.get(&s.value_span?)?;
+                Some((s.span.start_line, fact_sources(fact)))
+            })
             .collect();
         reads.extend(
             file.http_calls
                 .iter()
                 .filter(|c| c.enclosing.is_none())
-                .map(|c| c.span.start_line),
+                .map(|c| (c.span.start_line, url_sources(&c.url))),
         );
         let mut imported = Vec::new();
         let mut star_lines = Vec::new();
@@ -150,7 +160,8 @@ impl Scope {
             if python {
                 if let Some((start, end)) = bodies
                     .iter()
-                    .find(|(start, end)| *start <= line && line <= *end)
+                    .filter(|(start, end)| *start <= line && line <= *end)
+                    .min_by_key(|(start, end)| end - start)
                 {
                     for named in &import.named {
                         let name = named.local.as_deref().unwrap_or(named.imported.as_str());
@@ -217,7 +228,7 @@ impl Scope {
         strings: &[StringFact],
         imported: &[(String, u32, bool)],
         star_lines: &[u32],
-        reads: &[u32],
+        reads: &[(u32, String)],
         python: bool,
     ) -> Self {
         let mut scope = Self::new();
@@ -264,7 +275,13 @@ impl Scope {
             let conditional = python && symbol.span.start_column != 1;
             // A module-level read between an earlier import and this
             // assignment sees the import's value (Y-05, Y-09).
-            let read_between = |at: u32| reads.iter().any(|r| at < *r && *r < line);
+            // Only a read that names the constant matters, and one on the
+            // import's own line (after a `;`) counts too (Z-01, Z-04).
+            let read_between = |at: u32| {
+                reads
+                    .iter()
+                    .any(|(r, text)| at <= *r && *r < line && mentions(text, &symbol.name))
+            };
             let rebound_by_import = imported.iter().any(|(name, at, import_conditional)| {
                 name == &symbol.name
                     && (!python
@@ -302,6 +319,52 @@ impl Scope {
             self.bindings.entry(name).or_insert(value);
         }
     }
+}
+
+/// The expression source texts in a string fact, joined.
+fn fact_sources(fact: &StringFact) -> String {
+    match fact {
+        StringFact::Literal { .. } => String::new(),
+        StringFact::Template { parts, .. } => parts
+            .iter()
+            .filter_map(|p| match p {
+                TemplatePart::Expression { source, .. } => Some(source.as_str()),
+                TemplatePart::Text { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        StringFact::Concatenation { parts, .. } => parts
+            .iter()
+            .filter_map(|p| match p {
+                ConcatPart::Expression { source } => Some(source.as_str()),
+                ConcatPart::Literal { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+/// The expression source texts in a request's URL.
+fn url_sources(url: &cartograph_parser::model::UrlObservation) -> String {
+    use cartograph_parser::model::UrlObservation;
+    match url {
+        UrlObservation::Literal { .. } => String::new(),
+        UrlObservation::Template { parts } => parts
+            .iter()
+            .filter_map(|p| match p {
+                TemplatePart::Expression { source, .. } => Some(source.as_str()),
+                TemplatePart::Text { .. } => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        UrlObservation::Dynamic { source } => source.clone(),
+    }
+}
+
+/// Whether `text` names the identifier `name`.
+fn mentions(text: &str, name: &str) -> bool {
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|token| token == name)
 }
 
 /// Evaluates a string fact against a scope.

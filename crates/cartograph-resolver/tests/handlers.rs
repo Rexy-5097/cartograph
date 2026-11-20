@@ -866,3 +866,13 @@ fn a_def_under_try_or_with_after_a_star_import_is_refused() {
         );
     }
 }
+
+#[test]
+fn a_one_line_def_is_a_body() {
+    // Seventh review, Y-04: `def f(): return [path(...)]` may run after the
+    // star import, like any function.
+    let files = star_files(
+        "from django.urls import path\n\n\ndef list_orders(request):\n    return None\n\n\ndef get_patterns(): return [path('x/', list_orders)]\n\n\nfrom .views import *\nurlpatterns = get_patterns()\n",
+    );
+    assert_eq!(declared(&files, "shop/urls.py", "list_orders"), None);
+}

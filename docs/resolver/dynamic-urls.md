@@ -65,18 +65,23 @@ assignment at module level, and its value *is* one of the forms above, and
 nothing else in the file is seen to bind the name:
 - **another assignment, `def` or `class`**;
 - **an import** of the name. In Python, an unconditional import written
-  before the assignment does not count unless a module-level read (another
-  constant's value, a request) lies between them; an import inside a
-  function or class body hides the constant only for reads inside that body;
-- **a Python star import** written after it, or before it with a
-  module-level read between (a TypeScript `export * from` binds nothing
-  locally).
+  before the assignment does not count unless a module-level read that names
+  the constant (another string constant's expression, a module-level
+  request's URL) lies between them, or on the import's line;
+- **a Python star import** written after it, or before it with such a read
+  between (a TypeScript `export * from` binds nothing locally).
+
+A Python import inside a function or class body does not refuse the constant;
+it hides it for requests in the innermost body containing the import (an
+import in a class body also hides it from that class's methods, which is
+conservative).
 
 A name the file declares at module level is never taken from an import.
 Bindings by a tuple assignment, a `for` target, `with … as`, `:=`, `global`
 (including an import under `global`) and `+=` are not seen, so they do not
-refuse the constant. A function-local name or parameter of the same name is
-read as the constant (the lookup ignores scope). The parser
+refuse the constant. A function-local assignment or parameter of the same
+name is read as the constant (the lookup ignores scope); a function-local
+import is not. The parser
 records each variable's value span, with parentheses, `as` and `satisfies`
 looked through, and the string must cover it exactly: `'/api' as const`
 binds, while `isProd ? PROD : '/api'`, `base ?? '/api'` and

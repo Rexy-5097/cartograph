@@ -7,10 +7,41 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — lost edges found by an eighth independent review
+
+An eighth review found no false edge introduced by the seventh round's
+corrections, and correct constants they refused. Corrected, each with a
+regression test:
+
+- **Only a read that names the constant sees the import.** Any module-level
+  assignment between an import (or star import) and the constant's own
+  assignment used to refuse it, such as `logger = logging.getLogger(…)`. Now
+  only a string constant or a module-level request whose expression names the
+  constant does. A read on the import's own line, after `;`, counts.
+- **A function-local import hides the constant only in its innermost body**,
+  not in the whole module-level class or function around it: a sibling
+  method, or the outer function of a nested one, still reads the constant.
+- **A function-local import is applied when the request's URL is resolved**,
+  now tested end to end.
+
+Known limits, each reproduced by the review:
+
+- An import in a class body hides the constant from that class's methods,
+  which in Python cannot see class-body names.
+- A constant derived at module level from another constant (`URL = P +
+  "/x"`) is read with the request's own view of `P`: a function that imports
+  `P` locally does not get the module-level `URL`.
+- A request run while the module loads, by a module-level call between an
+  import and the assignment, is resolved only with the final value.
+- In a URL conf, a view name used inside the function that builds the routes
+  is resolved at module level: a parameter or a nested `def` of that name is
+  not seen.
+
 ### Fixed — false edges found by a seventh independent review
 
 A seventh review found that the sixth round's two rules guessed in uncommon
-cases. Corrected, each with a regression test:
+cases. Corrected, each with a regression test (the one-line `def` route's
+test was added with the eighth review's corrections):
 
 - **A route inside a function may run at any time after its `def`.** Its use
   now spans from its own line to the end of the module. A star import before
@@ -22,9 +53,12 @@ cases. Corrected, each with a regression test:
 - **A module-level read between an import and the assignment sees the
   import.** `from cfg import P`, then `URL = P + "sub/"`, then `P = "/api"`:
   `P` is no longer read as `/api`. The same holds for a star import.
+  *(Narrowed by the eighth review's corrections, above: only a read that
+  names the constant counts.)*
 - **A function-local import hides the module constant only inside its
   body.** A request in that body no longer reads the module constant; a
-  request elsewhere still does.
+  request elsewhere still does. *(Made exact by the eighth review's
+  corrections, above: the innermost body.)*
 
 Known limits, each reproduced by the review:
 
@@ -35,6 +69,7 @@ Known limits, each reproduced by the review:
   header (`if x: \` then a line in column 1) is read as unconditional.
 - `try: from cfg import P` / `except ImportError: pass` before an
   unconditional `P = "/api"` refuses `P`, although the assignment always wins.
+- `from cfg import P; P = "/api"` on one line refuses `P`.
 
 ### Fixed — false edges and lost edges found by a sixth independent review
 

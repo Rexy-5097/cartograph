@@ -576,3 +576,26 @@ def sync():
     assert_eq!(decisions[0].0, MatchStatus::Exact);
     assert_eq!(edges, 1);
 }
+
+#[test]
+fn a_function_local_import_hides_the_constant_from_requests_in_its_body() {
+    // Seventh review, Y-06, through `resolve_url` (eighth review, Z-07).
+    let project = Project::new(&[
+        (
+            "svc/client.py",
+            "import requests\n\nBASE = \"/api/orders/\"\n\n\ndef uses_import():\n    from svc.cfg import BASE\n    return requests.get(BASE)\n\n\ndef uses_constant():\n    return requests.get(BASE)\n",
+        ),
+        (
+            "api/views.py",
+            "from fastapi import APIRouter\n\nrouter = APIRouter()\n\n\n@router.get(\"/api/orders/\")\ndef orders():\n    return []\n",
+        ),
+    ]);
+    let (decisions, _, _) = project.run();
+    let derived: Vec<&str> = decisions.iter().map(|d| d.2.as_str()).collect();
+    assert_eq!(decisions.len(), 2, "{decisions:?}");
+    assert_ne!(
+        derived[0], "/api/orders/",
+        "the local import was read as the constant"
+    );
+    assert_eq!(derived[1], "/api/orders/");
+}
