@@ -362,6 +362,7 @@ dependencies = [
  "cartograph-core",
  "cartograph-graph",
  "cartograph-pipeline",
+ "cartograph-resolver",
  "cartograph-testkit",
  "keyring-core",
  "serde",

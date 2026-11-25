@@ -1,0 +1,29 @@
+[package]
+name = "cartograph-serve"
+description = "EXPERIMENTAL (M18, proposed ADR-0024): a loopback-only browser client for Cartograph."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/Rexy-5097/cartograph"
+authors = ["Cartograph contributors"]
+publish = false
+
+# Deliberately NOT a member of the root workspace, as `desktop/src-tauri` is
+# not (ADR-0016): this is an experiment the owner has not accepted, and the
+# CLI's own contract forbids a `serve` subcommand
+# (`crates/cartograph-cli/src/main.rs`, "forbidden" subcommands). Keeping it
+# out means no accepted crate, gate or ADR changes because it exists.
+#
+# It links `cartograph-desktop`, exactly as the Tauri shell does, so it calls
+# the same analysis, evidence, blast and layout code and adds none of its own
+# (ADR-0001). The network client `ureq` stays reachable only through
+# `cartograph-desktop`'s ASK path, which this server never calls
+# (ADR-0021 decision C3 is unchanged: `cartograph-cli` gains nothing).
+[workspace]
+
+[dependencies]
+cartograph-core = { path = "../../../crates/cartograph-core" }
+cartograph-desktop = { path = "../../../crates/cartograph-desktop" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

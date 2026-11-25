@@ -10,7 +10,7 @@ use cartograph_desktop::error::DesktopErrorKind;
 use cartograph_desktop::evidence::AnalysisId;
 use cartograph_desktop::repository::validate;
 use cartograph_desktop::session::{analyze_as, analyze_report_as};
-use cartograph_desktop::{source, trace};
+use cartograph_desktop::{inspect, source, trace};
 use cartograph_graph::trace::{DEFAULT_MAX_DEPTH, trace as core_trace};
 use cartograph_pipeline::pipeline::{self, Options};
 
@@ -184,5 +184,39 @@ fn a_source_excerpt_reads_only_files_the_analysis_cites() {
         None,
     )
     .expect_err("stale");
+    assert_eq!(stale.kind, DesktopErrorKind::StaleSelection);
+}
+
+#[test]
+fn a_node_detail_is_the_graphs_own_location_and_edges() {
+    let fixture = Fixture::new("inspect");
+    let repository = validate(fixture.path()).expect("validates");
+    let (payload, session) = analyze_as(&repository, AnalysisId::first()).expect("analyses");
+    let graph = session.graph();
+    let caller = graph
+        .nodes()
+        .find(|n| n.name() == "loadOrders")
+        .expect("the caller is a node");
+
+    let detail = inspect::node(&session, payload.analysis, caller.id()).expect("inspects");
+    assert_eq!(detail.label, "loadOrders");
+    assert_eq!(
+        detail.file.as_deref(),
+        caller.location().map(cartograph_core::SourceLocation::file)
+    );
+    assert_eq!(
+        detail.line,
+        caller.location().map(cartograph_core::SourceLocation::line)
+    );
+    assert_eq!(detail.outgoing.len(), graph.edges_from(caller.id()).count());
+    assert_eq!(detail.incoming.len(), graph.edges_to(caller.id()).count());
+    for out in &detail.outgoing {
+        let edge = graph.edge(out.edge).expect("a real edge");
+        assert_eq!(edge.source(), caller.id());
+        assert_eq!(edge.target(), out.node);
+    }
+
+    let stale =
+        inspect::node(&session, AnalysisId::first().next(), caller.id()).expect_err("stale");
     assert_eq!(stale.kind, DesktopErrorKind::StaleSelection);
 }
