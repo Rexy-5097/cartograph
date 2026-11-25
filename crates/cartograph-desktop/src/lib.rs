@@ -31,6 +31,11 @@
 //! cartograph-graph     the graph, and the layout (ADR-0015)
 //! ```
 //!
+//! The experimental `report` module (M18, proposed ADR-0024) also depends on
+//! `cartograph-resolver` directly, for the `MatchResult`/`MatchStatus` types
+//! of the decisions the pipeline already returns. It reads them, through
+//! accessors and `Display`; it runs no resolver matching logic.
+//!
 //! **Analysis only ever moves upward.** No layer above `cartograph-pipeline`
 //! decides what connects to what, and no layer above `cartograph-graph`
 //! decides where anything is drawn. That is RULE 002 and ADR-0001, and it is

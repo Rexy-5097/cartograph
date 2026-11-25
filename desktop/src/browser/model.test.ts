@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AnalysisReport, RequestDecision, TraceResult } from "./api";
 import {
+  frontendRequests,
   groupDecisions,
   isTestPath,
   neighbourhoodKeys,
@@ -179,5 +180,25 @@ describe("neighbourhoodKeys", () => {
     const keys = neighbourhoodKeys(1, [{ edge: 5, node: 2 }], [{ edge: 6, node: 3 }]);
     expect([...keys.nodes].sort()).toEqual(["1", "2", "3"]);
     expect([...keys.edges].sort()).toEqual(["e5", "e6"]);
+  });
+});
+
+describe("frontendRequests", () => {
+  it("counts requests in frontend files and the accepted ones among them", () => {
+    const d = (clientFile: string, status: RequestDecision["status"]): RequestDecision => ({
+      clientFile,
+      clientLine: 1,
+      clientRoute: "GET /x",
+      status,
+      candidates: [],
+    });
+    expect(
+      frontendRequests([
+        d("web/a.ts", "strong"),
+        d("web/b.tsx", "no-match"),
+        d("api/tests/test_a.py", "strong"),
+      ]),
+    ).toEqual({ observed: 2, connected: 1 });
+    expect(frontendRequests([])).toEqual({ observed: 0, connected: 0 });
   });
 });

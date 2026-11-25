@@ -115,15 +115,16 @@ pub fn analyze_as(
     repository: &ValidatedRepository,
     id: AnalysisId,
 ) -> Result<(AnalysisPayload, AnalysisSession), DesktopError> {
-    analyze_report_as(repository, id).map(|(payload, _, session)| (payload, session))
+    run(repository, id, false).map(|(payload, _, session)| (payload, session))
 }
 
 /// As [`analyze_as`], also returning the pipeline's counts, match decisions
 /// and diagnostics (**experimental**, M18 browser explorer; proposed
 /// ADR-0024).
 ///
-/// One code path: [`analyze_as`] is this function with the report dropped,
-/// so the desktop's payload cannot drift from the browser's.
+/// One code path: [`analyze_as`] and this function share [`run`], so the
+/// desktop's payload cannot drift from the browser's; only this one also
+/// composes the report.
 ///
 /// # Errors
 ///
@@ -132,8 +133,21 @@ pub fn analyze_report_as(
     repository: &ValidatedRepository,
     id: AnalysisId,
 ) -> Result<(AnalysisPayload, AnalysisReport, AnalysisSession), DesktopError> {
+    let (payload, report, session) = run(repository, id, true)?;
+    let report = report.ok_or_else(|| DesktopError::internal("the report was not composed"))?;
+    Ok((payload, report, session))
+}
+
+/// The one analysis path behind [`analyze_as`] and [`analyze_report_as`].
+/// The report is composed only when asked for, so the desktop's path does no
+/// extra work for the browser experiment.
+fn run(
+    repository: &ValidatedRepository,
+    id: AnalysisId,
+    with_report: bool,
+) -> Result<(AnalysisPayload, Option<AnalysisReport>, AnalysisSession), DesktopError> {
     let analysis = pipeline::run(repository.path(), Options { quiet: true })?;
-    let report = report::compose(id, &analysis);
+    let report = with_report.then(|| report::compose(id, &analysis));
 
     let layout = layout::layout(&analysis.graph, &LayoutParams::default());
     let scene = scene::compose(&analysis.graph, &layout);

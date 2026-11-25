@@ -7,8 +7,16 @@
 //!
 //! It is shaping only. Every value is copied from
 //! [`cartograph_pipeline::pipeline::Analysis`]; nothing here decides whether a
-//! request matches a route or why it did not (RULE 002, ADR-0001). The field
-//! names follow `cartograph match --json` so the two can be compared.
+//! request matches a route or why it did not (RULE 002, ADR-0001).
+//!
+//! It is **not** the `cartograph match --json` document. A decision carries
+//! the same facts as one entry of that document's `matches[]`, but the names
+//! here are camelCase, and `totals` is the pipeline's own [`Totals`] (so
+//! `routes`, `http_observations`, and `edges` = every edge), where the CLI's
+//! match totals say `backend_routes`, `client_calls`, and `edges` = HTTP-call
+//! edges. [`status_slug`] mirrors the CLI's private `status_name`; the two are
+//! separate code and could drift, which is why the experiment's
+//! `verify_api.py` compares the served counts with the CLI's output.
 
 use serde::Serialize;
 

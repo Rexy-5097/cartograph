@@ -201,9 +201,22 @@ fn start_analysis(shared: &Arc<Shared>) -> AnalysisId {
     };
     let worker = Arc::clone(shared);
     std::thread::spawn(move || {
-        let result = session::analyze_report_as(&worker.repository, id);
-        let Ok(mut state) = worker.state.lock() else {
-            return;
+        // A panic inside the analysis must not leave the server reporting
+        // "running" for ever: it becomes a failed analysis instead.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            session::analyze_report_as(&worker.repository, id)
+        }))
+        .unwrap_or_else(|_| {
+            Err(DesktopError::internal(
+                "the analysis stopped unexpectedly; see the server's console",
+            ))
+        });
+        let mut state = match worker.state.lock() {
+            Ok(state) => state,
+            Err(poisoned) => {
+                worker.state.clear_poison();
+                poisoned.into_inner()
+            }
         };
         state.running = None;
         match result {
@@ -297,17 +310,41 @@ fn read_request(stream: &mut TcpStream) -> Result<Request, &'static str> {
     let mut headers = HashMap::new();
     for line in lines {
         if let Some((name, value)) = line.split_once(':') {
-            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_owned());
+            let name = name.trim().to_ascii_lowercase();
+            // Two Host (or length) headers leave the request ambiguous; a
+            // browser never sends that, so it is refused rather than guessed.
+            if headers.contains_key(&name) && matches!(name.as_str(), "host" | "content-length") {
+                return Err("duplicate header");
+            }
+            headers.insert(name, value.trim().to_owned());
         }
     }
-    // A body is never used; it is drained (up to a small limit) so the client
-    // sees a complete exchange.
-    let length: usize = headers
-        .get("content-length")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+    if headers.contains_key("transfer-encoding") {
+        return Err("transfer encodings are not accepted");
+    }
+    // A body is never used. It is read and discarded (up to a small limit),
+    // because closing a socket with unread data resets the connection, which
+    // can destroy the response before the client reads it.
+    let length: usize = match headers.get("content-length") {
+        None => 0,
+        // Digits only: `usize::from_str` would also take a leading `+`.
+        Some(value) if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) => {
+            value.parse().map_err(|_| "invalid content length")?
+        }
+        Some(_) => return Err("invalid content length"),
+    };
     if length > MAX_BODY {
         return Err("request body too large");
+    }
+    let mut have = buffer.len() - (head_end + 4);
+    while have < length {
+        let read = stream
+            .read(&mut chunk)
+            .map_err(|_| "unreadable request body")?;
+        if read == 0 {
+            return Err("incomplete request body");
+        }
+        have += read;
     }
     let (path, query) = match target.split_once('?') {
         Some((path, query)) => (path, parse_query(query)),
@@ -626,12 +663,14 @@ fn same(a: &[u8], b: &[u8]) -> bool {
     a.iter().zip(b).fold(0_u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// A 256-bit per-launch token.
+/// A per-launch token: 64 hex digits, but **about 128 bits of entropy**.
 ///
-/// From the standard library's `RandomState`, whose keys are seeded from the
-/// operating system's random source; no crate is added for it. Mixed with the
-/// clock and the process id so two launches differ even if a platform seeded
-/// poorly.
+/// From the standard library's `RandomState`: one per-thread key seeded from
+/// the operating system's random source, whose first half is incremented for
+/// each new `RandomState`, so four hashes stretch one 128-bit secret rather
+/// than drawing four. No crate is added for it. Mixed with the clock and the
+/// process id so two launches differ even if a platform seeded poorly.
+/// Proposed ADR-0024 asks for a direct OS random source before acceptance.
 fn token() -> String {
     use std::fmt::Write as _;
     use std::hash::{BuildHasher, Hasher};
@@ -686,7 +725,7 @@ mod tests {
     }
 
     #[test]
-    fn two_tokens_differ_and_are_256_bits_of_hex() {
+    fn two_tokens_differ_and_are_64_hex_digits() {
         let (a, b) = (token(), token());
         assert_eq!(a.len(), 64);
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));

@@ -135,12 +135,13 @@ fn a_trace_is_the_core_walk_and_refuses_a_stale_or_unknown_start() {
     let core = core_trace(graph, start, DEFAULT_MAX_DEPTH);
     assert_eq!(walked.from, core.from);
     assert_eq!(walked.max_depth, core.max_depth);
-    assert_eq!(walked.steps.len(), core.steps.len());
-    for (ours, theirs) in walked.steps.iter().zip(&core.steps) {
-        assert_eq!(ours.edge, theirs.edge);
-        assert_eq!(ours.to, theirs.to);
-    }
+    assert_eq!(walked.stop, core.stop);
+    assert_same_hops(&walked.steps, &core.steps);
     assert!(!walked.steps.is_empty(), "the request reaches its handler");
+    assert!(
+        walked.steps.iter().any(|s| !s.next.is_empty()),
+        "the fixture's trace is deeper than one hop, so nesting is exercised"
+    );
 
     let stale = trace::walk(&session, AnalysisId::first().next(), start).expect_err("stale");
     assert_eq!(stale.kind, DesktopErrorKind::StaleSelection);
@@ -227,4 +228,15 @@ fn a_node_detail_is_the_graphs_own_location_and_edges() {
     let stale =
         inspect::node(&session, AnalysisId::first().next(), caller.id()).expect_err("stale");
     assert_eq!(stale.kind, DesktopErrorKind::StaleSelection);
+}
+
+/// Every hop, at every depth, with its stop reason, equals the core's.
+fn assert_same_hops(ours: &[trace::TraceHop], core: &[cartograph_graph::trace::TraceStep]) {
+    assert_eq!(ours.len(), core.len());
+    for (a, b) in ours.iter().zip(core) {
+        assert_eq!(a.edge, b.edge);
+        assert_eq!(a.to, b.to);
+        assert_eq!(a.stop, b.stop);
+        assert_same_hops(&a.next, &b.next);
+    }
 }

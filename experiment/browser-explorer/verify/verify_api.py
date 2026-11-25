@@ -80,11 +80,26 @@ def main() -> int:
         "summary nodes": (payload["summary"]["nodes"], len(cli["nodes"])),
         "summary edges": (payload["summary"]["edges"], len(cli["edges"])),
     }
-    for key in ("routes", "http_observations", "orm_models", "orm_tables", "ambiguous",
-                "no_match", "unsupported", "http_call_edges", "cross_language_edges"):
-        cli_key = {"http_observations": "http_calls"}.get(key, key)
-        if cli_key in s:
-            pairs[key] = (t[key], s[cli_key])
+    # Report field -> CLI summary field. Every one must be present: a missing
+    # key is a failure, not a skip, so a renamed field cannot pass silently.
+    cli_names = {
+        "routes": "routes_observed",
+        "http_observations": "http_observed",
+        "orm_models": "orm_models",
+        "orm_tables": "tables_resolved",
+        "symbols": "symbols",
+        "ambiguous": "ambiguous",
+        "no_match": "no_match",
+        "unsupported": "unsupported",
+        "http_call_edges": "http_call_edges",
+        "client_call_edges": "client_call_edges",
+        "orm_edges": "orm_edges",
+        "cross_language_edges": "cross_language_edges",
+        "diagnostics": "diagnostics",
+        "files_failed": "files_failed",
+    }
+    for key, cli_key in cli_names.items():
+        pairs[key] = (t.get(key), s.get(cli_key, "<missing in CLI JSON>"))
     for key, (ours, theirs) in pairs.items():
         check(f"count {key}", ours == theirs, f"browser {ours}, CLI {theirs}")
 

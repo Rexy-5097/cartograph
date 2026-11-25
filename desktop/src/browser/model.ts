@@ -20,10 +20,10 @@ import type { EdgeKind, NodeKind, Scene } from "../session";
 export type Layer = "frontend" | "api" | "backend" | "model" | "database" | "external" | "other";
 
 export const LAYER_LABEL: Record<Layer, string> = {
-  frontend: "Frontend (TypeScript)",
+  frontend: "Frontend (TS/JS)",
   api: "API route",
   backend: "Backend (Python)",
-  model: "Class / model",
+  model: "Python class",
   database: "Database table",
   external: "External service",
   other: "Other",
@@ -140,14 +140,16 @@ export function groupDecisions(
 
 /** What each refusal status means, in plain words. */
 export const STATUS_MEANING: Record<RequestDecision["status"], string> = {
-  exact: "Matched one route exactly: an edge was drawn.",
-  strong: "Matched one route, with something undetermined: an edge was drawn.",
+  exact:
+    "Accepted: exactly one compatible route, with a declared method and every path position determined. The graph gets an edge for it.",
+  strong:
+    "Accepted: exactly one compatible route, with something undetermined (an undeclared method or an unknown path value). The graph gets an edge for it.",
   ambiguous:
-    "Several routes fit equally well. Cartograph refused to choose, so no edge was drawn. This is not evidence that no connection exists.",
+    "Not decided, so no edge: several routes remain equally plausible, or the best one would only match by accepting an unknown value or a whole class of paths. This is not evidence that no connection exists.",
   "no-match":
-    "No route in the analysed code has this path. Cartograph drew no edge. The route may live outside the repository, be generated at runtime, or be built by a pattern Cartograph does not read.",
+    "No compatible route in the analysed code — none with this path, or none whose method fits. Cartograph drew no edge. The route may live outside the repository, be generated at runtime (for example by a router), or be declared in a way Cartograph does not read.",
   unsupported:
-    "The request's URL could not be determined from the source (for example, it is built at runtime). Cartograph refused to guess, so no edge was drawn.",
+    "Not compared: the request could not be compared safely — its path is not a fixed pattern, its prefix is unknown, or it names an absolute host (so it may address a third party, not this application). No edge was drawn.",
   other: "A decision kind this interface does not know. Shown as reported.",
 };
 
@@ -186,8 +188,11 @@ export interface TracePath {
   stop: TraceHop["stop"];
 }
 
+/** How many root-to-leaf paths a trace listing collects before it stops. */
+export const TRACE_PATH_LIMIT = 200;
+
 /** Flattens a trace into its root-to-leaf paths, at most `limit` of them. */
-export function tracePaths(trace: TraceResult | null, limit = 200): TracePath[] {
+export function tracePaths(trace: TraceResult | null, limit = TRACE_PATH_LIMIT): TracePath[] {
   if (trace === null) {
     return [];
   }
@@ -258,4 +263,27 @@ export function neighbourhoodKeys(
     edges.add(`e${n.edge}`);
   }
   return { nodes, edges };
+}
+
+/**
+ * Requests observed in frontend-language files, and how many were accepted.
+ *
+ * Counted from the report's own match decisions; the file-extension grouping
+ * is the same presentation choice as {@link layerOf}.
+ */
+export function frontendRequests(decisions: readonly RequestDecision[]): {
+  observed: number;
+  connected: number;
+} {
+  let observed = 0;
+  let connected = 0;
+  for (const d of decisions) {
+    if (FRONTEND_EXT.test(d.clientFile)) {
+      observed += 1;
+      if (d.status === "exact" || d.status === "strong") {
+        connected += 1;
+      }
+    }
+  }
+  return { observed, connected };
 }

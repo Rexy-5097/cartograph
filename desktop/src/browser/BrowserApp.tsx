@@ -46,6 +46,8 @@ import {
   LAYER_LABEL,
   type Layer,
   STATUS_MEANING,
+  TRACE_PATH_LIMIT,
+  frontendRequests,
   STOP_MEANING,
   edgeKinds,
   groupDecisions,
@@ -83,7 +85,7 @@ const LAYER_VIEWS: Partial<Record<View, Layer[]>> = {
   frontend: ["frontend"],
   api: ["api"],
   backend: ["backend", "model"],
-  database: ["database", "model"],
+  database: ["database"],
 };
 
 const ALL_EDGE_KINDS: EdgeKind[] = [
@@ -109,6 +111,7 @@ export default function BrowserApp() {
   const api = useMemo(() => (token === null ? null : new Api(token)), [token]);
 
   const [status, setStatus] = useState<ServerStatus | null>(null);
+  const [reachable, setReachable] = useState(true);
   const [payload, setPayload] = useState<AnalysisPayload | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [loadError, setLoadError] = useState<{ message: string; hint?: string } | null>(null);
@@ -132,6 +135,15 @@ export default function BrowserApp() {
   const [focus, setFocus] = useState<{ nodes: Set<string>; edges: Set<string> } | null>(null);
 
   const sigma = useRef<Sigma | null>(null);
+  const sourceSeq = useRef(0);
+  // The analysis on screen, updated the moment a new one is installed, and a
+  // counter per kind of request. An answer is applied only if it is still the
+  // newest of its kind and belongs to the analysis on screen; anything else
+  // arrived late and is dropped.
+  const liveAnalysis = useRef<number | null>(null);
+  const inspectorSeq = useRef(0);
+  const overlaySeq = useRef(0);
+  const inspector = useRef<HTMLElement | null>(null);
   const onSigma = useCallback((instance: Sigma | null) => {
     sigma.current = instance;
   }, []);
@@ -139,16 +151,20 @@ export default function BrowserApp() {
   const analysisId = payload?.analysis ?? null;
 
   // ── Loading and refreshing ────────────────────────────────────────────
-  const load = useCallback(async () => {
+  /** Installs the newest analysis; true if one was installed. */
+  const load = useCallback(async (): Promise<boolean> => {
     if (api === null) {
-      return;
+      return false;
     }
     try {
       const [nextPayload, nextReport] = await Promise.all([api.analysis(), api.report()]);
       if (nextPayload.analysis !== nextReport.analysis) {
         // Two different analyses: the next poll will bring a matching pair.
-        return;
+        return false;
       }
+      liveAnalysis.current = nextPayload.analysis;
+      inspectorSeq.current += 1;
+      overlaySeq.current += 1;
       setPayload(nextPayload);
       setReport(nextReport);
       setSelection({ kind: "none" });
@@ -159,8 +175,10 @@ export default function BrowserApp() {
       setBlast(null);
       setFocus(null);
       setLoadError(null);
+      return true;
     } catch (error) {
       setLoadError(errorText(error));
+      return false;
     }
   }, [api]);
 
@@ -177,14 +195,18 @@ export default function BrowserApp() {
           return;
         }
         setStatus(next);
+        setReachable(true);
         if (next.analysis !== null && next.analysis !== analysisId) {
           await load();
         }
-        if (next.phase === "running" || next.analysis === null) {
-          timer = window.setTimeout(poll, 600);
-        }
+        // Fast while an analysis runs; slow otherwise, so a refresh started
+        // elsewhere (another tab, the API) and a stopped server are noticed.
+        const waiting =
+          next.phase === "running" || (next.analysis === null && next.phase !== "failed");
+        timer = window.setTimeout(poll, waiting ? 600 : 5000);
       } catch (error) {
         if (!cancelled) {
+          setReachable(false);
           setLoadError(errorText(error));
           timer = window.setTimeout(poll, 2000);
         }
@@ -220,6 +242,42 @@ export default function BrowserApp() {
       setLoadError(errorText(error));
     }
   };
+
+  /**
+   * Shows a lookup failure. A stale refusal means the server holds a newer
+   * analysis than the page (refreshed from another tab or client), so the
+   * page loads it rather than asking the user to select again on an old map.
+   */
+  const lookupFailed = useCallback(
+    (error: unknown) => {
+      setInspectorError(errorText(error).message);
+      if (api === null || !(error instanceof ApiError) || error.kind !== "staleSelection") {
+        return;
+      }
+      void (async () => {
+        try {
+          const next = await api.status();
+          setStatus(next);
+          // The poll may already have installed it; compare with what is on
+          // screen now, not with the id this callback was created under.
+          if (next.analysis !== null && next.analysis !== liveAnalysis.current) {
+            if (await load()) {
+              setInspectorError(
+                `The analysis was refreshed elsewhere, so the map now shows analysis #${next.analysis}. Select again.`,
+              );
+            }
+          } else if (next.analysis !== null) {
+            setInspectorError(
+              `The analysis was refreshed elsewhere, so the map now shows analysis #${next.analysis}. Select again.`,
+            );
+          }
+        } catch (statusError) {
+          setLoadError(errorText(statusError));
+        }
+      })();
+    },
+    [api, load],
+  );
 
   // ── Derived, presentational data ──────────────────────────────────────
   const scene = payload?.scene ?? null;
@@ -291,7 +349,8 @@ export default function BrowserApp() {
           : (focus ?? viewHighlight);
     return {
       hiddenNodeKinds,
-      hiddenEdgeKinds: hiddenKinds,
+      // A trace or blast is shown whole: edge-kind filters do not cut it.
+      hiddenEdgeKinds: view === "trace" || view === "blast" ? new Set<string>() : hiddenKinds,
       hiddenClusters,
       highlight,
       selectedNode: selection.kind === "node" ? String(selection.id) : null,
@@ -315,19 +374,34 @@ export default function BrowserApp() {
           }
         }
       }
+      // Nodes in the trace or blast on screen stay visible whatever the
+      // filters say: hiding part of a result would misstate it.
+      const kept = new Set<string>();
+      if (view === "blast" && blast !== null) {
+        kept.add(String(blast.target));
+        for (const key of impactedNodeKeys(blast)) {
+          kept.add(key);
+        }
+      } else if (view === "trace" && traceHighlight !== null) {
+        for (const key of traceHighlight.nodes) {
+          kept.add(key);
+        }
+      }
       out.nodeStyle = (key: string) => {
         const layer = layerByKey.get(key);
         if (layer === undefined) {
           return {};
         }
         return {
-          hidden: hiddenLayers.has(layer) || testKeys.has(key),
-          color: colourBy === "layer" ? LAYER_COLOR[layer] : undefined,
+          hidden: !kept.has(key) && (hiddenLayers.has(layer) || testKeys.has(key)),
+          // In the blast view the renderer's target / impacted / dimmed
+          // colours carry the result, so the layer colour does not replace them.
+          color: colourBy === "layer" && view !== "blast" ? LAYER_COLOR[layer] : undefined,
         };
       };
     }
     return out;
-  }, [graphView, hiddenLayers, colourBy, layerOfNode, hideTests, where]);
+  }, [graphView, hiddenLayers, colourBy, layerOfNode, hideTests, where, view, blast, traceHighlight]);
 
   const testNodeCount = useMemo(() => {
     let n = 0;
@@ -349,18 +423,20 @@ export default function BrowserApp() {
       if (api === null || analysisId === null) {
         return;
       }
+      const seq = ++inspectorSeq.current;
       try {
         const record = await api.evidence(analysisId, edge);
-        // Discard an answer for an analysis that is no longer on screen.
-        if (record.analysis === analysisId) {
+        if (seq === inspectorSeq.current && record.analysis === liveAnalysis.current) {
           setEvidence(record);
         }
       } catch (error) {
-        setEvidence(null);
-        setInspectorError(errorText(error).message);
+        if (seq === inspectorSeq.current) {
+          setEvidence(null);
+          lookupFailed(error);
+        }
       }
     },
-    [api, analysisId],
+    [api, analysisId, lookupFailed],
   );
 
   const selectNode = useCallback(
@@ -372,20 +448,24 @@ export default function BrowserApp() {
       if (api === null || analysisId === null) {
         return;
       }
+      const seq = ++inspectorSeq.current;
       try {
         const found = await api.node(analysisId, node);
-        if (found.analysis === analysisId) {
+        if (seq === inspectorSeq.current && found.analysis === liveAnalysis.current) {
           setDetail(found);
         }
       } catch (error) {
-        setDetail(null);
-        setInspectorError(errorText(error).message);
+        if (seq === inspectorSeq.current) {
+          setDetail(null);
+          lookupFailed(error);
+        }
       }
     },
-    [api, analysisId],
+    [api, analysisId, lookupFailed],
   );
 
   const clearSelection = useCallback(() => {
+    inspectorSeq.current += 1;
     setSelection({ kind: "none" });
     setEvidence(null);
     setDetail(null);
@@ -455,13 +535,20 @@ export default function BrowserApp() {
     if (api === null || analysisId === null) {
       return;
     }
+    // Belongs to the current selection (a newer selection makes it late), and
+    // a newer source request supersedes it.
+    const seq = inspectorSeq.current;
+    const mine = ++sourceSeq.current;
+    const current = () => seq === inspectorSeq.current && mine === sourceSeq.current;
     try {
       const found = await api.source(analysisId, file, line);
-      if (found.analysis === analysisId) {
+      if (current() && found.analysis === liveAnalysis.current) {
         setSource(found);
       }
     } catch (error) {
-      setInspectorError(errorText(error).message);
+      if (current()) {
+        lookupFailed(error);
+      }
     }
   };
 
@@ -469,15 +556,18 @@ export default function BrowserApp() {
     if (api === null || analysisId === null) {
       return;
     }
+    const seq = ++overlaySeq.current;
     try {
       const found = await api.trace(analysisId, node);
-      if (found.analysis === analysisId) {
+      if (seq === overlaySeq.current && found.analysis === liveAnalysis.current) {
         setTrace(found);
         setBlast(null);
         setView("trace");
       }
     } catch (error) {
-      setInspectorError(errorText(error).message);
+      if (seq === overlaySeq.current) {
+        lookupFailed(error);
+      }
     }
   };
 
@@ -485,15 +575,18 @@ export default function BrowserApp() {
     if (api === null || analysisId === null) {
       return;
     }
+    const seq = ++overlaySeq.current;
     try {
       const found = await api.blast(analysisId, node);
-      if (found.analysis === analysisId) {
+      if (seq === overlaySeq.current && found.analysis === liveAnalysis.current) {
         setBlast(found);
         setTrace(null);
         setView("blast");
       }
     } catch (error) {
-      setInspectorError(errorText(error).message);
+      if (seq === overlaySeq.current) {
+        lookupFailed(error);
+      }
     }
   };
 
@@ -526,28 +619,19 @@ export default function BrowserApp() {
   }
 
   const label = (id: number) => nodeById.get(id)?.label ?? `node ${id}`;
-  const totals = report?.totals ?? null;
   const decisions = report?.decisions ?? [];
   const refusals = decisions.filter((d) => d.status !== "strong" && d.status !== "exact");
   const routeNodes = scene?.nodes.filter((n) => n.kind === "route") ?? [];
+  const frontend = frontendRequests(decisions);
 
+  const layerCount = (layer: Layer) => layerCounts.find(([l]) => l === layer)?.[1] ?? 0;
   const navItems: { id: View; label: string; count?: number; empty?: boolean }[] = [
     { id: "overview", label: "Architecture overview" },
     { id: "map", label: "Full map", count: scene?.nodes.length },
-    {
-      id: "frontend",
-      label: "Frontend",
-      count: layerCounts.find(([l]) => l === "frontend")?.[1] ?? 0,
-    },
-    { id: "api", label: "API and routes", count: totals?.routes ?? 0 },
-    {
-      id: "backend",
-      label: "Backend",
-      count:
-        (layerCounts.find(([l]) => l === "backend")?.[1] ?? 0) +
-        (layerCounts.find(([l]) => l === "model")?.[1] ?? 0),
-    },
-    { id: "database", label: "Database", count: totals?.orm_tables ?? 0 },
+    { id: "frontend", label: "Frontend", count: layerCount("frontend") },
+    { id: "api", label: "API and routes", count: layerCount("api") },
+    { id: "backend", label: "Backend", count: layerCount("backend") + layerCount("model") },
+    { id: "database", label: "Database", count: layerCount("database") },
     {
       id: "dependencies",
       label: "Dependencies",
@@ -584,7 +668,9 @@ export default function BrowserApp() {
           {status?.repository ?? payload?.repository ?? "…"}
         </div>
         <div className={`bx-status bx-status-${phase}`} role="status" aria-live="polite">
-          {phase === "running"
+          {!reachable
+            ? "Server unreachable"
+            : phase === "running"
             ? "Analysing…"
             : phase === "failed"
               ? "Last analysis failed"
@@ -625,6 +711,8 @@ export default function BrowserApp() {
                       }
                       void selectNode(m.id);
                       window.setTimeout(() => focusNode(m.id), 50);
+                      // The result list closes; keep keyboard focus on what was chosen.
+                      inspector.current?.focus();
                     }}
                   >
                     <span>{m.label}</span>
@@ -671,7 +759,10 @@ export default function BrowserApp() {
                 type="button"
                 className={view === item.id ? "bx-nav-item bx-nav-current" : "bx-nav-item"}
                 aria-current={view === item.id ? "page" : undefined}
-                onClick={() => setView(item.id)}
+                onClick={() => {
+                  overlaySeq.current += 1;
+                  setView(item.id);
+                }}
               >
                 <span>{item.label}</span>
                 {item.count !== undefined && (
@@ -684,8 +775,11 @@ export default function BrowserApp() {
           ))}
         </ul>
         <p className="bx-nav-note">
-          Counts come from the Rust analysis. “none” means Cartograph detected nothing of that
-          kind — not that the codebase has none.
+          Badges are counts from the Rust analysis: the map nodes in a group (the view also
+          shows their direct neighbours), relationships, refusals or diagnostics. Frontend, API,
+          Backend and Database group nodes by file type and kind — a presentation choice, not an
+          analysis result.
+          “none” means Cartograph detected nothing of that kind — not that the codebase has none.
         </p>
       </nav>
 
@@ -702,7 +796,7 @@ export default function BrowserApp() {
             {payload !== null && <span> The previous analysis is still shown.</span>}
           </div>
         )}
-        {payload === null && loadError === null && (
+        {payload === null && loadError === null && phase !== "failed" && (
           <div className="bx-loading" role="status">
             <div className="bx-spinner" aria-hidden="true" />
             <p>Cartograph is analysing the repository. The map appears when it finishes.</p>
@@ -716,14 +810,15 @@ export default function BrowserApp() {
               Analysis #{payload.analysis}, {report.elapsedMs} ms. Every figure below is a count
               from Cartograph’s Rust analysis of this repository; nothing is estimated.
             </p>
-            {report.totals.cross_language_edges === 0 && report.totals.http_observations > 0 && (
+            {frontend.observed > 0 && frontend.connected === 0 && (
               <div className="bx-callout" role="note">
-                <strong>No relationship crosses between languages in this analysis.</strong> Cartograph
-                observed {report.totals.http_observations.toLocaleString()} HTTP call sites, but none of
-                the frontend’s requests was connected to a backend route, so the map shows the frontend
-                and the backend as separate regions. This is a statement about what Cartograph could
-                establish, not about how the application works. See <em>Unresolved</em> for every request
-                it declined to match, and why.
+                <strong>No frontend request is connected to a backend route in this analysis.</strong>{" "}
+                Cartograph observed {report.totals.http_observations.toLocaleString()} HTTP call sites;{" "}
+                {frontend.observed.toLocaleString()} of them are in frontend (TypeScript or JavaScript)
+                files, and none of those was matched, so the map shows the frontend and the backend as
+                separate regions. This is a statement about what Cartograph could establish, not about
+                how the application works. See <em>Unresolved</em> for every request it declined to
+                match, and why.
               </div>
             )}
             <div className="bx-figures">
@@ -987,7 +1082,7 @@ export default function BrowserApp() {
         )}
       </main>
 
-      <aside className="bx-inspector" aria-label="Inspector">
+      <aside className="bx-inspector" aria-label="Inspector" ref={inspector} tabIndex={-1}>
         {selection.kind === "none" && (
           <div className="bx-inspector-empty">
             <h2>Inspector</h2>
@@ -1116,8 +1211,10 @@ function TracePanel({
       ) : (
         <>
           <p className="bx-muted">
-            {paths.length} path{paths.length === 1 ? "" : "s"} within depth {trace.maxDepth}. Click a
-            hop for its evidence.
+            {paths.length >= TRACE_PATH_LIMIT
+              ? `${TRACE_PATH_LIMIT} or more paths within depth ${trace.maxDepth}; this list stops collecting at ${TRACE_PATH_LIMIT}.`
+              : `${paths.length} path${paths.length === 1 ? "" : "s"} within depth ${trace.maxDepth}.`}{" "}
+            Click a hop for its evidence.
           </p>
           <ol className="bx-paths">
             {paths.slice(0, 50).map((path, i) => (
@@ -1145,7 +1242,7 @@ function TracePanel({
                           ? " This path reaches a database table."
                           : " This path does not reach a database table in the analysed graph."}
                         {viaHttp && kindOf(end) === "class" &&
-                          " The request reached a class-based view; Cartograph reaches such a view but does not follow into its methods (a documented limit), so what the view does is not on this path."}
+                          " Interface note: the request ends at a class. If that class is a class-based view, Cartograph reaches it but does not follow into its methods (a documented limit), so what the view does would not be on this path."}
                       </>
                     );
                   })()}
@@ -1153,7 +1250,12 @@ function TracePanel({
               </li>
             ))}
           </ol>
-          {paths.length > 50 && <p className="bx-muted">…and {paths.length - 50} more paths.</p>}
+          {paths.length > 50 && (
+            <p className="bx-muted">
+              …and {paths.length >= TRACE_PATH_LIMIT ? "at least " : ""}
+              {paths.length - 50} more paths.
+            </p>
+          )}
         </>
       )}
     </div>

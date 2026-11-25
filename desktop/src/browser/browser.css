@@ -203,7 +203,10 @@
 code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12.5px; }
 
 /* ── Inspector ───────────────────────────────────────────────────────── */
-.bx-inspector { grid-area: inspector; background: var(--surface); border-left: 1px solid var(--border); overflow: auto; padding: 12px 14px; display: grid; align-content: start; gap: 12px; }
+.bx-inspector { grid-area: inspector; background: var(--surface); border-left: 1px solid var(--border); overflow: auto; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; }
+/* A long path or symbol name must wrap, not widen the panel past its edge. */
+.bx-inspector > * { min-width: 0; }
+.bx-inspector .bx-link, .bx-neighbours li { overflow-wrap: anywhere; }
 .bx-inspector-empty h2, .bx-node h2 { font-size: 16px; margin: 0 0 4px; word-break: break-word; }
 .bx-inspector .evidence { position: static; width: auto; max-height: none; box-shadow: none; }
 .bx-inspector-actions { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -485,6 +485,7 @@ dependencies = [
  "cartograph-core",
  "cartograph-graph",
  "cartograph-pipeline",
+ "cartograph-resolver",
  "keyring-core",
  "serde",
  "serde_json",
