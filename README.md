@@ -186,7 +186,10 @@ Cartograph works in three steps. None of them uses AI.
 **Not supported yet:**
 - other languages;
 - JavaScript backends such as Express;
-- Django REST Framework routers and class-based views;
+- Django REST Framework routers (`router.register`, view sets, `@action`);
+- the methods of a class-based view: a request is followed to the view class,
+  not into its `get` or `post`;
+- an axios instance's `baseURL`, and base URLs set at runtime;
 - queries written as `session.query(Model)` or raw SQL.
 
 See the [complete list of limitations](docs/resolver/README.md#known-limitations).

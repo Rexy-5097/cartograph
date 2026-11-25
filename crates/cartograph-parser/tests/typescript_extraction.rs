@@ -980,3 +980,354 @@ export function lookups(key: string, AxiosType: Map<string, string>): void {
         analysis.http_calls
     );
 }
+
+// ---- T-004: a function bound to a name encloses what its body does -------
+
+/// The enclosing scope of the request on each line, by line number.
+fn enclosing_by_line(path: &str, source: &str) -> Vec<(u32, Option<String>)> {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer.analyze_source(path, source).expect("analyses");
+    analysis
+        .http_calls
+        .iter()
+        .map(|call| (call.span.start_line, call.enclosing.clone()))
+        .collect()
+}
+
+/// A request on `line`, enclosed by the function called `name`.
+fn at(line: u32, name: &str) -> (u32, Option<String>) {
+    (line, Some(name.to_owned()))
+}
+
+#[test]
+fn a_module_scope_arrow_function_encloses_its_requests() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "export const loadOrders = () => fetch('/api/orders');
+const saveOrder = async (order) => {
+  return fetch('/api/orders', { method: 'POST' });
+};
+export { saveOrder };
+export const removeOrder = async function (id) {
+  return fetch('/api/orders/1', { method: 'DELETE' });
+};
+let patchOrder = function* () {
+  yield fetch('/api/orders/2', { method: 'PATCH' });
+};
+",
+    );
+    // `let` may be reassigned, so only `const` names its function
+    // (second review, S-11).
+    assert_eq!(
+        calls,
+        vec![
+            at(1, "loadOrders"),
+            at(3, "saveOrder"),
+            at(7, "removeOrder"),
+            (10, None),
+        ]
+    );
+}
+
+#[test]
+fn a_typed_or_asserted_arrow_function_is_still_that_function() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "type Loader = () => Promise<Response>;
+export const typed: Loader = () => fetch('/api/a');
+export const asserted = (() => fetch('/api/b')) as Loader;
+export const wrapped = ((() => fetch('/api/c')));
+export const checked = (() => fetch('/api/d')) satisfies Loader;
+",
+    );
+    assert_eq!(
+        calls,
+        vec![
+            at(2, "typed"),
+            at(3, "asserted"),
+            at(4, "wrapped"),
+            at(5, "checked"),
+        ]
+    );
+}
+
+#[test]
+fn an_anonymous_default_export_encloses_its_requests_as_default() {
+    assert_eq!(
+        enclosing_by_line("src/a.ts", "export default () => fetch('/api/orders');\n"),
+        vec![at(1, "default")]
+    );
+    assert_eq!(
+        enclosing_by_line(
+            "src/b.ts",
+            "export default async function () {\n  return fetch('/api/orders');\n}\n"
+        ),
+        vec![at(2, "default")]
+    );
+}
+
+#[test]
+fn a_class_field_holding_a_function_stays_with_its_class() {
+    // Review R-08: naming the field would give it the node of any module
+    // function called `list`. The request stays attributed to the class.
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "export class OrderApi {
+  list = () => fetch('/api/orders');
+  create(order) {
+    return fetch('/api/orders', { method: 'POST' });
+  }
+}
+",
+    );
+    assert_eq!(calls, vec![at(2, "OrderApi"), at(4, "create")]);
+}
+
+#[test]
+fn a_function_inside_a_module_level_callback_is_not_a_module_function() {
+    // Review R-07: inside `memo(() => { ... })` no named scope is open, but
+    // `submit` is local to the callback. Naming it would create a file-level
+    // `submit` that any `submit()` in the file appears to call.
+    let calls = enclosing_by_line(
+        "src/form.tsx",
+        "export const Form = memo(() => {
+  const submit = () => fetch('/api/a');
+  return null;
+});
+describe('x', () => {
+  const load = async () => fetch('/api/b');
+});
+",
+    );
+    assert_eq!(calls, vec![(2, None), (6, None)]);
+}
+
+#[test]
+fn a_function_nested_in_a_named_function_keeps_its_host_as_the_scope() {
+    // Unchanged behaviour: a local arrow function is part of its host.
+    let calls = enclosing_by_line(
+        "src/hooks.ts",
+        "export function useOrders() {
+  const inner = () => fetch('/api/orders');
+  return inner();
+}
+export const useItems = () => {
+  const load = async () => fetch('/api/items');
+  return load;
+};
+",
+    );
+    assert_eq!(calls, vec![at(2, "useOrders"), at(6, "useItems")]);
+}
+
+#[test]
+fn a_binding_that_is_not_itself_a_function_encloses_nothing() {
+    // A value computed at module scope is not a function, and a function
+    // handed to a wrapper call or kept in an object literal is not bound to
+    // the declared name: what `debounce` returns is not known here. These
+    // stay at module scope rather than being given a name that may be wrong.
+    let calls = enclosing_by_line(
+        "src/misc.ts",
+        "const response = fetch('/api/a');
+export const debounced = debounce(() => fetch('/api/b'), 100);
+export const api = { load: () => fetch('/api/c') };
+",
+    );
+    assert_eq!(calls, vec![(1, None), (2, None), (3, None)]);
+}
+
+#[test]
+fn an_arrow_function_binding_keeps_its_symbol_kind_and_scope() {
+    // The symbol table is unchanged by T-004: the binding is still recorded
+    // once, as a module-scope variable.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "export const loadOrders = () => {\n  const inner = 1;\n  return fetch('/api/orders');\n};\n",
+        )
+        .expect("analyses");
+    let symbols: Vec<_> = analysis
+        .symbols
+        .iter()
+        .map(|s| (s.name.as_str(), s.kind, s.enclosing.clone()))
+        .collect();
+    assert_eq!(symbols, vec![("loadOrders", SymbolKind::Variable, None)]);
+}
+
+// ---- T-006: axios called as a function ------------------------------------
+
+#[test]
+fn axios_called_as_a_function_is_a_request_whatever_its_name() {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import axios from 'axios';
+import Http from 'axios';
+export function a() { return axios('/api/a'); }
+export function b(base) { return Http(`${base}/b`, { method: 'post' }); }
+export function c(url) { return axios(url, { method: 'DELETE' }); }
+",
+        )
+        .expect("analyses");
+    let calls: Vec<_> = analysis
+        .http_calls
+        .iter()
+        .map(|call| (call.span.start_line, call.method_hint))
+        .collect();
+    assert_eq!(
+        calls,
+        vec![
+            (3, None),
+            (4, Some(HttpMethodHint::Post)),
+            (5, Some(HttpMethodHint::Delete)),
+        ]
+    );
+    assert!(matches!(
+        analysis.http_calls[0].url,
+        UrlObservation::Literal { .. }
+    ));
+}
+
+#[test]
+fn a_function_that_is_not_axios_is_not_a_request_because_it_takes_a_path() {
+    // A wrapper, a same-named function from another module and a type-only
+    // import are not axios, whatever their argument looks like.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import request from './request';
+import type TypeOnly from 'axios';
+import { get } from 'lodash';
+export function a() { return request('/api/a'); }
+export function b(t: TypeOnly) { return TypeOnly('/api/b'); }
+export function c(o) { return get(o, '/api/c'); }
+",
+        )
+        .expect("analyses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "observed a non-axios call as a request: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_local_function_or_parameter_called_axios_is_not_the_library() {
+    // Review R-11: nothing here imports axios.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/fmt.ts",
+            "function axios(path) { return path.toUpperCase(); }
+export function a() { return axios('/api/secret/'); }
+export function b(axios) { return axios('/api/secret/'); }
+",
+        )
+        .expect("analyses");
+    assert!(
+        analysis.http_calls.is_empty(),
+        "observed a non-axios call as a request: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_parameter_or_local_named_axios_is_not_the_imported_library() {
+    // Second review, S-12: the import binding is per file, so a parameter or
+    // local of the same name was read as axios.
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer
+        .analyze_source(
+            "src/api.ts",
+            "import axios from 'axios';
+export function viaParam(axios: (s: string) => string) { return axios('/api/a/'); }
+export function viaLocal() {
+  const axios = (s: string) => s;
+  return axios('/api/b/');
+}
+export function viaDestructured({ axios }) { return axios('/api/c/'); }
+export function real() { return axios('/api/d/'); }
+export const realArrow = () => axios.get('/api/e/');
+",
+        )
+        .expect("analyses");
+    // `axios.get(...)` on any receiver *named* `axios` is a request by the
+    // separate, documented name rule (`HTTP_CLIENT_OBJECTS`), shadowed or not.
+    // What T-006 and S-12 govern is the import binding: lines 2, 5 and 7.
+    let lines: Vec<u32> = analysis
+        .http_calls
+        .iter()
+        .map(|c| c.span.start_line)
+        .collect();
+    assert_eq!(
+        lines,
+        vec![8, 9],
+        "only the real axios calls: {:?}",
+        analysis.http_calls
+    );
+}
+
+#[test]
+fn a_reassigned_top_level_let_does_not_name_its_function() {
+    let calls = enclosing_by_line(
+        "src/api.ts",
+        "let load = () => fetch('/api/a/');
+load = () => fetch('/api/secret/');
+var other = () => fetch('/api/b/');
+",
+    );
+    assert_eq!(calls, vec![(1, None), (2, None), (3, None)]);
+}
+
+fn request_lines(path: &str, src: &str) -> Vec<u32> {
+    let mut analyzer = Analyzer::new().expect("grammars load");
+    let analysis = analyzer.analyze_source(path, src).expect("analyses");
+    analysis
+        .http_calls
+        .iter()
+        .map(|c| c.span.start_line)
+        .collect()
+}
+
+#[test]
+fn a_default_value_or_a_type_that_mentions_axios_does_not_shadow_it() {
+    // Third review, U-04: a default value and a type *use* the name; counting
+    // them as a binding refused real requests.
+    let lines = request_lines(
+        "src/api.ts",
+        "import Ax from 'axios';
+export function a(c = Ax) { return Ax('/api/a/'); }
+export function b(c = Ax.create()) { return Ax('/api/b/'); }
+export const c = (k = Ax) => Ax('/api/c/');
+export function d({ k = Ax }) { return Ax('/api/d/'); }
+export function e(k: typeof Ax) { return Ax('/api/e/'); }
+export function f() { const k: typeof Ax = Ax; return Ax('/api/f/'); }
+export function g(k: ReturnType<typeof Ax>) { return Ax('/api/g/'); }
+export function h() { const { data = Ax } = cfg; return Ax('/api/h/'); }
+",
+    );
+    assert_eq!(lines, vec![2, 3, 4, 5, 6, 7, 8, 9]);
+}
+
+#[test]
+fn every_rebinding_form_shadows_the_imported_axios() {
+    // Third review, U-05: `for` targets, `switch` cases, `var` in a nested
+    // block, a named function expression and a renamed destructuring.
+    let lines = request_lines(
+        "src/api.ts",
+        "import Ax from 'axios';
+export function a(xs) { for (const Ax of xs) { Ax('/api/secret/'); } }
+export function b(xs) { for (const Ax in xs) { Ax('/api/secret/'); } }
+export function c() { for (let Ax = mk(); ; ) { Ax('/api/secret/'); } }
+export function d(k) { switch (k) { case 1: const Ax = mk(); Ax('/api/secret/'); } }
+export function e() { if (ok) { var Ax = mk(); } return Ax('/api/secret/'); }
+export const f = function Ax() { return Ax('/api/secret/'); };
+export function g(cfg) { const { client: Ax } = cfg; return Ax('/api/secret/'); }
+export function real() { return Ax('/api/real/'); }
+",
+    );
+    assert_eq!(lines, vec![9]);
+}

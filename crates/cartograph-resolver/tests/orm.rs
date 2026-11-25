@@ -1111,3 +1111,697 @@ class C(AppConfig):
     let a = orm(&[("api/apps.py", apps), ("api/models.py", DJANGO_MODELS)]);
     assert_eq!(a.models["Receipt"].table.name(), None);
 }
+
+// ---- T-007: a model whose base is declared in another file ----------------
+
+const SHOP_APPS: &str = "
+from django.apps import AppConfig
+
+
+class ShopConfig(AppConfig):
+    name = \"shop\"
+";
+
+const CORE_BASE: &str = "
+from django.db import models
+
+
+class TimeStamped(models.Model):
+    created = models.DateTimeField()
+
+    class Meta:
+        abstract = True
+
+
+class Audited(TimeStamped):
+    class Meta:
+        abstract = True
+";
+
+#[test]
+fn a_model_inheriting_an_imported_abstract_base_is_a_model() {
+    let a = orm(&[
+        ("core/base.py", CORE_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    // The abstract base itself still has no table.
+    assert_eq!(a.models["TimeStamped"].table.name(), None);
+}
+
+#[test]
+fn every_way_of_importing_the_base_is_followed() {
+    for (import, base) in [
+        ("from core.base import TimeStamped", "TimeStamped"),
+        ("from core.base import TimeStamped as Stamped", "Stamped"),
+        ("from core import base", "base.TimeStamped"),
+        ("import core.base", "core.base.TimeStamped"),
+        ("import core.base as cb", "cb.TimeStamped"),
+        // Two files away: `Audited` is itself a model only through its base.
+        ("from core.base import Audited", "Audited"),
+    ] {
+        let models = format!("{import}\n\n\nclass Order({base}):\n    pass\n");
+        let a = orm(&[
+            ("core/base.py", CORE_BASE),
+            ("shop/apps.py", SHOP_APPS),
+            ("shop/models.py", models.as_str()),
+        ]);
+        assert_eq!(
+            a.models.get("Order").and_then(|m| m.table.name()),
+            Some("shop_order"),
+            "`{import}` then `class Order({base})`"
+        );
+    }
+}
+
+#[test]
+fn a_base_re_exported_by_a_models_package_is_followed() {
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models/__init__.py",
+            "from .base import TimeStamped\nfrom .orders import Order\n",
+        ),
+        ("shop/models/base.py", CORE_BASE),
+        (
+            "shop/models/orders.py",
+            "from . import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n\n\nclass ArchivedOrder(Order):\n    class Meta:\n        proxy = True\n",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    // A proxy of a model found across files is a model, with no table of its own.
+    assert_eq!(a.models["ArchivedOrder"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["ArchivedOrder"].table.name(), None);
+}
+
+#[test]
+fn a_handler_reaches_a_model_found_through_an_imported_base() {
+    let (edges, g) = graph_of(&[
+        ("core/base.py", CORE_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+        (
+            "shop/views.py",
+            "from .models import Order\n\n\ndef list_orders(request):\n    return Order.objects.all()\n",
+        ),
+    ]);
+    assert_eq!(edges, 2, "one access edge and one table edge");
+    assert!(g.nodes().any(|n| n.name() == "shop_order"));
+}
+
+#[test]
+fn a_base_that_only_shares_a_models_name_makes_nothing_a_model() {
+    // `TimeStamped` here is a plain class in another module, a name bound by
+    // nothing, and a third-party import. None of them is the Django model.
+    for models in [
+        "from util.mixins import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        "class Order(TimeStamped):\n    pass\n",
+        "from thirdparty.models import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+    ] {
+        let a = orm(&[
+            ("core/base.py", CORE_BASE),
+            ("util/mixins.py", "class TimeStamped:\n    pass\n"),
+            ("shop/apps.py", SHOP_APPS),
+            ("shop/models.py", models),
+        ]);
+        assert!(!a.models.contains_key("Order"), "not a model: {models}");
+    }
+}
+
+#[test]
+fn an_ambiguous_base_import_makes_nothing_a_model() {
+    // `core.base` matches two files, so which `TimeStamped` is meant is open.
+    let a = orm(&[
+        ("a/core/base.py", CORE_BASE),
+        ("b/core/base.py", "class TimeStamped:\n    pass\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.base import TimeStamped\n\n\nclass Order(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert!(!a.models.contains_key("Order"));
+}
+
+#[test]
+fn a_sqlalchemy_model_inheriting_an_imported_abstract_base_keeps_its_declared_table() {
+    let a = orm(&[
+        (
+            "db/base.py",
+            "from sqlalchemy.orm import DeclarativeBase\n\n\nclass Base(DeclarativeBase):\n    pass\n\n\nclass Tracked(Base):\n    __abstract__ = True\n",
+        ),
+        (
+            "db/models.py",
+            "from .base import Tracked\n\n\nclass Customer(Tracked):\n    __tablename__ = \"customers\"\n\n\nclass Draft(Tracked):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Customer"].flavor, OrmFlavor::SqlAlchemy);
+    assert_eq!(a.models["Customer"].table.name(), Some("customers"));
+    // No `__tablename__`: a model, and no table is derived for it.
+    assert_eq!(a.models["Draft"].table.name(), None);
+}
+
+// ---- T-007: Meta.app_label, and fields that only look like Meta options ----
+
+#[test]
+fn a_models_own_app_label_overrides_the_packages() {
+    // Django names the table after Meta.app_label when a model states one.
+    // Deriving `shop_relabelled` from apps.py named a table that does not exist.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Relabelled(models.Model):\n    class Meta:\n        app_label = \"warehouse\"\n\n\nclass Plain(models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(
+        a.models["Relabelled"].table.name(),
+        Some("warehouse_relabelled")
+    );
+    assert_eq!(a.models["Plain"].table.name(), Some("shop_plain"));
+}
+
+#[test]
+fn a_models_own_app_label_is_enough_without_an_apps_py() {
+    let a = orm(&[(
+        "scripts/models.py",
+        "from django.db import models\n\n\nclass Example(models.Model):\n    class Meta:\n        app_label = 'ml_models'\n",
+    )]);
+    assert_eq!(a.models["Example"].table.name(), Some("ml_models_example"));
+}
+
+#[test]
+fn an_app_label_that_is_not_a_literal_refuses_the_default_table() {
+    // The label is overridden, and not known to what: apps.py must not be
+    // used in its place.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\nLABEL = compute()\n\n\nclass Dynamic(models.Model):\n    class Meta:\n        app_label = LABEL\n",
+        ),
+    ]);
+    assert_eq!(a.models["Dynamic"].table.name(), None);
+}
+
+#[test]
+fn a_field_named_like_a_meta_option_is_a_column_not_an_option() {
+    // `abstract`, `proxy`, `app_label` and `db_table` as *fields* say nothing
+    // about the table. `abstract = models.TextField()` used to refuse it.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Paper(models.Model):\n    abstract = models.TextField()\n    proxy = models.CharField(max_length=10)\n    app_label = models.CharField(max_length=10, default='x')\n    db_table = models.CharField(max_length=10)\n",
+        ),
+    ]);
+    assert_eq!(a.models["Paper"].table.name(), Some("shop_paper"));
+}
+
+// ---- T-009: a name imported as two different things draws no access edge ---
+
+#[test]
+fn a_class_that_shares_a_models_name_is_not_an_access_to_the_model() {
+    // Found on Label Studio: one test function imports the Django model
+    // `Filter`, another imports an unrelated class called `Filter`, and the
+    // second function's `Filter(...)` was drawn as an access to the model.
+    let a = orm(&[
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Filter(models.Model):\n    class Meta:\n        db_table = 'filters'\n",
+        ),
+        ("shop/params.py", "class Filter:\n    pass\n"),
+        (
+            "shop/tests.py",
+            "def uses_the_model():\n    from shop.models import Filter\n    return Filter.objects.create()\n\n\ndef uses_the_other_class():\n    from shop.params import Filter\n    return Filter(value=1)\n",
+        ),
+    ]);
+    assert!(
+        a.accesses.is_empty(),
+        "which Filter each function sees is not known, so no access may be claimed: {:?}",
+        a.accesses
+    );
+}
+
+#[test]
+fn a_model_imported_identically_in_two_functions_is_still_accessed_by_both() {
+    let a = orm(&[
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Filter(models.Model):\n    class Meta:\n        db_table = 'filters'\n",
+        ),
+        (
+            "shop/tests.py",
+            "def a():\n    from shop.models import Filter\n    return Filter.objects.all()\n\n\ndef b():\n    from shop.models import Filter\n    return Filter.objects.count()\n",
+        ),
+    ]);
+    let mut handlers: Vec<&str> = a
+        .accesses
+        .iter()
+        .filter_map(|x| x.handler.as_deref())
+        .collect();
+    handlers.sort_unstable();
+    assert_eq!(handlers, ["a", "b"]);
+}
+
+// ---- found by independent review -------------------------------------------
+
+const BILLING_BASE: &str = "
+from django.db import models
+
+
+class BillingBase(models.Model):
+    class Meta:
+        abstract = True
+        app_label = \"billing\"
+";
+
+#[test]
+fn a_table_option_inherited_from_a_base_meta_refuses_the_default_table() {
+    // R-12: Django names these `billing_invoice` and `billing_refund`. The
+    // label is in the base's Meta, so `shop_invoice` would be wrong.
+    let a = orm(&[
+        ("core/models.py", BILLING_BASE),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.models import BillingBase\n\n\nclass Invoice(BillingBase):\n    pass\n\n\nclass Refund(BillingBase):\n    class Meta(BillingBase.Meta):\n        ordering = ['id']\n\n\nclass Local(models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Invoice"].flavor, OrmFlavor::Django);
+    assert_eq!(a.models["Invoice"].table.name(), None);
+    assert_eq!(a.models["Refund"].table.name(), None);
+    // A model with no such base is unaffected.
+    assert_eq!(a.models["Local"].table.name(), Some("shop_local"));
+}
+
+#[test]
+fn a_value_that_only_contains_a_literal_is_not_a_literal() {
+    // R-13: each of these was read as its first string.
+    for value in [
+        "LABELS[\"billing\"]",
+        "get_label(\"fallback\")",
+        "\"one\" if FLAG else \"two\"",
+        "FLAG or \"billing\"",
+        "\"bill\" + \"ing\"",
+        "f\"{PREFIX}billing\"",
+    ] {
+        for option in ["app_label", "db_table"] {
+            let models = format!(
+                "from django.db import models\n\n\nclass Entry(models.Model):\n    class Meta:\n        {option} = {value}\n"
+            );
+            let a = orm(&[
+                ("shop/apps.py", SHOP_APPS),
+                ("shop/models.py", models.as_str()),
+            ]);
+            assert_eq!(
+                a.models["Entry"].table.name(),
+                None,
+                "`{option} = {value}` is not a string literal"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_plain_literal_is_still_read_however_it_is_spaced() {
+    for assignment in [
+        "db_table = \"entries\"",
+        "db_table=\"entries\"",
+        "db_table = 'entries'",
+    ] {
+        let models = format!(
+            "from django.db import models\n\n\nclass Entry(models.Model):\n    class Meta:\n        {assignment}\n"
+        );
+        let a = orm(&[("shop/models.py", models.as_str())]);
+        assert_eq!(
+            a.models["Entry"].table.name(),
+            Some("entries"),
+            "{assignment}"
+        );
+    }
+}
+
+#[test]
+fn a_base_imported_twice_from_different_modules_makes_nothing_a_model() {
+    // R-15: the second import, a plain class, is the one Python binds.
+    let a = orm(&[
+        ("core/stamped.py", CORE_BASE),
+        ("core/plain.py", "class TimeStamped:\n    pass\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from core.stamped import TimeStamped\nfrom core.plain import TimeStamped\n\n\nclass NotAModel(TimeStamped):\n    pass\n",
+        ),
+    ]);
+    assert!(!a.models.contains_key("NotAModel"));
+}
+
+#[test]
+fn a_meta_that_extends_a_base_meta_which_names_no_table_keeps_its_default() {
+    // Narrowed after measuring on Paperless-ngx: `class Meta(Parent.Meta)` is
+    // ordinary, and `Parent.Meta` here sets only `abstract` and `ordering`.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+
+
+class Matching(models.Model):
+    class Meta:
+        abstract = True
+        ordering = (\"name\",)
+
+
+class Tag(Matching):
+    class Meta(Matching.Meta):
+        verbose_name = \"tag\"
+
+
+class Odd(Matching):
+    class Meta(SomethingElse):
+        verbose_name = \"odd\"
+",
+        ),
+    ]);
+    assert_eq!(a.models["Tag"].table.name(), Some("shop_tag"));
+    // A Meta extending a class that is not read still refuses.
+    assert_eq!(a.models["Odd"].table.name(), None);
+}
+
+// ---- second independent review ---------------------------------------------
+
+#[test]
+fn a_meta_that_inherits_options_from_a_class_not_walked_refuses_the_table() {
+    // S-03: `Root.Meta` extends `CommonMeta`, which sets the label. Django
+    // names these `billing_i1` and `billing_i2`.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass CommonMeta:\n    app_label = \"billing\"\n\n\nclass Root(models.Model):\n    class Meta(CommonMeta):\n        abstract = True\n\n\nclass I1(Root):\n    pass\n\n\nclass I2(Root):\n    class Meta(Root.Meta):\n        ordering = [\"id\"]\n\n\nclass Assigned(models.Model):\n    Meta = CommonMeta\n",
+        ),
+    ]);
+    for name in ["I1", "I2", "Assigned"] {
+        assert_eq!(a.models[name].table.name(), None, "{name}");
+    }
+}
+
+#[test]
+fn a_base_inside_the_project_that_cannot_be_resolved_refuses_the_table() {
+    // S-04: a try/except import and a star import leave the base unread.
+    let a = orm(&[
+        (
+            "core/mixins.py",
+            "class Labelled:\n    class Meta:\n        app_label = \"billing\"\n",
+        ),
+        ("core/compat.py", "class Labelled:\n    pass\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\ntry:\n    from core.mixins import Labelled\nexcept ImportError:\n    from core.compat import Labelled\n\n\nclass I4(Labelled, models.Model):\n    pass\n",
+        ),
+        (
+            "shop/star.py",
+            "from django.db import models\nfrom core.mixins import *\n\n\nclass I5(Labelled, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["I4"].table.name(), None);
+    assert_eq!(a.models["I5"].table.name(), None);
+}
+
+#[test]
+fn a_base_outside_the_project_is_assumed_and_the_rule_says_so() {
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom dirtyfields import DirtyFieldsMixin\n\n\nclass Order(DirtyFieldsMixin, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    let TableName::Derived { rule, .. } = &a.models["Order"].table else {
+        panic!("derived");
+    };
+    assert!(rule.contains("assumes DirtyFieldsMixin"), "{rule}");
+}
+
+#[test]
+fn an_option_assigned_twice_refuses_the_table() {
+    // S-06: the last assignment wins at runtime; the first was read.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\nOTHER = compute()\n\n\nclass A(models.Model):\n    class Meta:\n        db_table = \"first\"\n        db_table = \"second\"\n\n\nclass B(models.Model):\n    class Meta:\n        db_table = \"first\"\n        db_table = OTHER\n\n\nclass C(models.Model):\n    class Meta:\n        app_label = \"one\"\n        app_label = \"two\"\n",
+        ),
+    ]);
+    for name in ["A", "B", "C"] {
+        assert_eq!(a.models[name].table.name(), None, "{name}");
+    }
+}
+
+#[test]
+fn an_apps_py_label_that_only_contains_a_literal_is_not_a_label() {
+    // S-07: the R-13 rule, applied to apps.py.
+    for label in [
+        "LABELS[\"store\"]",
+        "\"one\" if FLAG else \"two\"",
+        "pick(\"store\")",
+    ] {
+        let apps = format!(
+            "from django.apps import AppConfig\n\n\nclass ShopConfig(AppConfig):\n    name = \"shop\"\n    label = {label}\n"
+        );
+        let a = orm(&[
+            ("shop/apps.py", apps.as_str()),
+            (
+                "shop/models.py",
+                "from django.db import models\n\n\nclass Item(models.Model):\n    pass\n",
+            ),
+        ]);
+        assert_eq!(a.models["Item"].table.name(), None, "label = {label}");
+    }
+}
+
+#[test]
+fn a_literal_holding_an_escape_is_not_read_as_a_name() {
+    // S-18: escapes are not interpreted, so the text is not the table.
+    let a = orm(&[(
+        "shop/models.py",
+        "from django.db import models\n\n\nclass E(models.Model):\n    class Meta:\n        db_table = \"ord\\x65rs\"\n",
+    )]);
+    assert_eq!(a.models["E"].table.name(), None);
+}
+
+#[test]
+fn an_alias_is_not_read_as_the_model_whose_name_it_reuses() {
+    // S-09: `Ledger as Order` makes `Order` mean Ledger. The access is not
+    // drawn to `Order`; drawing it to Ledger through the alias is not
+    // supported (third review, U-12).
+    let a = orm(&[
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Order(models.Model):\n    class Meta:\n        db_table = 'orders'\n\n\nclass Ledger(models.Model):\n    class Meta:\n        db_table = 'ledgers'\n",
+        ),
+        (
+            "shop/views.py",
+            "from shop.models import Ledger as Order\n\n\ndef v(request):\n    return Order.objects.all()\n",
+        ),
+    ]);
+    assert!(
+        a.accesses.iter().all(|x| x.model != "Order"),
+        "an access to Ledger was attributed to Order: {:?}",
+        a.accesses
+    );
+    assert!(
+        a.accesses.iter().all(|x| x.model != "Ledger"),
+        "the alias is now followed; update this test and the CHANGELOG: {:?}",
+        a.accesses
+    );
+}
+
+#[test]
+fn a_base_bound_by_a_star_import_is_read() {
+    // Found measuring NetBox: its model bases inherit mixins imported with
+    // `from netbox.models.features import *`. Following the star import keeps
+    // those models' tables; a mixin whose Meta sets a label still refuses.
+    let a = orm(&[
+        (
+            "core/features.py",
+            "class ChangeLogged:
+    pass
+
+
+class Labelled:
+    class Meta:
+        app_label = \"billing\"
+",
+        ),
+        (
+            "core/models.py",
+            "from django.db import models
+from core.features import *
+
+
+class Root(ChangeLogged, models.Model):
+    class Meta:
+        abstract = True
+",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+from core.models import Root
+from core.features import *
+
+
+class Order(Root):
+    pass
+
+
+class Bill(Labelled, models.Model):
+    pass
+",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), Some("shop_order"));
+    assert_eq!(a.models["Bill"].table.name(), None);
+}
+
+#[test]
+fn a_base_bound_by_a_star_import_from_two_modules_is_not_read() {
+    let a = orm(&[
+        (
+            "core/a.py",
+            "class Mixin:
+    pass
+",
+        ),
+        (
+            "core/b.py",
+            "class Mixin:
+    class Meta:
+        app_label = \"billing\"
+",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models
+from core.a import *
+from core.b import *
+
+
+class Order(Mixin, models.Model):
+    pass
+",
+        ),
+    ]);
+    assert_eq!(a.models["Order"].table.name(), None);
+}
+
+// ── Third review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_star_module_that_binds_a_base_by_assignment_is_not_skipped() {
+    // U-07: `core/b.py` binds `Mixin` by assignment; it was read as "not here",
+    // and `core/a.py`'s class won although `b`'s star import comes last.
+    let a = orm(&[
+        ("core/a.py", "class Mixin:\n    pass\n"),
+        (
+            "core/c.py",
+            "class Labelled:\n    class Meta:\n        app_label = \"billing\"\n",
+        ),
+        (
+            "core/b.py",
+            "from core.c import Labelled\n\nMixin = Labelled\n",
+        ),
+        ("core/d.py", "from extlib.mixins import Mixin\n"),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.a import *\nfrom core.b import *\n\n\nclass S1(Mixin, models.Model):\n    pass\n",
+        ),
+        (
+            "shop/more.py",
+            "from django.db import models\nfrom core.a import *\nfrom core.d import *\n\n\nclass S19(Mixin, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S1"].table.name(), None);
+    assert_eq!(a.models["S19"].table.name(), None);
+}
+
+#[test]
+fn a_base_declared_twice_is_not_read() {
+    // U-08: `if …: class Base … else: class Base …`.
+    let a = orm(&[
+        (
+            "core/bases.py",
+            "import os\n\nif os.environ.get('X'):\n    class Mixin:\n        pass\nelse:\n    class Mixin:\n        class Meta:\n            app_label = \"billing\"\n",
+        ),
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom core.bases import Mixin\n\n\nclass S15(Mixin, models.Model):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S15"].table.name(), None);
+}
+
+#[test]
+fn a_base_meta_extending_object_sets_nothing() {
+    // U-09: `class Meta(object):` is the Python 2 spelling of a plain Meta.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\n\n\nclass Stamped(models.Model):\n    class Meta(object):\n        abstract = True\n\n\nclass S10(Stamped):\n    pass\n",
+        ),
+    ]);
+    assert_eq!(a.models["S10"].table.name(), Some("shop_s10"));
+}
+
+#[test]
+fn a_library_base_named_model_is_an_assumption_unless_it_is_djangos() {
+    // U-13: only Django's own `Model` is silent.
+    let a = orm(&[
+        ("shop/apps.py", SHOP_APPS),
+        (
+            "shop/models.py",
+            "from django.db import models\nfrom extlib.orm import Model\n\n\nclass E1(Model, models.Model):\n    pass\n\n\nclass E2(models.Model):\n    pass\n",
+        ),
+    ]);
+    let TableName::Derived { rule, .. } = &a.models["E1"].table else {
+        panic!("E1: {:?}", a.models["E1"].table);
+    };
+    assert!(rule.contains("assumes Model"), "{rule}");
+    let TableName::Derived { rule, .. } = &a.models["E2"].table else {
+        panic!("E2: {:?}", a.models["E2"].table);
+    };
+    assert!(!rule.contains("assumes"), "{rule}");
+}
+
+#[test]
+fn an_option_is_read_whatever_its_spacing_or_form() {
+    // U-16 and T-010: alignment, parentheses, annotations and a chained
+    // assignment all leave the value a literal; `N*"t"` does not.
+    let a = orm(&[(
+        "shop/models.py",
+        "from django.db import models\n\n\nclass Al(models.Model):\n    class Meta:\n        db_table     = \"aligned\"\n\n\nclass P(models.Model):\n    class Meta:\n        db_table = (\n            \"paren\"\n        )\n\n\nclass An(models.Model):\n    class Meta:\n        db_table: str = \"annotated\"\n\n\nclass Ch(models.Model):\n    class Meta:\n        db_table = x = \"chained\"\n\n\nclass Op(models.Model):\n    class Meta:\n        db_table = N*\"t\"\n",
+    )]);
+    assert_eq!(a.models["Al"].table.name(), Some("aligned"));
+    assert_eq!(a.models["P"].table.name(), Some("paren"));
+    assert_eq!(a.models["An"].table.name(), Some("annotated"));
+    assert_eq!(a.models["Ch"].table.name(), Some("chained"));
+    assert_ne!(a.models["Op"].table.name(), Some("t"));
+}

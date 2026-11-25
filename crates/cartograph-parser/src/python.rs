@@ -464,6 +464,12 @@ impl Walker<'_> {
             }
         }
         self.push_symbol(SymbolKind::Variable, &name, false, Vec::new(), node);
+        if let (Some(symbol), Some(right)) = (
+            self.analysis.symbols.last_mut(),
+            node.child_by_field_name("right"),
+        ) {
+            symbol.value_span = Some(span_of(unwrap_python_value(right)));
+        }
     }
 
     /// `urlpatterns += [...]` at module scope. Nothing else an augmented
@@ -541,6 +547,7 @@ impl Walker<'_> {
             decorators,
             bases,
             span: span_of(node),
+            value_span: None,
         });
     }
 
@@ -889,9 +896,13 @@ impl Walker<'_> {
             // `create_order` or `views.create_order`, kept as written.
             "identifier" | "attribute" => Some(self.text(*h)),
             // `LegacyView.as_view()` — record the callable being invoked.
+            // Any other call (`login_required(views.orders)`) names a wrapper,
+            // not the view: what it returns is not known here, so the entry
+            // names no handler rather than the wrong one (T-002).
             "call" => h
                 .child_by_field_name("function")
-                .map(|f| text_of(f, self.source)),
+                .map(|f| text_of(f, self.source))
+                .filter(|callee| callee.ends_with(".as_view")),
             _ => None,
         });
 
@@ -1145,9 +1156,27 @@ impl Walker<'_> {
             }
             if node.kind() == "string" {
                 *has_string = true;
-                parts.push(ConcatPart::Literal {
-                    value: string_content(node, self.source),
-                });
+                // An f-string operand keeps its substitutions: dropping them
+                // turned `f"/api/{VERSION}/" + "orders/"` into
+                // `/api/orders/` (ninth review, AA-01).
+                let template = template_parts(node, self.source);
+                if template
+                    .iter()
+                    .any(|part| matches!(part, TemplatePart::Expression { .. }))
+                {
+                    for part in template {
+                        parts.push(match part {
+                            TemplatePart::Text { value } => ConcatPart::Literal { value },
+                            TemplatePart::Expression { source, .. } => {
+                                ConcatPart::Expression { source }
+                            }
+                        });
+                    }
+                } else {
+                    parts.push(ConcatPart::Literal {
+                        value: string_content(node, self.source),
+                    });
+                }
             } else {
                 parts.push(ConcatPart::Expression {
                     source: self.text(node),
@@ -1229,10 +1258,25 @@ fn template_parts(node: Node<'_>, source: &str) -> Vec<TemplatePart> {
             }
             "interpolation" => {
                 let mut inner = child.walk();
-                if let Some(expr) = child.named_children(&mut inner).next() {
+                let named: Vec<Node<'_>> = child.named_children(&mut inner).collect();
+                if let Some(expr) = named.first() {
+                    // `{n:03d}`, `{x!r}` and `{x=}` change the text: keep the
+                    // whole substitution, which no evaluator form accepts,
+                    // rather than the bare name (ninth review, AA-01
+                    // neighbour; tenth review, AB-01). Anything besides the
+                    // braces and the expression is such a change.
+                    let text = if named.len() > 1 || child.child_count() > 3 {
+                        let whole = text_of(child, source);
+                        whole
+                            .trim_start_matches('{')
+                            .trim_end_matches('}')
+                            .to_owned()
+                    } else {
+                        text_of(*expr, source)
+                    };
                     parts.push(TemplatePart::Expression {
-                        source: text_of(expr, source),
-                        span: span_of(expr),
+                        source: text,
+                        span: span_of(*expr),
                     });
                 }
             }
@@ -1311,4 +1355,26 @@ fn collect_error_diagnostics(root: Node<'_>, analysis: &mut FileAnalysis) {
             span: None,
         });
     }
+}
+
+/// The value inside any parentheses, and at the end of a chained assignment:
+/// `("orders")` and `x = "orders"` are the string.
+fn unwrap_python_value(mut node: Node<'_>) -> Node<'_> {
+    loop {
+        let inner = match node.kind() {
+            "parenthesized_expression" => {
+                // `(  # legacy\n "t")`: the comment is a named child (V-10).
+                let mut cursor = node.walk();
+                node.named_children(&mut cursor)
+                    .find(|child| child.kind() != "comment")
+            }
+            "assignment" => node.child_by_field_name("right"),
+            _ => None,
+        };
+        let Some(inner) = inner else {
+            break;
+        };
+        node = inner;
+    }
+    node
 }

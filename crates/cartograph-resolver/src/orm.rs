@@ -330,12 +330,10 @@ impl OrmAnalysis {
         // not matched against a global map of every model name.
         let index = ModuleIndex::build(files);
 
-        for file in &python {
-            for mut model in discover_models(file) {
-                derive_django_default_table(&mut model, &python);
-                *seen.entry(model.name.clone()).or_insert(0) += 1;
-                analysis.models.insert(model.name.clone(), model);
-            }
+        for mut model in discover_project_models(&python, &index) {
+            derive_django_default_table(&mut model, &python, &index);
+            *seen.entry(model.name.clone()).or_insert(0) += 1;
+            analysis.models.insert(model.name.clone(), model);
         }
         // A class name claimed twice cannot identify one table.
         for (name, count) in seen {
@@ -396,7 +394,11 @@ impl OrmAnalysis {
 /// the package has no `apps.py`, when its configs disagree, when a value is not
 /// a literal, or when `name` does not end with the package's directory name
 /// (the config then describes some other app).
-fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
+fn derive_django_default_table(
+    model: &mut OrmModel,
+    python: &[&FileAnalysis],
+    index: &ModuleIndex<'_>,
+) {
     if model.flavor != OrmFlavor::Django || !matches!(model.table, TableName::Unresolved { .. }) {
         return;
     }
@@ -414,12 +416,40 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
             return;
         }
     }
-    match django_app_label(&model.file, python) {
-        Ok(label) => {
+    // `Meta` options are inherited: a model with no `Meta` of its own takes
+    // its abstract base's, and `class Meta(Base.Meta)` extends it. A base
+    // that sets `app_label` or `db_table` therefore decides this model's
+    // table too, and neither this file's `Meta` nor the package's apps.py
+    // says what it is (review R-12). Refused rather than derived wrongly.
+    if inherits_table_options(model, python, index) {
+        model.table = TableName::Unresolved {
+            reason: "Meta options that name the table are inherited from a base class".into(),
+        };
+        return;
+    }
+    // `Meta.app_label` overrides the app the model's module belongs to, so it
+    // is read before the package's apps.py. Deriving from apps.py while the
+    // model states another label names a table that does not exist (T-007).
+    let label = match meta_app_label(python, model) {
+        Some(Ok(label)) => Ok((label, "Meta.app_label")),
+        Some(Err(reason)) => Err(reason),
+        None => django_app_label(&model.file, python).map(|label| (label, "the package's apps.py")),
+    };
+    match label {
+        Ok((label, source)) => {
+            let external = external_bases(model, python, index);
+            let assumption = if external.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; assumes {} (outside the project) set no Meta.app_label or db_table",
+                    external.join(", ")
+                )
+            };
             model.table = TableName::Derived {
                 name: format!("{label}_{}", model.name.to_lowercase()),
                 rule: format!(
-                    "Django default <app_label>_<modelname>; app label `{label}` from the package's apps.py"
+                    "Django default <app_label>_<modelname>; app label `{label}` from {source}{assumption}"
                 ),
             };
         }
@@ -431,15 +461,409 @@ fn derive_django_default_table(model: &mut OrmModel, python: &[&FileAnalysis]) {
     }
 }
 
-fn model_declares_attribute(python: &[&FileAnalysis], model: &OrmModel, attribute: &str) -> bool {
-    python.iter().filter(|f| f.path == model.file).any(|f| {
-        f.symbols.iter().any(|s| {
+/// The app label a model's own `Meta` states, if it states one.
+///
+/// `Some(Err(..))` when `app_label` is assigned something other than a string
+/// literal: the label is then known to be overridden, and not known to what.
+fn meta_app_label(python: &[&FileAnalysis], model: &OrmModel) -> Option<Result<String, String>> {
+    let file = python.iter().find(|f| f.path == model.file)?;
+    let declaration = meta_declaration(file, model, "app_label")?;
+    if meta_assignments(file, model, "app_label") > 1 {
+        return Some(Err("Meta.app_label is assigned more than once".to_owned()));
+    }
+    let literal = assigned_literal(file, declaration);
+    Some(match literal {
+        Some(label) if !label.is_empty() => Ok(label),
+        _ => Err("Meta.app_label is not a string literal".to_owned()),
+    })
+}
+
+/// The string literal an assignment assigns, when the literal is the whole
+/// value.
+///
+/// `db_table = "orders"` is one. `LABELS["billing"]`, `label("fallback")` and
+/// `"one" if FLAG else "two"` each *contain* a literal and are not one; taking
+/// the first literal on the line read them as `billing`, `fallback` and `one`
+/// (review R-13). The literal must be the only string in the assignment,
+/// start straight after `name =` and end where the assignment ends.
+fn assigned_literal(file: &FileAnalysis, declaration: &Symbol) -> Option<String> {
+    // The literal is the whole value when its span is the value's span, which
+    // the parser records from the syntax (T-010). Positions alone mistook
+    // `N*"t"` for `"t"` and refused `db_table     = "x"`.
+    let value = declaration.value_span?;
+    file.strings.iter().find_map(|fact| match fact {
+        // An escape (`"ord\x65rs"`) is not interpreted here, so the text is
+        // not the name (second review, S-18).
+        StringFact::Literal { value: text, span } if *span == value && !text.contains('\\') => {
+            Some(text.clone())
+        }
+        _ => None,
+    })
+}
+
+/// Whether the table options a model inherits cannot be shown to be its own.
+///
+/// `Meta` options are inherited, so the default table depends on every class
+/// the model inherits from. This walks them and answers `true` — refuse the
+/// default table — when any of these holds:
+///
+/// - a base's `Meta` sets `app_label` or `db_table`;
+/// - a `Meta` in the chain (the model's own included) extends anything other
+///   than its owner's own base's `Meta`, which the walk reads anyway
+///   (`class Meta(CommonMeta)` brings in options from a class not walked;
+///   second review, S-03);
+/// - a class in the chain binds `Meta` by assignment (`Meta = CommonMeta`);
+/// - a base inside the project cannot be resolved to one class: a star import,
+///   a `try`/`except` import, an ambiguous one (S-04).
+///
+/// A base whose import leaves the project (`models.Model`, `AbstractUser`, a
+/// third-party mixin) cannot be read. It is **assumed** to set no table
+/// option, and the derived table's rule says so ([`external_bases`]).
+fn inherits_table_options(
+    model: &OrmModel,
+    python: &[&FileAnalysis],
+    index: &ModuleIndex<'_>,
+) -> bool {
+    let Some(file) = python.iter().find(|f| f.path == model.file) else {
+        return true;
+    };
+    let Some(class) = file
+        .symbols
+        .iter()
+        .find(|s| s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == model.name)
+    else {
+        return true;
+    };
+
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut pending: Vec<(&FileAnalysis, &Symbol, bool)> = vec![(file, class, false)];
+    while let Some((at, current, is_base)) = pending.pop() {
+        if meta_is_unreadable(at, current) {
+            return true;
+        }
+        if is_base && meta_sets_table_option(at, current) {
+            return true;
+        }
+        for base in &current.bases {
+            match classify_base(index, at, base) {
+                BaseKind::External => {}
+                BaseKind::Unreadable => return true,
+                BaseKind::Project(declared_in, name) => {
+                    if !seen.insert((declared_in.clone(), name.clone())) {
+                        continue;
+                    }
+                    let Some(base_file) = python.iter().find(|f| f.path == declared_in) else {
+                        return true;
+                    };
+                    let mut declarations = base_file.symbols.iter().filter(|s| {
+                        s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == name
+                    });
+                    // Declared twice (`if …: class X … else: class X …`), the
+                    // base is whichever runs; neither can be read as the one
+                    // (third review, U-08).
+                    let (Some(base_class), None) = (declarations.next(), declarations.next())
+                    else {
+                        return true;
+                    };
+                    pending.push((base_file, base_class, true));
+                }
+            }
+        }
+    }
+    false
+}
+
+/// What a base class written in `at` refers to.
+enum BaseKind {
+    /// Declared in the project: walk it.
+    Project(String, String),
+    /// Bound by an import that leaves the project: not readable here.
+    External,
+    /// In the project, but not resolvable to one class.
+    Unreadable,
+}
+
+fn classify_base(index: &ModuleIndex<'_>, at: &FileAnalysis, base: &str) -> BaseKind {
+    if let Some((declared_in, name, _, _)) = crate::handlers::resolve_reference(index, at, base) {
+        return BaseKind::Project(declared_in, name);
+    }
+    if base == "object" {
+        return BaseKind::External;
+    }
+    // `from netbox.models.features import *` then `class M(ChangeLoggingMixin)`:
+    // the name is bound by the star import to whichever module declares it.
+    if !base.contains('.') && matches!(index.resolve_python(at, base), Resolution::NotBound) {
+        return match through_star_imports(index, at, base, 0, &mut HashSet::new()) {
+            Some((declared_in, name)) => BaseKind::Project(declared_in, name),
+            None => BaseKind::Unreadable,
+        };
+    }
+    let head = base.split('.').next().unwrap_or(base);
+    match index.resolve_python(at, head) {
+        Resolution::Unresolved { reason, .. }
+            if reason.contains("not a module this project contains") =>
+        {
+            BaseKind::External
+        }
+        _ => BaseKind::Unreadable,
+    }
+}
+
+/// The class a star import binds `name` to, when exactly one module in the
+/// star chain declares it and every star import in the chain is in the
+/// project.
+///
+/// A star import that leaves the project could bind the name too, and two
+/// project modules that both declare it leave the answer to import order, so
+/// either case is `None`. A module that binds the name by a named import is
+/// followed through [`crate::handlers::resolve_reference`].
+fn through_star_imports(
+    index: &ModuleIndex<'_>,
+    at: &FileAnalysis,
+    name: &str,
+    depth: usize,
+    visited: &mut HashSet<String>,
+) -> Option<(String, String)> {
+    match star_binding(index, at, name, depth, visited) {
+        StarBinding::Class(file, declared) => Some((file, declared)),
+        StarBinding::Absent | StarBinding::Unknown => None,
+    }
+}
+
+/// What a module's star imports bind a name to.
+enum StarBinding {
+    /// Exactly one class, in the project.
+    Class(String, String),
+    /// Nothing in the star chain binds the name.
+    Absent,
+    /// Something binds it that is not one readable class: a variable, an
+    /// import leaving the project, two candidates. It must not be ignored, or
+    /// another star module's class would win (third review, U-07).
+    Unknown,
+}
+
+fn star_binding(
+    index: &ModuleIndex<'_>,
+    at: &FileAnalysis,
+    name: &str,
+    depth: usize,
+    visited: &mut HashSet<String>,
+) -> StarBinding {
+    if depth > 8 {
+        return StarBinding::Unknown;
+    }
+    if !visited.insert(at.path.clone()) {
+        return StarBinding::Absent;
+    }
+    let mut hits: Vec<(String, String)> = Vec::new();
+    for import in at
+        .imports
+        .iter()
+        .filter(|i| i.namespace_name.as_deref() == Some("*"))
+    {
+        let Some(target) = index.resolve_python_module(&import.specifier, &at.path) else {
+            return StarBinding::Unknown; // a star import that leaves the project
+        };
+        let Some(module) = index.file(&target) else {
+            return StarBinding::Unknown;
+        };
+        let declared: Vec<&Symbol> = module
+            .symbols
+            .iter()
+            .filter(|s| s.name == name && s.enclosing.is_none())
+            .collect();
+        let binds_by_name = module.imports.iter().any(|i| {
+            i.named
+                .iter()
+                .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+        });
+        let hit = match declared.as_slice() {
+            [only] if only.kind == SymbolKind::Class && !binds_by_name => {
+                (target.clone(), name.to_owned())
+            }
+            [] if binds_by_name => match crate::handlers::resolve_reference(index, module, name) {
+                Some((file, declared_name, _, _)) => (file, declared_name),
+                None => return StarBinding::Unknown,
+            },
+            [] => match star_binding(index, module, name, depth + 1, visited) {
+                StarBinding::Class(file, declared_name) => (file, declared_name),
+                StarBinding::Absent => continue,
+                StarBinding::Unknown => return StarBinding::Unknown,
+            },
+            _ => return StarBinding::Unknown,
+        };
+        if !hits.contains(&hit) {
+            hits.push(hit);
+        }
+    }
+    match hits.len() {
+        0 => StarBinding::Absent,
+        1 => {
+            let (file, declared) = hits.remove(0);
+            StarBinding::Class(file, declared)
+        }
+        _ => StarBinding::Unknown,
+    }
+}
+
+/// Bases of a model whose import leaves the project, other than Django's own
+/// model bases. Their `Meta` cannot be read.
+fn external_bases(
+    model: &OrmModel,
+    python: &[&FileAnalysis],
+    index: &ModuleIndex<'_>,
+) -> Vec<String> {
+    let Some(file) = python.iter().find(|f| f.path == model.file) else {
+        return Vec::new();
+    };
+    let Some(class) = file
+        .symbols
+        .iter()
+        .find(|s| s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == model.name)
+    else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<(String, String)> = HashSet::new();
+    let mut pending: Vec<(&FileAnalysis, &Symbol)> = vec![(file, class)];
+    while let Some((at, current)) = pending.pop() {
+        for base in &current.bases {
+            match classify_base(index, at, base) {
+                BaseKind::External => {
+                    // Silent only for Django's own bases, judged by the module
+                    // the name is imported from, not by the name (U-13).
+                    let head = base.split('.').next().unwrap_or(base);
+                    let django = base == "object" || imported_from_django(at, head);
+                    if !django && !out.contains(base) {
+                        out.push(base.clone());
+                    }
+                }
+                BaseKind::Unreadable => {}
+                BaseKind::Project(declared_in, name) => {
+                    if !seen.insert((declared_in.clone(), name.clone())) {
+                        continue;
+                    }
+                    let Some(base_file) = python.iter().find(|f| f.path == declared_in) else {
+                        continue;
+                    };
+                    if let Some(base_class) = base_file.symbols.iter().find(|s| {
+                        s.kind == SymbolKind::Class && s.enclosing.is_none() && s.name == name
+                    }) {
+                        pending.push((base_file, base_class));
+                    }
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Whether `name` is bound in `file` by an import from a `django` module.
+fn imported_from_django(file: &FileAnalysis, name: &str) -> bool {
+    file.imports.iter().any(|import| {
+        let from_django = import.specifier == "django" || import.specifier.starts_with("django.");
+        from_django
+            && (import
+                .named
+                .iter()
+                .any(|n| n.local.as_deref().unwrap_or(n.imported.as_str()) == name)
+                || import.namespace_name.as_deref() == Some(name)
+                || (import.named.is_empty()
+                    && import.namespace_name.is_none()
+                    && import.specifier.split('.').next() == Some(name)))
+    })
+}
+
+/// The `Meta` classes nested directly in `class`.
+fn metas_of<'f>(file: &'f FileAnalysis, class: &Symbol) -> impl Iterator<Item = &'f Symbol> {
+    let (start, end, owner) = (
+        class.span.start_line,
+        class.span.end_line,
+        class.name.clone(),
+    );
+    file.symbols.iter().filter(move |s| {
+        s.kind == SymbolKind::Class
+            && s.name == "Meta"
+            && s.enclosing.as_deref() == Some(owner.as_str())
+            && s.span.start_line >= start
+            && s.span.end_line <= end
+    })
+}
+
+/// A `Meta` this analysis cannot read completely: one that extends a class
+/// other than its owner's own base's `Meta`, or `Meta` bound by assignment.
+fn meta_is_unreadable(file: &FileAnalysis, class: &Symbol) -> bool {
+    let assigned = file.symbols.iter().any(|s| {
+        s.kind == SymbolKind::Variable
+            && s.name == "Meta"
+            && s.enclosing.as_deref() == Some(class.name.as_str())
+            && s.span.start_line >= class.span.start_line
+            && s.span.end_line <= class.span.end_line
+    });
+    assigned
+        || metas_of(file, class).any(|meta| {
+            meta.bases.iter().any(|meta_base| {
+                // `class Meta(object):` is the Python 2 spelling of no base
+                // (third review, U-09).
+                meta_base != "object"
+                    && meta_base
+                        .strip_suffix(".Meta")
+                        .is_none_or(|owner| !class.bases.iter().any(|base| base == owner))
+            })
+        })
+}
+
+/// Whether a class's own `Meta` assigns `app_label` or `db_table`.
+fn meta_sets_table_option(file: &FileAnalysis, class: &Symbol) -> bool {
+    metas_of(file, class).any(|meta| {
+        file.symbols.iter().any(|s| {
+            s.kind == SymbolKind::Variable
+                && (s.name == "app_label" || s.name == "db_table")
+                && s.enclosing.as_deref() == Some("Meta")
+                && s.span.start_line >= meta.span.start_line
+                && s.span.end_line <= meta.span.end_line
+        })
+    })
+}
+
+/// How many times `attribute` is assigned inside a model's own `Meta`.
+fn meta_assignments(file: &FileAnalysis, model: &OrmModel, attribute: &str) -> usize {
+    file.symbols
+        .iter()
+        .filter(|s| {
             s.kind == SymbolKind::Variable
                 && s.name == attribute
+                && s.enclosing.as_deref() == Some("Meta")
                 && s.span.start_line >= model.span.start_line
                 && s.span.end_line <= model.span.end_line
         })
+        .count()
+}
+
+/// The assignment to `attribute` inside a model's own `Meta`, if there is one.
+///
+/// Inside `Meta`, not merely inside the model: a *field* called `abstract`,
+/// `proxy` or `app_label` is a column, and says nothing about the table.
+fn meta_declaration<'f>(
+    file: &'f FileAnalysis,
+    model: &OrmModel,
+    attribute: &str,
+) -> Option<&'f Symbol> {
+    file.symbols.iter().find(|s| {
+        s.kind == SymbolKind::Variable
+            && s.name == attribute
+            && s.enclosing.as_deref() == Some("Meta")
+            && s.span.start_line >= model.span.start_line
+            && s.span.end_line <= model.span.end_line
     })
+}
+
+fn model_declares_attribute(python: &[&FileAnalysis], model: &OrmModel, attribute: &str) -> bool {
+    python
+        .iter()
+        .filter(|f| f.path == model.file)
+        .any(|f| meta_declaration(f, model, attribute).is_some())
 }
 
 fn django_app_label(model_file: &str, python: &[&FileAnalysis]) -> Result<String, String> {
@@ -463,36 +887,41 @@ fn django_app_label(model_file: &str, python: &[&FileAnalysis]) -> Result<String
             "the app package has no apps.py stating its label ({apps_path})"
         ));
     };
-    let literal_of = |decl: &Symbol| {
-        apps.strings.iter().find_map(|s| match s {
-            StringFact::Literal { value, span }
-                if span.start_line >= decl.span.start_line
-                    && span.end_line <= decl.span.end_line =>
-            {
-                Some(value.clone())
-            }
-            _ => None,
-        })
-    };
+    // The value must *be* a literal: `LABELS["store"]` and `pick("store")` are
+    // not `store` (second review, S-07; the rule R-13 set for Meta options).
+    let literal_of = |decl: &Symbol| assigned_literal(apps, decl);
     let mut labels: Vec<String> = Vec::new();
     for config in apps.symbols.iter().filter(|s| {
         s.kind == SymbolKind::Class
             && s.enclosing.is_none()
             && s.bases.iter().any(|b| b.ends_with("AppConfig"))
     }) {
+        // Assigned twice, the label is whatever the last assignment says;
+        // which one that is depends on control flow, so two refuse.
         let attr = |name: &str| {
-            apps.symbols.iter().find(|s| {
+            let mut found = apps.symbols.iter().filter(|s| {
                 s.kind == SymbolKind::Variable
                     && s.name == name
                     && s.enclosing.as_deref() == Some(config.name.as_str())
-            })
+            });
+            match (found.next(), found.next()) {
+                (Some(only), None) => Some(Ok(only)),
+                (Some(_), Some(_)) => Some(Err(())),
+                _ => None,
+            }
         };
         if let Some(decl) = attr("label") {
+            let Ok(decl) = decl else {
+                return Err(format!("{apps_path} assigns `label` more than once"));
+            };
             match literal_of(decl) {
                 Some(l) if !l.is_empty() => labels.push(l),
                 _ => return Err(format!("{apps_path} states a label that is not a literal")),
             }
         } else if let Some(decl) = attr("name") {
+            let Ok(decl) = decl else {
+                return Err(format!("{apps_path} assigns `name` more than once"));
+            };
             match literal_of(decl) {
                 Some(n) if n.rsplit('.').next() == Some(dir_name.as_str()) => {
                     labels.push(dir_name.clone());
@@ -561,6 +990,74 @@ pub fn discover_models(file: &FileAnalysis) -> Vec<OrmModel> {
                 })
             })
             .collect();
+        if added.is_empty() {
+            return models;
+        }
+        models.extend(added);
+    }
+}
+
+/// Every model in the project: each file's own ([`discover_models`]), plus
+/// classes whose base is a model declared **in another file** (T-007).
+///
+/// `class Order(TimeStamped)` with `from .base import TimeStamped` is the
+/// ordinary Django layout: one abstract base, shared by every app. A class is
+/// a model when one of its bases *resolves*, through the file's own imports,
+/// to a class already known to be a model; it takes that model's flavour.
+/// The step repeats until nothing is added, so a chain of bases across
+/// several files is followed. A base that is merely *named* like a model, or
+/// whose import is ambiguous or leaves the project, makes nothing a model.
+fn discover_project_models(python: &[&FileAnalysis], index: &ModuleIndex<'_>) -> Vec<OrmModel> {
+    let mut models: Vec<OrmModel> = python
+        .iter()
+        .flat_map(|file| discover_models(file))
+        .collect();
+    // What a base resolves to does not change between rounds; only which
+    // classes are known to be models does. Resolved once per (file, base).
+    let mut resolved: HashMap<(usize, String), Option<(String, String)>> = HashMap::new();
+    loop {
+        let known: HashMap<(&str, &str), OrmFlavor> = models
+            .iter()
+            .filter(|model| model.flavor != OrmFlavor::Unspecified)
+            .map(|model| ((model.file.as_str(), model.name.as_str()), model.flavor))
+            .collect();
+        let is_model: HashSet<(&str, &str)> = models
+            .iter()
+            .map(|model| (model.file.as_str(), model.name.as_str()))
+            .collect();
+
+        let mut added: Vec<OrmModel> = Vec::new();
+        for (file_index, file) in python.iter().enumerate() {
+            for class in &file.symbols {
+                if class.kind != SymbolKind::Class
+                    || class.enclosing.is_some()
+                    || is_model.contains(&(file.path.as_str(), class.name.as_str()))
+                {
+                    continue;
+                }
+                let inherited = class.bases.iter().find_map(|base| {
+                    let (declared_in, name) = resolved
+                        .entry((file_index, base.clone()))
+                        .or_insert_with(|| {
+                            crate::handlers::resolve_reference(index, file, base)
+                                .map(|(declared_in, name, _, _)| (declared_in, name))
+                        })
+                        .as_ref()?;
+                    let flavor = known.get(&(declared_in.as_str(), name.as_str()))?;
+                    Some((base.clone(), *flavor))
+                });
+                if let Some((base, flavor)) = inherited {
+                    added.push(OrmModel {
+                        name: class.name.clone(),
+                        flavor,
+                        base,
+                        table: resolve_table(file, class, flavor),
+                        file: file.path.clone(),
+                        span: class.span,
+                    });
+                }
+            }
+        }
         if added.is_empty() {
             return models;
         }
@@ -713,26 +1210,25 @@ fn declared_table(file: &FileAnalysis, class: &Symbol, flavor: OrmFlavor) -> Opt
             .collect(),
     };
 
-    let declaration = file.symbols.iter().find(|s| {
+    let mut declarations = file.symbols.iter().filter(|s| {
         s.kind == SymbolKind::Variable
             && s.name == attribute
             && s.enclosing
                 .as_ref()
                 .is_some_and(|e| owner_names.contains(e))
             && within_class(s)
-    })?;
-
-    // The value is the string literal inside the assignment's own span — the
-    // same span-correlation the constant evaluator uses.
-    let literal = file.strings.iter().find_map(|s| match s {
-        StringFact::Literal { value, span }
-            if span.start_line >= declaration.span.start_line
-                && span.end_line <= declaration.span.end_line =>
-        {
-            Some(value.clone())
-        }
-        _ => None,
     });
+    let declaration = declarations.next()?;
+    // Assigned twice, the table is whatever the last assignment says. Reading
+    // the first named a table Django does not use (second review, S-06).
+    if declarations.next().is_some() {
+        return Some(TableName::Unresolved {
+            reason: format!("{attribute} is assigned more than once"),
+        });
+    }
+
+    // The value must *be* a string literal, not merely contain one.
+    let literal = assigned_literal(file, declaration);
 
     Some(match literal {
         Some(name) if !name.is_empty() => TableName::Declared {
@@ -869,7 +1365,10 @@ fn resolves_to_the_model<S: std::hash::BuildHasher>(
         // otherwise the local declaration is a different symbol of the same
         // name, and attributing the access would be exactly the M07 defect.
         Resolution::Local { .. } => declared.file == file.path,
-        Resolution::Declared { file: at, .. } => at == declared.file,
+        // The declaration must be this model, not merely in its file:
+        // `from shop.models import Ledger as Order` makes `Order` mean Ledger
+        // (second review, S-09).
+        Resolution::Declared { file: at, name, .. } => at == declared.file && name == declared.name,
         // An unresolvable module, or several equally good ones. Neither
         // answers which symbol was meant.
         Resolution::Unresolved { .. } | Resolution::Ambiguous { .. } => false,

@@ -7,6 +7,551 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — a false edge and refusals found by a tenth independent review
+
+A tenth review found one false edge introduced by the ninth round's
+corrections and three needless refusals. Corrected, each with a regression
+test:
+
+- **A self-documenting substitution (`f"{x=}"`) is not the bare name.** It
+  renders `x=` followed by the value's representation. Any interpolation
+  with more than its braces and its expression keeps its whole text, which
+  no evaluator form accepts.
+- **A class body is found by position, not by name.** A method named like a
+  class, or a class written inside a function, is not a module-level class
+  body, and its request is not a load-time read. A class inside a
+  module-level class still is. (A function called while the module loads runs
+  its class bodies then; that is the documented module-level call limit.)
+- **A read after the assignment on its own line sees the new value**, so it
+  no longer refuses the constant.
+
+Known limits, each reproduced by the review:
+
+- After a star import, an assignment in a `try` or `with` body is refused,
+  as one under `if` is, although it always runs.
+- A lambda or generator expression in a class body, or at module level,
+  counts as running while the module loads.
+- After a star import, a constant assigned after `;` on a line is refused, as
+  any assignment not in column 1 is.
+- An implicitly concatenated string (`"/api/a/" "sub/"`, with or without an
+  f-string) is never bound as a constant.
+- An f-string operand of a `+` chain is read as a direct f-string is, so a
+  runtime prefix (`f"{HOST}/api/" + "x/"`) now refuses the value instead of
+  being dropped.
+
+### Fixed — false edges found by a ninth independent review
+
+A ninth review found no false edge introduced by the eighth round's
+corrections outside the documented `global` limit. It found an older parser
+defect and three small gaps. Corrected, each with a regression test:
+
+- **An f-string operand of a Python `+` chain keeps its substitutions.**
+  `f"/api/{VERSION}/" + "orders/"` was read as `/api/orders/`, dropping
+  `{VERSION}`, and matched a shorter route with confidence. Its substitutions
+  are now operands of the chain. A substitution with a format spec or a
+  conversion (`{n:03d}`, `{x!r}`) is not read as the bare name, in any
+  f-string.
+- **A request in a class body runs while the module loads**, so it is a read
+  between an import and the assignment, as a module-level request is.
+- **A conditional assignment after a Python star import is not a constant**,
+  as one after a named import already was.
+- **A read on the assignment's own line, after `;`, sees the earlier
+  import.** *(This holds through the column rule: such an assignment is not
+  in column 1. The tenth review's corrections, above, withdraw the separate
+  line rule, which also refused reads after the assignment.)*
+
+Known limits, each reproduced by the review:
+
+- An import under `global` or `nonlocal` in a nested function or another
+  method rebinds the name beyond the body that imports it, and is not seen
+  (the documented `global` limit).
+- A read that names the constant between its import and its assignment
+  refuses it for every use, including requests made after the module loads.
+
+### Fixed — lost edges found by an eighth independent review
+
+An eighth review found no false edge introduced by the seventh round's
+corrections, and correct constants they refused. Corrected, each with a
+regression test:
+
+- **Only a read that names the constant sees the import.** Any module-level
+  assignment between an import (or star import) and the constant's own
+  assignment used to refuse it, such as `logger = logging.getLogger(…)`. Now
+  only a string constant or a module-level request whose expression names the
+  constant does. A read on the import's own line, after `;`, counts.
+- **A function-local import hides the constant only in its innermost body**,
+  not in the whole module-level class or function around it: a sibling
+  method, or the outer function of a nested one, still reads the constant.
+- **A function-local import is applied when the request's URL is resolved**,
+  now tested end to end.
+
+Known limits, each reproduced by the review:
+
+- An import in a class body hides the constant from that class's methods,
+  which in Python cannot see class-body names.
+- A constant derived at module level from another constant (`URL = P +
+  "/x"`) is read with the request's own view of `P`: a function that imports
+  `P` locally does not get the module-level `URL`.
+- A request run while the module loads, by a module-level call between an
+  import and the assignment, is resolved only with the final value.
+- In a URL conf, a view name used inside the function that builds the routes
+  is resolved at module level: a parameter or a nested `def` of that name is
+  not seen.
+
+### Fixed — false edges found by a seventh independent review
+
+A seventh review found that the sixth round's two rules guessed in uncommon
+cases. Corrected, each with a regression test (the one-line `def` route's
+test was added with the eighth review's corrections):
+
+- **A route inside a function may run at any time after its `def`.** Its use
+  now spans from its own line to the end of the module. A star import before
+  a local view that the function may see refuses the view, whether the
+  function is called before or after the view's `def`, by a later statement or
+  by a decorator. A one-line `def` counts as a body.
+- **A class body runs where it is written**, so a route in it sees the
+  binding at that line.
+- **A module-level read between an import and the assignment sees the
+  import.** `from cfg import P`, then `URL = P + "sub/"`, then `P = "/api"`:
+  `P` is no longer read as `/api`. The same holds for a star import.
+  *(Narrowed by the eighth review's corrections, above: only a read that
+  names the constant counts.)*
+- **A function-local import hides the module constant only inside its
+  body.** A request in that body no longer reads the module constant; a
+  request elsewhere still does. *(Narrowed by the eighth review's
+  corrections, above: the innermost body.)*
+
+Known limits, each reproduced by the review:
+
+- A route built in a `lambda` is taken at its line.
+- An import under `global` in a function rebinds the module constant, and is
+  not seen.
+- A statement written after a backslash continuation of a compound statement
+  header (`if x: \` then a line in column 1) is read as unconditional.
+- `try: from cfg import P` / `except ImportError: pass` before an
+  unconditional `P = "/api"` refuses `P`, although the assignment always wins.
+- `from cfg import P; P = "/api"` on one line refuses `P`.
+
+### Fixed — false edges and lost edges found by a sixth independent review
+
+A sixth review found two uncommon false edges introduced by the fifth round's
+URL-conf rule, correct constants that round refused, and one older false edge
+in the constant rules (a tuple rebinding, listed below as a limit). Corrected, each with a regression test:
+
+- **A URL conf's star import counts until the last use of the name.** One
+  answer serves every route that names a view, so a second route after the
+  star import (`urlpatterns += [...]` under `if settings.DEBUG:`) refuses the
+  local view; an earlier route that did see it is refused with it.
+- **A route written inside a function runs when the function is called**,
+  which is treated as the end of the module: a star import after the `def` of
+  that function may rebind the view, and a view defined after the function
+  but before the call is its binding. *(Corrected by the seventh review's
+  corrections, above: the call's position is not read, so such a use may run
+  at any time after the function's `def`; and a class body runs where it is
+  written.)*
+- **A TypeScript `export * from` binds nothing locally**, so a barrel
+  `index.ts` that declares a base URL and then re-exports modules keeps the
+  constant, for itself and for its importers.
+- **A Python import inside a function or class body binds that body's name**,
+  not the module's, and an unconditional import written before the
+  assignment is overridden by it. Either kept a module constant from being
+  read. *(Narrowed by the seventh review's corrections, above: reads inside
+  that body, and module-level reads between the import and the assignment,
+  see the import.)*
+- **An object-literal method is not a binding** of its name at module level.
+
+Known limits, each reproduced by the review:
+
+- A Python constant rebound by a tuple assignment (`P, Q = "/x", 1`) keeps its
+  first value, as do the forms listed above (`for`, `global`, `+=`, `with`,
+  `:=`).
+- An import under `if TYPE_CHECKING:` refuses a module constant of the same
+  name, although it never runs.
+- A Python star import after a module constant refuses it, even when the star
+  module binds no such name.
+- A function or class declared inside a top-level callback counts as a
+  module binding of its name, as a `const` there does.
+
+### Fixed — false edges found by a fifth independent review
+
+A fifth review found two false edges introduced by the fourth round's URL-conf
+rule, one correct edge it had lost, and older false edges in constant
+binding. Corrected, each with a regression test:
+
+- **A URL conf's use sees the last binding before it.** A view defined
+  *after* `urlpatterns`, behind a star import, was drawn to the local `def`;
+  Python built the list with the star import's function. A `def` under a
+  module-level `if`, `try` or `with` after a star import is refused, because
+  the star import's binding is used when the branch does not run. A star
+  import written after the use does not affect it. *(Narrowed by the sixth
+  review's corrections, above: after the last use, and a use inside a
+  function counts as running at the end of the module.)*
+- **A star chain that cannot bind the view keeps the local view**: a nested
+  star module that binds no such name, or a chain that leads back to the URL
+  conf itself.
+- **A constant rebound by a `def`, a `class` or an import is not a
+  constant**, including the common `try: from cfg import P` /
+  `except ImportError: P = "/api"` fallback, and a star import written after
+  the assignment.
+- **A name the file declares is never supplied by an import of the same
+  name**, so a `const` inside a block or callback no longer replaces an
+  imported constant, and the import no longer replaces it either.
+- **A bare annotation (`P: str`) binds no value**, so `P: str` followed by
+  `P = "/api"` is bound again. A TypeScript `interface` or `type` of the same
+  name as a `const` does not rebind it.
+- **Constant collection is linear again.** The fourth round's duplicate check
+  was quadratic in a file's constants (30,000 constants: about 6 s).
+
+Known limits, each reproduced by the review on constructed code:
+
+- A URL-conf star module that binds the view by a tuple assignment, a `for`
+  target or `global` is not seen.
+- A Python constant rebound by `with … as P` or `:=` keeps its value.
+- A `const` inside a block or callback is not a constant, so a request inside
+  that callback using it is not resolved (a recall cost).
+- A function-local or parameter with the same name as a module constant is
+  still read as the constant (the scope-insensitive lookup, documented
+  above).
+
+### Fixed — false edges found by a fourth independent review
+
+A fourth review found no false edge introduced by the third round's
+corrections, one correct edge they had lost, and older false edges in the same
+functions. Corrected, each with a regression test:
+
+- **A `let` or `var` is not a constant.** `let API = '/api'` followed by a
+  module-level `API = …` was read as `/api`. Only a TypeScript `const` binds.
+- **A name declared twice at module level is not a constant.**
+  `BASE = BASE.replace(…)`, a reassignment under `if`, and a `const` of the
+  same name declared again inside a block made the first, or the last, value
+  win. *(Extended to `def`, `class` and import rebindings by the fifth
+  review's corrections, above.)*
+- **A star import written before a local view does not rebind it**, nor does
+  a star module that has the name only as a method. Both were refused by the
+  third round's rule; they are drawn to the local view again. *(Narrowed by
+  the fifth review's corrections, above: it holds when the view is defined
+  unconditionally before its use.)*
+- **A star module that binds the view by import, or through a star import of
+  its own, may rebind it**, and the view is refused. *(A star chain that
+  cannot bind it, or that leads back to the URL conf, no longer refuses;
+  see above.)*
+- **A comment inside parentheses, or a non-null `!`, does not hide the
+  string.** `( # legacy\n "t")` and `'/api'!` are read again.
+
+Known limits, each reproduced by the review on constructed code:
+
+- A Python constant changed by `+=`, a `for` target, `global`, or an
+  `import … as` of the same name keeps its string value. *(`import … as` is
+  refused since the fifth review's corrections; the rest remain.)*
+- A `Meta` option set inside an `if`, by a tuple assignment, by `+=` or as a
+  `for` target is not seen, and neither is a `Meta` rebound after its class,
+  nor a model's whole `class Meta` declared under `if`/`else`.
+- A model base bound in a star module by a tuple assignment is not seen.
+- A model base rebound after its class declaration (`Mix = Labelled`, a later
+  import of the same name, or a later project star import) is read as the
+  class. A star module that declares the base and then star-imports another
+  module is read as declaring it.
+- `__all__` is not read: a star module that declares a view but excludes it
+  from `__all__` still refuses the local view.
+- Further rare TypeScript rebindings of an imported axios are not seen: a
+  `for (var …)` used after the loop, a declaration in a different `switch`
+  case, a generator function's own name, `using`, and declarations inside a
+  `namespace`.
+- An f-string's doubled braces are not collapsed: `f"ord{{ers}}"` is read as
+  written.
+- `export let API = '/api'` is no longer bound even when it is never
+  reassigned: a recall cost of the `const`-only rule.
+
+### Fixed — false edges found by a third independent review
+
+A third review of the corrections above reproduced false edges in the same
+classes they claimed to close, and correct edges they had lost. Each is
+corrected, with a regression test:
+
+- **A constant is bound only when its value *is* a string** (T-010). The
+  parser now records where each variable's value is, with parentheses,
+  `as` and `satisfies` looked through, and a string is the value exactly when
+  its span is that span. Positions alone had mistaken `isProd ? PROD :
+  '/internal'`, `cfg.base ?? '/internal'`, `x || '/internal'`, a value split
+  over lines and `db_table = N*"t"` for the literal, and refused
+  `'/api' as const`, `('/api')`, `const A = '/api', B = '/x'` and an aligned
+  `db_table     = "t"`. A chained `db_table = x = "t"` and an annotated
+  `db_table: str = "t"` are read.
+- **A default value or a type does not shadow axios.** `function f(c = Ax)`,
+  `{ k = Ax }` and `k: typeof Ax` *use* the imported name; they were counted
+  as rebinding it and the request was dropped.
+- **More rebinding forms shadow axios:** a `for … of`/`in` target, a `for`
+  initialiser, a declaration in a `switch` case, a `var` anywhere in the
+  function, a named function expression, and a renamed destructuring
+  (`{ client: Ax }`).
+- **A star module that binds a base by assignment, or by an import from
+  outside the project, is not skipped.** Another star module's class of the
+  same name used to win; the table is now refused. A tuple assignment
+  (`Mix, Other = Labelled, None`) is not seen (a limit, listed in the fourth
+  review's entry).
+- **A base declared twice in its module (`if`/`else`) is not read**, and the
+  table is refused.
+- **`class Meta(object):`** in a base is a plain `Meta` again; it had refused
+  the child's table.
+- **A view defined in the URL conf and star-imported over is refused**: a
+  star import written after the `def` whose module is outside the project, or
+  binds the name at module level by declaration, by import, or through a star
+  import of its own. A star import written before the `def` does not rebind
+  it.
+- **`import shop.legacy as Order` conflicts with `from shop.models import
+  Order`**, so neither is drawn.
+- **A library base named `Model` is named as an assumption** in the derived
+  table's rule unless it is imported from Django.
+
+Public interface: the parse JSON gains an optional `value_span` on variable
+symbols. It is additive; existing fields are unchanged.
+
+Known limits that remain:
+
+- For a method call, any receiver with a verb method and a path literal is a
+  request (`f(Ax) { return Ax.get('/api/x/') }`), shadowed or not.
+- A top-level `var` or `let` arrow function is not named, even if it is never
+  reassigned; its request starts at the file.
+- A name imported twice in one file is refused even when the later import
+  is the one Python uses.
+- `blast` on a handler whose route was refused says nothing depends on it.
+
+### Fixed — false edges and statements found by a second independent review
+
+A second adversarial review of the fixes above reproduced further false edges
+and false statements. Each is corrected, with a regression test:
+
+- **A URL-conf reference that does not resolve ends at its route.** Its edge
+  used to end at a node named by the reference text, which is the identity of
+  any real function of that name in the URL conf, so a refused
+  `list_orders` could inherit a helper method's model accesses. The node is
+  now the route itself (kind `route`, named by its path).
+- **A view imported after a local `def` of the same name is refused.** The
+  import rebinds the name; the local `def` was preferred whatever the order.
+- **Each `Meta` in a model's inheritance is read, or the table is refused**,
+  for `Meta` options assigned directly in the class body (see the limits in
+  the fourth review's entry). A `Meta` that extends a class outside the model's bases
+  (`class Meta(CommonMeta)`), `Meta` bound by assignment, and a base inside
+  the project that cannot be resolved (a `try`/`except` import, a base loaded
+  from settings at runtime, a star import that two modules satisfy) now refuse
+  the default table instead of deriving a wrong one. A base bound by a star
+  import is followed to the one project module that declares it. A base from
+  outside the project cannot be read and is *assumed* to set no table option;
+  the derived table's rule names each such base.
+- **An option assigned twice refuses.** Two assignments to `db_table`,
+  `app_label`, or an `apps.py` `label` or `name`: the last wins at runtime, and
+  the first was read.
+- **An `apps.py` label must be a whole literal**, as `Meta` options already
+  must. `LABELS["store"]` is not `store`. A literal holding an escape is not
+  read either, because escapes are not interpreted.
+- **An alias is not read as the model whose name it reuses.** After
+  `from shop.models import Ledger as Order`, `Order.objects...` was drawn to
+  the model `Order`. It is now not drawn; following the alias to `Ledger` is
+  not supported.
+- **A module constant is bound only to a whole-string initialiser.**
+  `isProd ? '/api' : '/internal'` and `'/api'.replace(…)` were read as `/api`.
+- **A `let` or `var` arrow function is not named**, because it may be
+  reassigned; only `const` is.
+- **A parameter or local called `axios` is not the imported library.** The
+  import binding is now checked against the enclosing functions' parameters
+  and blocks at the call.
+- **`trace` under `--max-depth` no longer says a path does not cross the HTTP
+  boundary** when a crossing branch was cut by the limit.
+
+Known limits that remain, each reproduced by the review:
+
+- `db_table = N*"t"` and `app_label = Q%"y"`, written without spaces around a
+  one-character left operand, are read as the literal. *(Fixed by the third
+  review's corrections, above.)*
+- A constant whose initialiser is `x || '/api'` or `x && '/api'` is read as
+  `/api`. *(Fixed by the third review's corrections, above.)*
+- A method and a module function of the same name in one file share a node
+  (ADR-0011), so a call to the function can appear to reach the method's
+  requests.
+- Rebinding a name through a `for` target or `global` is not seen. *(For a
+  TypeScript `for` target in scope at the call, fixed above. Still a limit for
+  a Python URL conf or module constant, and for a TypeScript `for (var …)`
+  used after its loop.)*
+- `const axios = require('axios')` is not recognised as axios. A receiver
+  *named* `axios`, `client`, `http` or `api` with a verb method is a request by
+  name, shadowed or not, as before.
+
+### Fixed — one name imported as two different things is ambiguous, not the first import
+
+Python allows an import inside a function, so one file can bind a name twice,
+to different things. Imports are recorded per file, so which binding a given
+use sees is not known, and the resolver took the first. On Label Studio a test
+function's `Filter(...)`, a plain class imported inside that function, was
+drawn as an access to the Django model `Filter` imported inside another
+(T-009). Two imports that bind one name to different targets are now
+ambiguous, and no edge is drawn from either. The same import repeated in
+several functions is still one binding.
+
+### Fixed — the MCP server no longer re-parses an unchanged repository on every call
+
+Every `map`, `trace`, `blast` and `diff` call analysed its repository from
+nothing: the incremental engine was handed a new, empty cache each time
+(T-008). A session now keeps one cache per granted tree for as long as it
+lives, so a repeated question re-parses only the files whose content changed.
+On CVAT (1,295 files) a repeated `map` call went from 5.2 s to 0.85 s, for
+about 18 MB more memory.
+
+It cannot answer from a stale tree. Every call still lists the tree and reads
+every file. A file's parsed facts are reused only when its bytes hash to what
+they hashed to before, and its model accesses only when that file, the files
+its resolution read and the project's sets of models, paths and import aliases
+are all unchanged. A deleted file is dropped, and routes, matches, models,
+tables and edges are rebuilt on every call. The answer is the one a cold
+analysis gives.
+The cache holds only trees the session authorized, lives in memory only, and
+is discarded for a tree whose analysis fails. Two requests for the same tree
+run one after the other.
+
+`Session::new` is no longer a `const fn`.
+
+### Fixed — a model's own `Meta.app_label` names its table, and a field is not a `Meta` option
+
+Two errors in the default-table rule (T-007):
+
+- **`Meta.app_label` was not read.** A model that states its own label is in
+  that app, whatever package its module is in. Deriving the table from the
+  package's `apps.py` instead named a table that does not exist. The model's
+  own label is now used first, and it is enough on its own when the package has
+  no `apps.py`. A label that is not a string literal refuses the default table,
+  and the value must *be* a literal, not contain one: `LABELS["billing"]` and
+  `"a" if x else "b"` refuse. The same rule now applies to `db_table`.
+- **An inherited `Meta` was ignored.** `Meta` options are inherited from an
+  abstract base, so a base whose `Meta` sets `app_label` or `db_table` decides
+  its children's tables. Such a model, and one whose own `Meta` extends another
+  class, now gets no derived table rather than a wrong one.
+- **A field was mistaken for a `Meta` option.** `abstract = models.TextField()`
+  on a model refused its table, because any assignment to `abstract`, `proxy`
+  or `db_table` anywhere in the class counted. Only an assignment inside the
+  model's `Meta` counts now.
+
+### Fixed — `axios(url, config)` is observed as a request
+
+axios may be called as a function, `axios('/api/orders')` or
+`axios(url, { method: 'post' })`. Only its verb methods and its
+configuration-object form were observed; this form was silently dropped
+(T-006). It is now observed like `fetch(url, init)`, under whatever name axios
+was imported, with the method read from a literal `method` in the second
+argument. It is recognised by its import alone: a local function or parameter
+that happens to be called `axios` is not a request.
+
+### Fixed — a model whose base class lives in another file is a model
+
+`class Order(TimeStamped)` with `from core.models import TimeStamped` is the
+ordinary Django layout: one abstract base shared by every app. Only a base in
+the *same file* was followed, so such a model was not recognised at all: no
+table, and no edge from the views that query it (T-007). A class is now a model
+when one of its bases resolves, through the file's own imports, to a class
+already known to be a model, across any number of files; it takes that model's
+ORM. Every import form is followed, including a `models/` package that
+re-exports its base, and SQLAlchemy models gain the same rule.
+
+Nothing is decided by name: a base that merely shares a model's name, an
+ambiguous import and an import that leaves the project make nothing a model.
+Table rules are unchanged, so an abstract or proxy model still gets no table,
+and a SQLAlchemy model still needs its own `__tablename__`.
+
+Graphs gain models, tables and ORM edges on projects laid out this way.
+
+### Fixed — a Django view in `views.py` is the node its URL conf points at
+
+`path("orders/", views.list_orders)` in `urls.py` names a function declared in
+`views.py`. The request edge ended at a node named after the reference
+(`views.list_orders`, in `urls.py`), while the view's model accesses started at
+the function in `views.py`, so a trace from the frontend stopped one hop short
+of the table in the standard Django layout (T-002). The reference is now
+resolved through the URL conf's own imports to the declaration, and the edge
+ends there. Supported: a bare imported name, with or without an alias;
+`module.name` through `from . import views`, `from pkg import views as v`,
+`import pkg.views` and `import pkg.views as v`; a `views/` package that
+re-exports the view; and `X.as_view()`, which resolves to the class. The
+edge's evidence names where the handler is declared and which import led there.
+
+Refused, leaving the node as it was: an import that is ambiguous or leaves the
+project; a name imported twice from different modules; a name that is not a
+function or class; a name that means more than one thing in the file that
+declares it (a function and a method of the same name share one node, and a
+later `name = wrap(...)` rebinds it); a module alias reassigned in the URL
+conf; `function.as_view`; and a bare class.
+
+Two deliberate limits:
+
+- **A wrapper call names no handler.** `login_required(views.orders)` used to
+  be recorded with the handler `login_required`. What a wrapper returns is not
+  known, so such an entry now names no handler and its edge ends at a route
+  node, as documented for a route without one.
+- **A class-based view is reached, not entered.** The request ends at the
+  class. No edge is drawn from the class to `get` or `post`: those are separate
+  nodes, shared by every class in the file that defines one
+  ([ADR-0011](docs/adr/ADR-0011-node-identity-within-a-graph.md)), so the edge
+  would also claim the other classes' model accesses.
+
+### Fixed — `fetch(BASE + '/orders')` resolves like the template it equals
+
+A `+` chain written directly as a request's URL was refused as unsupported,
+while the template `` `${BASE}/orders` `` built from the same constant matched
+(T-003). The parser hands a template over in parts but a concatenation used as
+an argument arrives as source text, and the evaluator's grammar rejected any
+text with an operator. It now accepts one more form: a top-level `+` chain
+whose operands are quoted literals, constants, member accesses or environment
+reads, each evaluated by the existing rules. The same holds for Python.
+
+Nothing is executed and nothing is invented. A call, an index, parentheses, a
+template operand, an escape inside a literal or any other operator still makes
+the whole value unsupported. An object property and an environment value stay
+unresolved, so a URL whose prefix depends on one is still refused.
+
+Known limit, shared with the template form: an identifier is looked up among
+the module's constants without regard to scope. A parameter, a function-local
+value or a destructured name that has the **same name as a module constant** is
+read as that constant, and a `let` reassigned later is read at its first value.
+Where no module constant shares the name, such an identifier stays unknown.
+
+### Fixed — a request inside `const f = () => …` belongs to `f`
+
+A request made inside an arrow function or function expression bound to a
+module-scope name had no enclosing function, so it was attributed to the whole
+file and `cartograph trace f` answered `symbol-not-found` (T-004). The parser
+now treats such a binding as the function it is, as the resolver already did
+when following calls. The same holds for an anonymous `export default`
+function, named `default`. Parentheses and type assertions around the function
+are looked through.
+
+Only a declaration written at the top level of the module qualifies. Unchanged
+on purpose: a function nested inside a named function still belongs to its
+host; a function declared inside a callback (`memo(() => { const submit = … })`)
+is not named, because it is local to that callback; a class field holding a
+function stays attributed to its class; and a function passed to a wrapper call
+(`debounce(() => …)`) or kept in an object literal is not given the binding's
+name, because what the wrapper returns is not known.
+
+Graphs change where requests sit in top-level arrow functions: the request's
+source is the named function instead of the file, and a caller that imports it
+by name gains a `call` edge to it. A call to a function nested in its caller is
+not followed, and neither is a call through a default import of an anonymous
+default export.
+
+Known limit, shared with `function` declarations: parameters are not recorded,
+so a call to a parameter that has the same name as a module function is read as
+a call to that function.
+
+### Fixed — `trace` no longer claims an HTTP boundary the path does not cross
+
+`cartograph trace` closed every trace that reached a table with "This path
+crosses the HTTP boundary and reaches a database table", even when no HTTP-call
+edge was on the path: tracing a model to its own table printed it (T-001). The
+sentence is now printed only when one path both contains an HTTP-call edge and
+reaches a table. A path that reaches a table with no HTTP-call edge says so:
+"This path reaches a database table without crossing the HTTP boundary". An
+HTTP call on one branch no longer vouches for a table on another. A walk cut
+short by `--max-depth` no longer says "a missing hop was refused, not hidden":
+it says no table was reached within the limit. The JSON field `reaches_table`
+is unchanged; it has always meant only that a table was reached.
+
 ### Changed — Cartograph is licensed under the Functional Source License
 
 Cartograph moves from Apache-2.0 to the Functional Source License, Version 1.1,

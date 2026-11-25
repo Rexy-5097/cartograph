@@ -48,8 +48,8 @@
     },
     {
       "id": 2,
-      "kind": "function",
-      "name": "views.order_detail",
+      "kind": "route",
+      "name": "UNKNOWN /orders/{pk}/",
       "file": "python/django_urls.py",
       "line": 8
     },

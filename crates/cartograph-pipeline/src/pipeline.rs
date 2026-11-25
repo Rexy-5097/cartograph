@@ -23,10 +23,10 @@ use cartograph_graph::ArchitectureGraph;
 use cartograph_parser::Analyzer;
 use cartograph_parser::model::{FileAnalysis, ParseStatus, SourceLanguage};
 use cartograph_resolver::{
-    MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex, UrlConfIndex,
-    add_client_call_edges, add_edge_for_match, add_orm_edges, collect_exported_constants,
-    match_client, normalize_client_call, normalize_route_declaration, resolve_url, scope_for_file,
-    with_composed_prefix, with_resolved_url,
+    HandlerIndex, MatchResult, MatchStatus, ModuleIndex, OrmAnalysis, RouteIndex, RouterIndex,
+    UrlConfIndex, add_client_call_edges, add_edge_for_match_with, add_orm_edges,
+    collect_exported_constants, match_client, normalize_client_call, normalize_route_declaration,
+    resolve_url, scope_for_file, with_composed_prefix, with_resolved_url,
 };
 use serde::Serialize;
 
@@ -394,6 +394,9 @@ fn resolve(
     // A Django URL-conf entry has no receiver; what mounts it is an
     // `include(...)` or a spread elsewhere.
     let urlconfs = UrlConfIndex::build(analyses, &modules);
+    // A URL-conf entry names its view by reference; the view is declared
+    // elsewhere, and the edge must end at the declaration (T-002).
+    let handlers = HandlerIndex::build(analyses, &modules);
 
     let mut backend = Vec::new();
     let mut clients = Vec::new();
@@ -456,7 +459,7 @@ fn resolve(
             MatchStatus::Unsupported => totals.unsupported += 1,
             _ => {}
         }
-        if add_edge_for_match(&mut graph, result, None)
+        if add_edge_for_match_with(&mut graph, result, None, &handlers)
             .map_err(|e| graph_failure(&e))?
             .is_some()
         {

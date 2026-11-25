@@ -111,7 +111,8 @@ struct TraceResult {
     from: JsonNode,
     /// The hops.
     steps: Vec<Step>,
-    /// Whether any path reached a database table — the full-stack chain.
+    /// Whether any path reached a database table. It says nothing about an
+    /// HTTP edge: the closing sentence checks for one separately (T-001).
     reaches_table: bool,
     /// Why the walk stopped, when it stopped immediately.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -303,6 +304,29 @@ fn reaches_table(steps: &[Step]) -> bool {
         .any(|step| matches!(step.to.kind, NodeKind::Table) || reaches_table(&step.next))
 }
 
+/// Whether the walk, or any branch of it, stopped at the depth limit.
+fn stopped_at_depth(stop: Option<Stop>, steps: &[Step]) -> bool {
+    matches!(stop, Some(Stop::MaxDepth))
+        || steps
+            .iter()
+            .any(|step| stopped_at_depth(step.stop, &step.next))
+}
+
+/// Whether some single path reaches a database table **through** an
+/// `HttpCall` edge.
+///
+/// The closing sentence claims an HTTP boundary crossing, so the claim needs
+/// the edge that makes it true, on the same path as the table (T-001). A
+/// table reached on one branch and an HTTP call on another is not a crossing:
+/// `crossed` is carried down each path, never shared between branches.
+fn reaches_table_through_http(steps: &[Step], crossed: bool) -> bool {
+    steps.iter().any(|step| {
+        let crossed = crossed || matches!(step.edge.kind, EdgeKind::HttpCall);
+        (crossed && matches!(step.to.kind, NodeKind::Table))
+            || reaches_table_through_http(&step.next, crossed)
+    })
+}
+
 /// Observations in the same file as `node` that the resolver refused.
 ///
 /// Scoped to the file, and labelled as such. This does not claim the refusal
@@ -383,11 +407,28 @@ fn render_text(analysis: &Analysis, result: &TraceResult) -> String {
     }
 
     let _ = writeln!(out);
-    if result.reaches_table {
+    if reaches_table_through_http(&result.steps, false) {
         let _ = writeln!(
             out,
             "This path crosses the HTTP boundary and reaches a database table."
         );
+    } else if stopped_at_depth(result.stop, &result.steps) {
+        // The walk was cut short, so "a missing hop was refused" would be
+        // untrue: the table may be one hop past the limit (review R-14).
+        let _ = writeln!(
+            out,
+            "No path within --max-depth was found to cross the HTTP boundary and reach a"
+        );
+        let _ = writeln!(
+            out,
+            "database table, but the walk stopped at the limit: a path may continue past it."
+        );
+    } else if result.reaches_table {
+        let _ = writeln!(
+            out,
+            "This path reaches a database table without crossing the HTTP boundary:"
+        );
+        let _ = writeln!(out, "no HTTP-call edge is on it.");
     } else {
         let _ = writeln!(
             out,
@@ -566,6 +607,87 @@ mod tests {
     #[test]
     fn the_depth_default_is_the_graph_layer_default() {
         assert_eq!(DEFAULT_MAX_DEPTH, trace::DEFAULT_MAX_DEPTH);
+    }
+
+    fn step(edge: EdgeKind, to: NodeKind, next: Vec<Step>) -> Step {
+        Step {
+            edge: JsonEdge {
+                id: 0,
+                source: 0,
+                target: 0,
+                kind: edge,
+                confidence: 0.8,
+                provenance: Provenance::RouteMatcher,
+                evidence: String::new(),
+                file: "f".to_owned(),
+                line: 1,
+            },
+            to: JsonNode {
+                id: 0,
+                kind: to,
+                name: "n".to_owned(),
+                file: None,
+                line: None,
+            },
+            next,
+            stop: None,
+            refusals: Vec::new(),
+        }
+    }
+
+    /// T-001: the HTTP claim needs an `HttpCall` edge on the path to the table.
+    #[test]
+    fn a_table_reached_without_an_http_edge_is_not_a_boundary_crossing() {
+        // class -> table
+        let model_only = vec![step(EdgeKind::Queries, NodeKind::Table, Vec::new())];
+        assert!(reaches_table(&model_only));
+        assert!(!reaches_table_through_http(&model_only, false));
+
+        // handler -> class -> table
+        let handler = vec![step(EdgeKind::OrmAccess, NodeKind::Class, model_only)];
+        assert!(reaches_table(&handler));
+        assert!(!reaches_table_through_http(&handler, false));
+    }
+
+    #[test]
+    fn a_table_reached_through_an_http_edge_is_a_boundary_crossing() {
+        let chain = vec![step(
+            EdgeKind::HttpCall,
+            NodeKind::Function,
+            vec![step(
+                EdgeKind::OrmAccess,
+                NodeKind::Class,
+                vec![step(EdgeKind::Queries, NodeKind::Table, Vec::new())],
+            )],
+        )];
+        assert!(reaches_table_through_http(&chain, false));
+
+        // A wrapper call before the request changes nothing.
+        let wrapped = vec![step(EdgeKind::Call, NodeKind::Function, chain)];
+        assert!(reaches_table_through_http(&wrapped, false));
+    }
+
+    #[test]
+    fn an_http_edge_on_one_branch_does_not_vouch_for_a_table_on_another() {
+        let forked = vec![
+            // branch 1: a request whose handler touches no model
+            step(EdgeKind::HttpCall, NodeKind::Function, Vec::new()),
+            // branch 2: a direct model access
+            step(
+                EdgeKind::OrmAccess,
+                NodeKind::Class,
+                vec![step(EdgeKind::Queries, NodeKind::Table, Vec::new())],
+            ),
+        ];
+        assert!(reaches_table(&forked));
+        assert!(!reaches_table_through_http(&forked, false));
+    }
+
+    #[test]
+    fn an_http_edge_with_no_table_behind_it_reaches_nothing() {
+        let request_only = vec![step(EdgeKind::HttpCall, NodeKind::Function, Vec::new())];
+        assert!(!reaches_table(&request_only));
+        assert!(!reaches_table_through_http(&request_only, false));
     }
 
     #[test]

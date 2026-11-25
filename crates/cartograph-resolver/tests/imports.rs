@@ -312,3 +312,109 @@ fn every_resolution_explains_itself_without_quoting_source() {
         );
     }
 }
+
+// ── T-009: one name imported as two different things in one file ────
+
+const TWO_FILTERS: [(&str, &str); 3] = [
+    (
+        "shop/models.py",
+        "from django.db import models\n\n\nclass Filter(models.Model):\n    class Meta:\n        db_table = 'filters'\n",
+    ),
+    ("shop/params.py", "class Filter:\n    pass\n"),
+    (
+        "shop/tests.py",
+        "def uses_the_model():\n    from shop.models import Filter\n    return Filter.objects.create()\n\n\ndef uses_the_other_class():\n    from shop.params import Filter\n    return Filter(value=1)\n",
+    ),
+];
+
+#[test]
+fn a_name_imported_as_two_different_things_is_ambiguous() {
+    // Imports are recorded per file, not per function, so which `Filter` a
+    // given use sees is not known. The first import must not win.
+    let resolution = resolve(&TWO_FILTERS, "shop/tests.py", "Filter");
+    assert!(
+        matches!(&resolution, Resolution::Ambiguous { candidates } if candidates.len() == 2),
+        "got {resolution:?}"
+    );
+}
+
+#[test]
+fn the_same_import_repeated_in_several_functions_is_one_binding() {
+    let files = [
+        TWO_FILTERS[0],
+        (
+            "shop/tests.py",
+            "def a():\n    from shop.models import Filter\n    return Filter.objects.all()\n\n\ndef b():\n    from shop.models import Filter\n    return Filter.objects.count()\n",
+        ),
+    ];
+    let resolution = resolve(&files, "shop/tests.py", "Filter");
+    assert_eq!(
+        resolution.declared_in(),
+        Some("shop/models.py"),
+        "got {resolution:?}"
+    );
+}
+
+#[test]
+fn two_aliases_of_one_declaration_do_not_conflict_with_each_other() {
+    // `Filter` and `F` are different local names; each is bound once.
+    let files = [
+        TWO_FILTERS[0],
+        (
+            "shop/tests.py",
+            "from shop.models import Filter\nfrom shop.models import Filter as F\n",
+        ),
+    ];
+    for name in ["Filter", "F"] {
+        let resolution = resolve(&files, "shop/tests.py", name);
+        assert_eq!(
+            resolution.declared_in(),
+            Some("shop/models.py"),
+            "{name}: {resolution:?}"
+        );
+    }
+}
+
+#[test]
+fn one_module_imported_relatively_and_absolutely_is_one_binding() {
+    // Found on Label Studio: `from .models import ConvertedFormat` at the top
+    // of data_export/api.py and `from data_export.models import
+    // ConvertedFormat` inside a function are the same class.
+    let files = [
+        TWO_FILTERS[0],
+        (
+            "shop/api.py",
+            "from .models import Filter
+
+
+def later():
+    from shop.models import Filter
+    return Filter.objects.all()
+",
+        ),
+    ];
+    let resolution = resolve(&files, "shop/api.py", "Filter");
+    assert_eq!(
+        resolution.declared_in(),
+        Some("shop/models.py"),
+        "got {resolution:?}"
+    );
+}
+
+#[test]
+fn a_module_imported_under_a_models_name_conflicts_with_it() {
+    // Third review, U-11: `import shop.legacy as Order` rebinds `Order`.
+    let files = [
+        TWO_FILTERS[0],
+        ("shop/legacy.py", "X = 1\n"),
+        (
+            "shop/views.py",
+            "from shop.models import Filter\nimport shop.legacy as Filter\n\n\ndef v(request):\n    return Filter.objects.all()\n",
+        ),
+    ];
+    let resolution = resolve(&files, "shop/views.py", "Filter");
+    assert!(
+        matches!(resolution, Resolution::Ambiguous { .. }),
+        "got {resolution:?}"
+    );
+}

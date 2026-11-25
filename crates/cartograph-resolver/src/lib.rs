@@ -104,6 +104,7 @@ pub mod dependencies;
 pub mod dynamic;
 pub mod edge;
 pub mod evaluator;
+pub mod handlers;
 pub mod imports;
 pub mod matching;
 pub mod normalize;
@@ -127,8 +128,9 @@ pub use dynamic::{
     ExportedConstants, ResolvedUrl, collect_exported_constants, resolve_url, scope_for_file,
     with_resolved_url,
 };
-pub use edge::add_edge_for_match;
+pub use edge::{add_edge_for_match, add_edge_for_match_with};
 pub use evaluator::{Scope, evaluate_expression, evaluate_string_fact};
+pub use handlers::{HandlerDeclaration, HandlerIndex};
 pub use imports::{ModuleIndex, Resolution};
 pub use matching::{
     Candidate, MatchReason, MatchResult, MatchStatus, MethodCompatibility, PathCompatibility,

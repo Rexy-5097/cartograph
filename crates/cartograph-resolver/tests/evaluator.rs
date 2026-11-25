@@ -313,3 +313,659 @@ fn evaluation_is_deterministic() {
 await fetch(`${BASE}/orders/${id}`);"#;
     assert_eq!(url_of("web/src/api.ts", src), url_of("web/src/api.ts", src));
 }
+
+// ── T-003: a `+` chain given as expression text ─────────────────────
+
+#[test]
+fn a_plus_chain_of_literals_and_constants_evaluates() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\nconst V = 'v1';\n");
+    for (expr, expected) in [
+        ("BASE + '/orders'", "/api/orders"),
+        ("BASE+\"/orders\"", "/api/orders"),
+        ("'/api' + '/orders'", "/api/orders"),
+        ("BASE + '/' + V + '/orders'", "/api/v1/orders"),
+        ("  BASE  +  '/a+b'  ", "/api/a+b"),
+    ] {
+        let value = evaluate_expression(expr, &scope);
+        assert_eq!(
+            value.as_literal().as_deref(),
+            Some(expected),
+            "{expr} gave {value:?}"
+        );
+    }
+}
+
+#[test]
+fn a_plus_chain_keeps_what_it_cannot_determine_unknown() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\n");
+    let value = evaluate_expression("BASE + '/orders/' + orderId", &scope);
+    assert_eq!(value.as_literal(), None);
+    assert_eq!(value.to_string(), "/api/orders/{unknown}");
+
+    // A member access and an environment read keep their existing meaning.
+    assert_eq!(
+        evaluate_expression("config.base + '/orders'", &scope).to_string(),
+        "{unknown}/orders"
+    );
+    assert_eq!(
+        evaluate_expression("process.env.API + '/orders'", &scope).to_string(),
+        "{env:API}/orders"
+    );
+}
+
+#[test]
+fn text_that_is_not_a_plain_plus_chain_stays_unsupported() {
+    let scope = scope_of("src/c.ts", "const BASE = '/api';\n");
+    for expr in [
+        "BASE + build()",
+        "BASE + paths[0]",
+        "(BASE + '/x')",
+        "BASE + '/x' + (a ? b : c)",
+        "BASE - '/x'",
+        "BASE + `/x`",
+        "BASE + + '/x'",
+        "+BASE",
+        "BASE +",
+        "BASE++",
+        "BASE + 'it\\'s'",
+        "BASE + '/x",
+        "BASE '/x'",
+        "BASE + a b",
+        "a ? BASE + '/x' : '/y'",
+        "BASE + '/x' || '/y'",
+    ] {
+        let value = evaluate_expression(expr, &scope);
+        assert_eq!(value.as_literal(), None, "{expr} must not resolve");
+        assert!(
+            matches!(value, SymbolicValue::Unsupported { .. }),
+            "{expr} should be unsupported, got {value:?}"
+        );
+    }
+}
+
+#[test]
+fn a_constant_whose_initialiser_only_contains_a_string_is_not_bound() {
+    // Second review, S-08: the first string in the initialiser was taken.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const A = isProd ? '/api' : '/internal';\nexport const B = '/api'.replace('/api', '/v2');\nexport const C = '/api';\n",
+    );
+    assert_eq!(evaluate_expression("A + '/x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("B + '/x'", &scope).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("C + '/x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/x")
+    );
+}
+
+// ── T-010: a constant is bound only when its value *is* a string ─────────
+
+#[test]
+fn a_value_holding_one_string_at_its_end_is_not_that_string() {
+    // Third review, U-01: the last string ended where the declaration ended,
+    // so `isProd ? PROD : '/internal'` was read as `/internal`.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const F1 = isProd ? PROD : '/internal';
+export const F2 = cfg.base ?? '/internal';
+export const F3 = x || '/internal';
+export const F4 = import.meta.env.PROD ? import.meta.env.VITE_API : '/internal';
+export const F5 = () => '/internal';
+",
+    );
+    for name in ["F1", "F2", "F3", "F4", "F5"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope).as_literal(),
+            None,
+            "{name} was bound"
+        );
+    }
+}
+
+#[test]
+fn a_value_split_over_lines_is_not_its_last_string() {
+    // Third review, U-02: a string left of the declarator's column on a later
+    // line was not seen.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const F3 = isProd
+  ? '/prod' : '/internal';
+export const F4 =
+  isProd ? PROD
+: '/internal';
+",
+    );
+    assert_eq!(evaluate_expression("F3 + '/x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("F4 + '/x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_string_in_parentheses_or_a_type_assertion_is_still_the_value() {
+    // Third review, U-03: these were bound before the second review's fix and
+    // refused after it.
+    let scope = scope_of(
+        "src/c.ts",
+        "export const A = '/api' as const;
+export const B = '/api' satisfies string;
+export const C = ('/api');
+export const D = '/api', E = '/x';
+export const T = `/api/v1`;
+",
+    );
+    for name in ["A", "B", "C", "D"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/x"),
+            "{name} was not bound"
+        );
+    }
+    assert_eq!(
+        evaluate_expression("E", &scope).as_literal().as_deref(),
+        Some("/x")
+    );
+    assert_eq!(
+        evaluate_expression("T + '/x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/v1/x")
+    );
+}
+
+#[test]
+fn python_constants_are_bound_by_the_same_rule() {
+    let scope = scope_of(
+        "svc/c.py",
+        "BASE_A = \"/api\"
+BASE_B = (\"/api\")
+BASE_T = settings.BASE if DEBUG else \"/internal\"
+BASE_O = settings.BASE or \"/internal\"
+",
+    );
+    for name in ["BASE_A", "BASE_B"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/x"),
+            "{name}"
+        );
+    }
+    for name in ["BASE_T", "BASE_O"] {
+        assert_eq!(
+            evaluate_expression(&format!("{name} + '/x'"), &scope).as_literal(),
+            None,
+            "{name} was bound"
+        );
+    }
+}
+
+// ── Fourth review ────────────────────────────────────────────────────────
+
+#[test]
+fn a_let_or_var_is_not_a_constant() {
+    // V-01: a top-level `API = …` runs at module load, before any call.
+    let scope = scope_of(
+        "src/c.ts",
+        "export let A = '/api/a/';
+A = A + 'secret/';
+export var B = '/api/b/';
+export const C = '/api/c/';
+",
+    );
+    assert_eq!(evaluate_expression("A + 'x'", &scope).as_literal(), None);
+    assert_eq!(evaluate_expression("B + 'x'", &scope).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("C + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/c/x")
+    );
+}
+
+#[test]
+fn a_name_declared_twice_at_module_level_is_not_a_constant() {
+    // V-02, V-03: a later assignment, or a block declaration of the same name.
+    // The lookup ignores scope (R-05), so both are refused. A block's own
+    // `const` is not a module constant (fifth review, W-05).
+    let ts = scope_of(
+        "src/c.ts",
+        "const A = '/api/a/';
+if (isProd) { const A = '/api/x/'; }
+{ const B = '/api/b/'; }
+",
+    );
+    assert_eq!(evaluate_expression("A + 'x'", &ts).as_literal(), None);
+    assert_eq!(evaluate_expression("B + 'x'", &ts).as_literal(), None);
+    let py = scope_of(
+        "svc/c.py",
+        "BASE2 = \"/api/a/\"
+BASE2 = BASE2.replace(\"a\", \"x\")
+BASE3 = \"/api/a/\"
+if DEBUG:
+    BASE3 = \"/api/x/\"
+BASE4 = \"/api/a/\"
+",
+    );
+    assert_eq!(evaluate_expression("BASE2 + 'x'", &py).as_literal(), None);
+    assert_eq!(evaluate_expression("BASE3 + 'x'", &py).as_literal(), None);
+    assert_eq!(
+        evaluate_expression("BASE4 + 'x'", &py)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_comment_or_a_non_null_assertion_does_not_hide_the_string() {
+    // V-10.
+    let ts = scope_of(
+        "src/c.ts",
+        "export const K = (/* base */ '/api/k/');\nexport const N = '/api/n/'!;\n",
+    );
+    for name in ["K", "N"] {
+        assert!(
+            evaluate_expression(&format!("{name} + 'x'"), &ts)
+                .as_literal()
+                .is_some(),
+            "{name}"
+        );
+    }
+    let py = scope_of("svc/c.py", "BASE = (  # c\n    \"/api/a/\"\n)\n");
+    assert_eq!(
+        evaluate_expression("BASE + 'x'", &py)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+// ── Fifth review ─────────────────────────────────────────────────────────
+
+fn file_scope(path: &str, src: &str) -> Scope {
+    Scope::from_analysis(&analyze(path, src))
+}
+
+#[test]
+fn a_python_constant_rebound_by_a_def_class_or_import_is_not_a_constant() {
+    // W-06: `try: from cfg import P` / `except ImportError: P = "/api"` is a
+    // common Django fallback; whichever ran is the value.
+    for src in [
+        "try:\n    from svc.cfg import P\nexcept ImportError:\n    P = \"/api/a/\"\n",
+        "P = \"/api/a/\"\nfrom svc.cfg import P\n",
+        "P = \"/api/a/\"\nfrom svc.cfg import *\n",
+        "P = \"/api/a/\"\n\n\ndef P():\n    return 1\n",
+        "P = \"/api/a/\"\n\n\nclass P:\n    pass\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+    // A star import before the assignment is overridden by it.
+    let scope = file_scope("svc/c.py", "from svc.cfg import *\nP = \"/api/a/\"\n");
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_bare_annotation_binds_no_value() {
+    // W-07: `P: str` declares a type, not a second value.
+    for src in [
+        "P: str\nP = \"/api/a/\"\n",
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    P: str\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_type_of_the_same_name_does_not_rebind_a_const() {
+    // TypeScript keeps types and values apart.
+    for src in [
+        "export const A = '/api/a/';\nexport interface A { x: number }\n",
+        "export const A = '/api/a/';\nexport type A = string;\n",
+    ] {
+        let scope = file_scope("src/c.ts", src);
+        assert_eq!(
+            evaluate_expression("A + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_name_the_file_declares_is_not_supplied_by_an_import() {
+    // W-05: an imported `A` and a `const A` in a block or callback. The
+    // import must not be read in place of the local, nor the local in place
+    // of the import.
+    for src in [
+        "import { A } from './cfg';\nif (isProd) { const A = '/api/x/'; }\n",
+        "import { A } from './cfg';\nwrap(() => { const A = '/api/x/'; });\n",
+    ] {
+        let mut scope = file_scope("src/c.ts", src);
+        let imported = evaluate_expression("'/api/a/'", &Scope::new());
+        scope.extend_with_imports([("A".to_owned(), imported)]);
+        assert_eq!(
+            evaluate_expression("A + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+// ── Sixth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_typescript_export_star_binds_nothing_locally() {
+    // X-04: a barrel `index.ts` that declares a base and re-exports modules.
+    for src in [
+        "export const BASE = '/api/a/';\nexport * from './types';\n",
+        "export const BASE = '/api/a/';\nexport * as T from './types';\n",
+    ] {
+        let scope = file_scope("src/api/index.ts", src);
+        assert_eq!(
+            evaluate_expression("BASE + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_python_import_that_cannot_rebind_the_constant_does_not_refuse_it() {
+    // X-05: an import inside a function binds that function's local; an
+    // unconditional import before the assignment is overridden by it.
+    for src in [
+        "P = \"/api/a/\"\n\n\ndef helper():\n    from svc.cfg import P\n    return P\n",
+        "from svc.cfg import P\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // A conditional import before a conditional assignment is the fallback
+    // idiom, and stays refused (W-06).
+    let scope = file_scope(
+        "svc/c.py",
+        "try:\n    from svc.cfg import P\nexcept ImportError:\n    P = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn an_object_literal_method_is_not_a_binding() {
+    // X-06.
+    let scope = file_scope(
+        "src/c.ts",
+        "export const D = '/api/a/';\nexport const handlers = { D() { return 1; } };\n",
+    );
+    assert_eq!(
+        evaluate_expression("D + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+// ── Seventh review ───────────────────────────────────────────────────────
+
+#[test]
+fn a_module_level_read_between_an_import_and_the_assignment_refuses_it() {
+    // Y-05, Y-09: `URL = P + "sub/"` runs while `P` is still the import.
+    for src in [
+        "from svc.cfg import P\nURL = P + \"sub/\"\nP = \"/api/a/\"\n",
+        "from svc.cfg import *\nURL = P + \"sub/\"\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_function_local_import_hides_the_constant_only_in_its_body() {
+    // Y-06: the read inside `uses_import` sees the import; the read in
+    // `uses_constant` sees the module constant.
+    let src = "P = \"/api/a/\"\n\n\ndef uses_import():\n    from svc.cfg import P\n    return P\n\n\ndef uses_constant():\n    return P\n";
+    let scope = file_scope("svc/c.py", src);
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(6)).as_literal(),
+        None
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(10))
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+    // A one-line `def` is a body too.
+    let scope = file_scope(
+        "svc/c.py",
+        "P = \"/api/a/\"\n\n\ndef helper(): from svc.cfg import P\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+// ── Eighth review ────────────────────────────────────────────────────────
+
+#[test]
+fn only_a_read_that_names_the_constant_sees_the_import() {
+    // Z-01: an unrelated module-level assignment between the import and the
+    // assignment reads nothing of the constant.
+    for src in [
+        "from svc.cfg import *\nimport logging\nlogger = logging.getLogger(__name__)\nTIMEOUT = 10\nP = \"/api/a/\"\n",
+        "from svc.cfg import P\nOTHER = \"/x/\"\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // Z-04: a read on the import's own line, after `;`, sees the import.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P; URL = P + \"sub/\"\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_local_import_hides_the_constant_only_in_its_innermost_body() {
+    // Z-02: the import in `a` does not hide the constant from `b`, a sibling
+    // method of the same class.
+    let src = "P = \"/api/a/\"\n\n\nclass C:\n    def a(self):\n        from svc.cfg import P\n        return P\n\n    def b(self):\n        return P\n";
+    let scope = file_scope("svc/c.py", src);
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(7)).as_literal(),
+        None
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope.at_line(10))
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+// ── Ninth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn an_f_string_operand_of_a_plus_chain_keeps_its_substitutions() {
+    // AA-01: `{VERSION}` was dropped, so the value read `/api/orders/`.
+    let scope = file_scope(
+        "svc/c.py",
+        "VERSION = \"v1\"\nORDERS_URL = f\"/api/{VERSION}/\" + \"orders/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("ORDERS_URL", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/v1/orders/")
+    );
+    // A substitution with a format spec or conversion is not the bare name.
+    for src in [
+        "N = \"5\"\nURL = f\"/api/{N:>3}/\" + \"x/\"\n",
+        "N = \"5\"\nURL = f\"/api/{N!r}/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("URL", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn every_kind_of_load_time_read_sees_the_import() {
+    // AA-06: an f-string constant and a module-level request between the
+    // import and the assignment; AA-03: a request in a class body; AA-05: a
+    // read on the assignment's own line.
+    for src in [
+        "from svc.cfg import P\nURL = f\"{P}sub/\"\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\nrequests.get(P)\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\n\n\nclass C:\n    r = requests.get(P)\n\n\nP = \"/api/a/\"\n",
+        "from svc.cfg import *\nURL = P + \"sub/\"; P = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+    // Whole-token matching: `PREFIX` is not `P`.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P\nPX = PREFIX + \"x\"\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn a_conditional_assignment_after_a_star_import_is_not_a_constant() {
+    // AA-04: when the condition is false, the star import's value is used.
+    let scope = file_scope(
+        "svc/c.py",
+        "import os\nfrom svc.star_cfg import *\nif os.environ.get(\"X\"):\n    P = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}
+
+#[test]
+fn a_local_import_hides_the_constant_in_its_whole_body_and_closures() {
+    // AA-06: a read before the import in the same function, and a closure
+    // reading the outer function's import.
+    let src = "P = \"/api/a/\"\n\n\ndef f():\n    x = P\n    from svc.cfg import P\n\n    def g():\n        return P\n    return g\n";
+    let scope = file_scope("svc/c.py", src);
+    for line in [5, 9] {
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope.at_line(line)).as_literal(),
+            None,
+            "line {line}"
+        );
+    }
+}
+
+// ── Tenth review ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_self_documenting_substitution_is_not_the_bare_name() {
+    // AB-01: `f"{V=}"` renders `V='a'`.
+    for src in [
+        "V = \"a\"\nURL = f\"/api/{V=}/\" + \"sub/\"\n",
+        "V = \"a\"\nURL = f\"/api/{V = }/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("URL", &scope).as_literal(),
+            None,
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn a_read_after_the_assignment_on_its_line_sees_the_new_value() {
+    // AB-02: `P = "/api/a/"; URL = P + "sub/"` reads the assignment.
+    let scope = file_scope(
+        "svc/c.py",
+        "from svc.cfg import P\nP = \"/api/a/\"; URL = P + \"sub/\"\n",
+    );
+    assert_eq!(
+        evaluate_expression("P + 'x'", &scope)
+            .as_literal()
+            .as_deref(),
+        Some("/api/a/x")
+    );
+}
+
+#[test]
+fn only_a_class_body_that_runs_at_load_is_a_read() {
+    // AB-04: a method named like a class, and a class inside a function, do
+    // not run while the module loads.
+    for src in [
+        "import requests\nfrom svc.cfg import P\n\n\nclass Fetch:\n    pass\n\n\nclass Client:\n    def Fetch(self):\n        return requests.get(P)\n\n\nP = \"/api/a/\"\n",
+        "import requests\nfrom svc.cfg import P\n\n\ndef make():\n    class K:\n        r = requests.get(P)\n    return K\n\n\nP = \"/api/a/\"\n",
+    ] {
+        let scope = file_scope("svc/c.py", src);
+        assert_eq!(
+            evaluate_expression("P + 'x'", &scope)
+                .as_literal()
+                .as_deref(),
+            Some("/api/a/x"),
+            "{src}"
+        );
+    }
+    // A class nested in a module-level class runs at load.
+    let scope = file_scope(
+        "svc/c.py",
+        "import requests\nfrom svc.cfg import P\n\n\nclass Outer:\n    class Inner:\n        r = requests.get(P)\n\n\nP = \"/api/a/\"\n",
+    );
+    assert_eq!(evaluate_expression("P + 'x'", &scope).as_literal(), None);
+}

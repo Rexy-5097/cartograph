@@ -31,7 +31,11 @@ a `__tablename__` is not a model.
 | `__tablename__ = "orders"` | `Declared` — read exactly |
 | `Meta.db_table = "orders"` | `Declared` — read exactly |
 | SQLAlchemy without `__tablename__` | **Unresolved** |
-| Django without `db_table`, app package's `apps.py` states its label or name | `Derived` — `<app_label>_<modelname>` |
+| Django without `db_table`, the model's own `Meta.app_label` is a string literal | `Derived` — `<app_label>_<modelname>` |
+| Django without `db_table`, `Meta.app_label` assigned something else | **Unresolved** |
+| Django model whose base, at any depth, sets `app_label` or `db_table` in its `Meta`; or a `Meta` in the chain extends a class outside the model's bases, or is bound by assignment; or a base inside the project does not resolve to one class | **Unresolved** — the option may be inherited |
+| `db_table`, `app_label`, or an `apps.py` `label`/`name` assigned twice, or not a whole string literal, or holding an escape | **Unresolved** |
+| Django without `db_table` or `Meta.app_label`, app package's `apps.py` states its label or name | `Derived` — `<app_label>_<modelname>` |
 | Django without `db_table`, no `apps.py`, or one that is contradictory, non-literal or names another app | **Unresolved** |
 | Django model whose `Meta` declares `abstract` or `proxy` | **Unresolved** — no table of its own |
 | `db_table = settings.TABLE` | **Unresolved** — not a string literal |
@@ -46,11 +50,19 @@ directory ([BUG-0009](../../agentos/artifacts/bugs/ART-BUG-0009-django-default-t
 Anything less certain refuses. The parser records that `abstract` or `proxy`
 is assigned but not its value, so either one's presence refuses the default.
 
-A Django model is recognised by a `models.Model` base, by a base that is
-itself a Django model class in the same file (an abstract `TimestampedModel`),
-or by `AbstractUser`/`AbstractBaseUser` imported from
-`django.contrib.auth.models`. A class inheriting a same-named base from
-anywhere else is not a model. SQLAlchemy 2.0 requires
+A model is recognised by a `models.Model` or SQLAlchemy base, by
+`AbstractUser`/`AbstractBaseUser` imported from `django.contrib.auth.models`,
+or by a base that **resolves to a class already known to be a model**: in the
+same file, or in another file through the class's own imports, across any
+number of files (`class Order(TimeStamped)` with
+`from core.models import TimeStamped`). It takes that model's ORM. Resolution
+is by import, never by name: a base that merely shares a model's name, an
+ambiguous import and an import that leaves the project make nothing a model.
+
+`abstract`, `proxy`, `db_table` and `app_label` count only when assigned inside
+the model's own `Meta`. A field with one of those names is a column.
+
+SQLAlchemy 2.0 requires
 `__tablename__` on a concrete model, so its absence means abstract or a naming
 callback this analysis cannot see. Both refuse.
 
@@ -115,8 +127,23 @@ Raw SQL mapping is a possible future milestone.
 - Only SQLAlchemy and Django. SQLModel, Peewee, Tortoise and others are not
   recognised — the FastAPI template in the corpus uses SQLModel, and correctly
   yields zero models.
-- Django's default table naming is never derived (see above).
-- Model inheritance hierarchies are not followed: a subclass of a model class
-  is not itself recognised unless it names a recognised base directly.
+- Django's default table is derived only from a literal `Meta.app_label` or
+  from the `apps.py` of the model's own package (see above). An `apps.py` in a
+  parent package is not used, and `abstract = False` still refuses the table,
+  because the option's value is not recorded.
+- A base from outside the project (a library mixin) cannot be read. It is
+  assumed to set no `app_label` or `db_table`, and the derived table's rule
+  names it.
+- An option is read only when its value *is* a string literal: the parser
+  records the value's span, and the literal must cover it. Parentheses, an
+  annotation (`db_table: str = "t"`) and a chained assignment are looked
+  through; `N*"t"` and `PREFIX + "t"` are not literals.
+- A base declared twice in its module (under `if`/`else`) refuses the table.
+- A model is found through its bases only when each base resolves through
+  imports to a class in this project. A base from a library other than
+  `models.Model`, `AbstractUser` and `AbstractBaseUser` (for example
+  `AbstractBaseSession`) makes nothing a model.
+- Relationships between models (`ForeignKey`, `relationship(...)`) are not
+  read.
 - Shadow detection is file-wide rather than flow-sensitive, so it is
   conservative — it can drop a valid access.

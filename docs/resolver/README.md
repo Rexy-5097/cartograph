@@ -45,7 +45,9 @@ observations. On the client side, in TypeScript and TSX:
 
 - `fetch(...)`;
 - `.get`, `.post` and the other method calls on an object named `axios`,
-  `client`, `http` or `api`;
+  `client`, `http` or `api`, or on any name an import binds to axios's default
+  or namespace export (`import Axios from 'axios'`);
+- axios called as a function, `axios(url, config)`, under any import name;
 - a request configuration object whose `url` or `endpoint` key holds a path —
   the shape a generated OpenAPI client uses. A `path` key is deliberately not
   read, because frontend router tables use it.
@@ -137,8 +139,17 @@ in [`benchmarks/acceptance/m07-acceptance-evaluation.json`](../../benchmarks/acc
 - **Prefix composition follows named routers only.** An
   `include_router(items.router)` attribute, or a prefix applied by a
   project-local helper, does not compose.
-- **Class-based views and DRF routers** are not modelled, nor are deployment-time
-  URL rewrites.
+- **A URL-conf handler is followed to its declaration, not further.**
+  `path("orders/", views.list_orders)` ends at `list_orders` in `views.py`,
+  and `OrderView.as_view()` at the class ([urlconf.md](urlconf.md)). The
+  methods a class-based view dispatches to are not joined to the class, and a
+  wrapper call such as `login_required(views.orders)` names no handler.
+- **DRF routers are not modelled.** `router.register(...)`, view sets,
+  `@action` and `include(router.urls)` produce no route, so a request served
+  only through a router is reported as having no matching route.
+- **Deployment-time URL rewrites are not modelled**, and neither is an axios
+  instance's `baseURL`: a request made on `axios.create({ baseURL })` is read
+  with the path as written.
 - **Bounded traversal.** Call following stops after four hops (`MAX_CALL_HOPS`),
   and re-export following after four (`MAX_REEXPORT_HOPS`).
 - **A client URL with an absolute host never matches**, even when it addresses

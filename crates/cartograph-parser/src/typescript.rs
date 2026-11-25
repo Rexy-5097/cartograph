@@ -209,6 +209,214 @@ enum Step<'t> {
     LeaveConcat,
 }
 
+/// The value inside parentheses and type assertions: `('/api' as const)` is
+/// the string.
+fn unwrap_typescript_value(mut node: Node<'_>) -> Node<'_> {
+    while matches!(
+        node.kind(),
+        "parenthesized_expression"
+            | "as_expression"
+            | "satisfies_expression"
+            | "non_null_expression"
+            | "type_assertion"
+    ) {
+        // Comments are named children too: `(/* base */ '/api')` (V-10).
+        let mut cursor = node.walk();
+        let mut children = node
+            .named_children(&mut cursor)
+            .filter(|child| child.kind() != "comment");
+        let inner = if node.kind() == "type_assertion" {
+            // `<string>'/api'`: the expression follows the type.
+            children.last()
+        } else {
+            children.next()
+        };
+        let Some(inner) = inner else {
+            break;
+        };
+        node = inner;
+    }
+    node
+}
+
+/// Is `name` rebound between the module and this call: a parameter of an
+/// enclosing function, or a declaration in an enclosing block?
+///
+/// The import binding is per file, so without this a parameter called
+/// `axios` in a file that imports axios was read as the library (second
+/// review, S-12).
+fn is_shadowed(name: &str, call: Node<'_>, source: &str) -> bool {
+    let named = |node: Node<'_>| {
+        node.child_by_field_name("name")
+            .is_some_and(|n| n.utf8_text(source.as_bytes()).unwrap_or_default() == name)
+    };
+    let mut node = call;
+    while let Some(parent) = node.parent() {
+        if parent.kind() == "program" {
+            return false;
+        }
+        let binds_here = |field: &str| {
+            parent
+                .child_by_field_name(field)
+                .is_some_and(|n| binds(n, name, source))
+        };
+        let shadowed = binds_here("parameters")
+            || binds_here("parameter")
+            || match parent.kind() {
+                // `function Ax() { Ax(...) }` names itself inside its body.
+                "function_expression" | "function" => named(parent),
+                // `for (const Ax of xs)`, `for (let Ax = …; …)`.
+                "for_in_statement" => binds_here("left"),
+                "for_statement" => binds_here("initializer"),
+                "statement_block" | "class_body" | "switch_case" | "switch_default" => {
+                    declares(parent, name, source)
+                }
+                _ => false,
+            }
+            // `var` anywhere in a function body binds for the whole function.
+            || (is_function_like(parent.kind())
+                && parent
+                    .child_by_field_name("body")
+                    .is_some_and(|body| hoists_var(body, name, source)));
+        if shadowed {
+            return true;
+        }
+        node = parent;
+    }
+    false
+}
+
+fn is_function_like(kind: &str) -> bool {
+    matches!(
+        kind,
+        "arrow_function"
+            | "function_expression"
+            | "function"
+            | "function_declaration"
+            | "generator_function_declaration"
+            | "method_definition"
+    )
+}
+
+/// Whether the pattern or declaration `node` binds `name`.
+///
+/// Only binding positions count: a default value (`c = Ax`), a type
+/// (`typeof Ax`), an initialiser and a member target (`for (o.Ax of xs)`)
+/// *use* the name, and counting them refused real requests (third review,
+/// U-04).
+fn binds(node: Node<'_>, name: &str, source: &str) -> bool {
+    let mut stack = vec![node];
+    while let Some(current) = stack.pop() {
+        let kind = current.kind();
+        if matches!(kind, "identifier" | "shorthand_property_identifier_pattern") {
+            if current.utf8_text(source.as_bytes()).unwrap_or_default() == name {
+                return true;
+            }
+            continue;
+        }
+        if is_function_like(kind)
+            || matches!(
+                kind,
+                "type_annotation"
+                    | "type_arguments"
+                    | "type_parameters"
+                    | "type_query"
+                    | "member_expression"
+                    | "subscript_expression"
+                    | "call_expression"
+            )
+        {
+            continue;
+        }
+        // The fields that hold an expression rather than a pattern. A
+        // `pair_pattern`'s `value` *is* a pattern (`{ a: Ax }`).
+        let expression_fields: &[&str] = match kind {
+            "variable_declarator" | "required_parameter" | "optional_parameter" => {
+                &["value", "type"]
+            }
+            "assignment_pattern" | "object_assignment_pattern" => &["right"],
+            "pair_pattern" => &["key"],
+            _ => &["type", "return_type"],
+        };
+        let skip: Vec<Node<'_>> = expression_fields
+            .iter()
+            .filter_map(|field| current.child_by_field_name(field))
+            .collect();
+        let mut cursor = current.walk();
+        for child in current.named_children(&mut cursor) {
+            if !skip.contains(&child) {
+                stack.push(child);
+            }
+        }
+    }
+    false
+}
+
+/// Whether a `var` anywhere in this function body, outside nested functions,
+/// binds `name`.
+fn hoists_var(body: Node<'_>, name: &str, source: &str) -> bool {
+    let mut stack = vec![body];
+    while let Some(current) = stack.pop() {
+        if current.kind() == "variable_declaration" && binds(current, name, source) {
+            return true;
+        }
+        if is_function_like(current.kind()) && current != body {
+            continue;
+        }
+        let mut cursor = current.walk();
+        stack.extend(current.named_children(&mut cursor));
+    }
+    false
+}
+
+/// Whether a statement directly in `container` declares `name`.
+fn declares(container: Node<'_>, name: &str, source: &str) -> bool {
+    let mut cursor = container.walk();
+    container
+        .named_children(&mut cursor)
+        .any(|statement| match statement.kind() {
+            "lexical_declaration" | "variable_declaration" => binds(statement, name, source),
+            "function_declaration" | "class_declaration" | "generator_function_declaration" => {
+                statement
+                    .child_by_field_name("name")
+                    .is_some_and(|n| n.utf8_text(source.as_bytes()).unwrap_or_default() == name)
+            }
+            _ => false,
+        })
+}
+
+/// Is this declarator written at the top level of the module?
+///
+/// Its declaration's parent is the program itself, or an `export` statement
+/// whose parent is. Anything deeper is inside a function, a callback or a
+/// block.
+fn is_top_level_declarator(declarator: Node<'_>) -> bool {
+    let Some(declaration) = declarator.parent() else {
+        return false;
+    };
+    // `const` only: a `let` or `var` may be reassigned, and the call then
+    // reaches whatever was assigned last (second review, S-11).
+    let mut cursor = declaration.walk();
+    let is_const = declaration.kind() == "lexical_declaration"
+        && declaration
+            .children(&mut cursor)
+            .next()
+            .is_some_and(|keyword| keyword.kind() == "const");
+    if !is_const {
+        return false;
+    }
+    let Some(mut holder) = declaration.parent() else {
+        return false;
+    };
+    if holder.kind() == "export_statement" {
+        let Some(outer) = holder.parent() else {
+            return false;
+        };
+        holder = outer;
+    }
+    holder.kind() == "program"
+}
+
 /// Is this argument a handler rather than a request option?
 ///
 /// A handler is a function written in place, a reference to one, or a call
@@ -309,6 +517,25 @@ impl Walker<'_> {
             "lexical_declaration" | "variable_declaration" => {
                 self.extract_variables(node, export);
                 // Still descend: initialisers contain calls and strings.
+            }
+            // `const f = () => …` is how most TypeScript functions are written.
+            // The binding is the function's name, so it encloses what the body
+            // does, exactly as a `function f() {}` would (T-004).
+            //
+            // Only a declaration written at the top level of the module
+            // qualifies, and that is checked on the syntax tree, not on the
+            // scope stack: inside `memo(() => { const submit = () => … })`
+            // the stack is empty too, and naming `submit` there would make a
+            // file-level function out of a local one (review R-07). A class
+            // field is left alone as well: it would share a node with any
+            // module function of the same name (R-08).
+            "variable_declarator" if self.scope.is_empty() && is_top_level_declarator(node) => {
+                if let Some(name) = self.function_binding(node, "name") {
+                    self.scope.push(name);
+                    next.push(Step::Children(node));
+                    next.push(Step::LeaveScope);
+                    return;
+                }
             }
             "call_expression" => self.extract_call(node, false),
             "new_expression" => self.extract_call(node, true),
@@ -493,6 +720,12 @@ impl Walker<'_> {
                             ExportContext::Default,
                             value,
                         );
+                        // The symbol is named `default`, so its body is
+                        // enclosed by `default` (T-004).
+                        self.scope.push("default".to_owned());
+                        next.push(Step::Visit(value, ExportContext::None));
+                        next.push(Step::LeaveScope);
+                        return;
                     }
                     "class" => {
                         self.push_symbol(
@@ -592,6 +825,44 @@ impl Walker<'_> {
         next.push(Step::LeaveScope);
     }
 
+    /// The name a declarator or class field gives a function, when its value
+    /// is one.
+    ///
+    /// `field` is the grammar's name for the bound identifier: `name` on a
+    /// variable declarator and a TypeScript class field, `property` on a
+    /// JavaScript one. Parentheses and type assertions around the function are
+    /// looked through, because `(() => …) as Handler` is still that function.
+    /// A function passed to a wrapper call (`debounce(() => …)`) is **not** a
+    /// binding of this name: what the wrapper returns is not known here.
+    fn function_binding(&self, node: Node<'_>, field: &str) -> Option<String> {
+        let name = node.child_by_field_name(field)?;
+        if !matches!(
+            name.kind(),
+            "identifier" | "property_identifier" | "private_property_identifier"
+        ) {
+            return None;
+        }
+        let mut value = node.child_by_field_name("value")?;
+        loop {
+            match value.kind() {
+                "arrow_function" | "function_expression" | "function" | "generator_function" => {
+                    let name = self.text(name);
+                    return (!name.is_empty()).then_some(name);
+                }
+                "parenthesized_expression"
+                | "as_expression"
+                | "satisfies_expression"
+                | "non_null_expression"
+                | "type_assertion" => {
+                    let mut cursor = value.walk();
+                    let inner = value.named_children(&mut cursor).next()?;
+                    value = inner;
+                }
+                _ => return None,
+            }
+        }
+    }
+
     fn extract_named_only(&mut self, node: Node<'_>, kind: SymbolKind, export: ExportContext) {
         if let Some(name) = node.child_by_field_name("name") {
             let name = self.text(name);
@@ -613,6 +884,17 @@ impl Walker<'_> {
                 if name.kind() == "identifier" {
                     let name = self.text(name);
                     self.push_symbol(SymbolKind::Variable, &name, false, export, declarator);
+                    // A `let` or `var` may be reassigned at module load (fourth
+                    // review, V-01), and a `const` inside a block or a callback
+                    // is not the module's (fifth review, W-05): only a
+                    // top-level `const` has a value of its own.
+                    if let (Some(symbol), Some(value), true) = (
+                        self.analysis.symbols.last_mut(),
+                        declarator.child_by_field_name("value"),
+                        is_top_level_declarator(declarator),
+                    ) {
+                        symbol.value_span = Some(span_of(unwrap_typescript_value(value)));
+                    }
                 }
                 // Destructuring patterns are skipped in M01 (documented).
             }
@@ -640,6 +922,7 @@ impl Walker<'_> {
             // shared and TS fills it when a milestone needs it.
             bases: Vec::new(),
             span: span_of(node),
+            value_span: None,
         });
     }
 
@@ -760,19 +1043,32 @@ impl Walker<'_> {
         }
 
         let (is_http, method_hint) = match callee {
-            Callee::Identifier { name } if name == "fetch" => (
-                true,
-                arg_nodes
-                    .get(1)
-                    .and_then(|n| self.literal_method_property(*n)),
-            ),
+            // `fetch(url, init)`, and axios called as a function:
+            // `axios(url, config)` is one of its documented signatures, under
+            // whatever name it was imported (T-006). The method is the
+            // literal `method` of the second argument, or not stated.
+            // By binding only: a local function or parameter that happens to
+            // be called `axios` is not the library (review R-11).
+            Callee::Identifier { name }
+                if name == "fetch"
+                    || (self.bound_to_http_client(name)
+                        && !is_shadowed(name, call_node, self.source)) =>
+            {
+                (
+                    true,
+                    arg_nodes
+                        .get(1)
+                        .and_then(|n| self.literal_method_property(*n)),
+                )
+            }
             Callee::Member { object, property } => {
                 let Some(verb) = HttpMethodHint::from_name(property) else {
                     return;
                 };
                 let known_client = object.len() == 1
                     && (HTTP_CLIENT_OBJECTS.contains(&object[0].as_str())
-                        || self.bound_to_http_client(&object[0]));
+                        || (self.bound_to_http_client(&object[0])
+                            && !is_shadowed(&object[0], call_node, self.source)));
                 // Express and Hono register a route by passing handlers,
                 // and the syntax is identical to a client call:
                 //

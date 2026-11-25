@@ -428,3 +428,174 @@ def sync():
     assert_eq!(edges, 1);
     let _ = SourceLanguage::Python;
 }
+
+// ── T-003: a `+` chain written at the request site ──────────────────
+
+#[test]
+fn an_inline_concatenation_resolves_like_the_template_it_equals() {
+    // `fetch(BASE + "/orders")` was refused while `${BASE}/orders` matched.
+    let project = Project::new(&[
+        ("web/src/config.ts", r#"export const API_BASE = "/api/v1";"#),
+        (
+            "web/src/orders.ts",
+            r#"import { API_BASE } from "./config";
+await axios.post(API_BASE + "/orders", {});
+await axios.post(`${API_BASE}/orders`, {});"#,
+        ),
+        ("api/orders.py", ORDERS_API),
+    ]);
+
+    let (decisions, edges, graph) = project.run();
+    assert_eq!(decisions.len(), 2);
+    assert_eq!(decisions[0].2, "/api/v1/orders", "concatenation resolved");
+    assert_eq!(
+        (&decisions[0].0, &decisions[0].2),
+        (&decisions[1].0, &decisions[1].2),
+        "the concatenation and the template are the same URL and the same decision"
+    );
+    assert_eq!(decisions[0].0, MatchStatus::Exact);
+    assert_eq!(edges, 2);
+    assert!(
+        graph
+            .edges()
+            .all(|e| graph.node(e.target()).unwrap().name() == "create_order")
+    );
+}
+
+#[test]
+fn a_concatenation_of_a_local_constant_and_several_parts_resolves() {
+    let project = Project::new(&[
+        (
+            "web/src/orders.ts",
+            r#"const ROOT = "/api";
+const VERSION = "v1";
+export const create = () => axios.post(ROOT + "/" + VERSION + '/orders', {});"#,
+        ),
+        ("api/orders.py", ORDERS_API),
+    ]);
+
+    let (decisions, edges, _) = project.run();
+    assert_eq!(decisions[0].2, "/api/v1/orders");
+    assert_eq!(decisions[0].0, MatchStatus::Exact);
+    assert_eq!(edges, 1);
+}
+
+#[test]
+fn a_concatenation_with_an_unknown_suffix_still_matches_a_parameter() {
+    // The same outcome the template form has always had.
+    let project = Project::new(&[
+        ("web/src/config.ts", r#"export const API_BASE = "/api/v1";"#),
+        (
+            "web/src/orders.ts",
+            r#"import { API_BASE } from "./config";
+export function load(orderId) { return axios.get(API_BASE + "/orders/" + orderId); }
+export function loadTpl(orderId) { return axios.get(`${API_BASE}/orders/${orderId}`); }"#,
+        ),
+        ("api/orders.py", ORDERS_API),
+    ]);
+
+    let (decisions, edges, _) = project.run();
+    assert_eq!(decisions[0].2, "/api/v1/orders/{unknown}");
+    assert_eq!(
+        (&decisions[0].0, &decisions[0].2),
+        (&decisions[1].0, &decisions[1].2)
+    );
+    assert_eq!(edges, 2);
+}
+
+#[test]
+fn a_concatenation_whose_prefix_is_not_a_known_constant_is_refused() {
+    // Object properties, destructured names, function-local values, calls
+    // and environment values are not resolved, concatenated or not. Each must
+    // produce no edge.
+    for (label, client) in [
+        (
+            "object property",
+            r#"import config from "./config";
+await axios.post(config.apiBase + "/orders", {});"#,
+        ),
+        (
+            "destructured name",
+            r#"import config from "./config";
+const { apiBase } = config;
+await axios.post(apiBase + "/orders", {});"#,
+        ),
+        (
+            "function-local constant",
+            r#"export function create() {
+  const base = "/api/v1";
+  return axios.post(base + "/orders", {});
+}"#,
+        ),
+        ("call", r#"await axios.post(buildBase() + "/orders", {});"#),
+        (
+            "environment value",
+            r#"await axios.post(process.env.API_URL + "/orders", {});"#,
+        ),
+        (
+            "parenthesised arithmetic",
+            r#"await axios.post("/api/v" + (1 + 0) + "/orders", {});"#,
+        ),
+    ] {
+        let project = Project::new(&[
+            (
+                "web/src/config.ts",
+                r#"export default { apiBase: "/api/v1" };"#,
+            ),
+            ("web/src/orders.ts", client),
+            ("api/orders.py", ORDERS_API),
+        ]);
+        let (decisions, edges, _) = project.run();
+        assert_eq!(edges, 0, "{label}: NO EDGE IS PRODUCED, got {decisions:?}");
+        assert!(
+            !decisions.iter().any(|d| d.2 == "/api/v1/orders"),
+            "{label}: the URL must not be invented: {decisions:?}"
+        );
+    }
+}
+
+#[test]
+fn python_concatenation_resolves_too() {
+    let project = Project::new(&[
+        (
+            "worker/tasks.py",
+            r#"
+import requests
+
+BASE = "/api/v1"
+
+def sync():
+    requests.post(BASE + "/orders")
+"#,
+        ),
+        ("api/orders.py", ORDERS_API),
+    ]);
+
+    let (decisions, edges, _) = project.run();
+    assert_eq!(decisions[0].2, "/api/v1/orders");
+    assert_eq!(decisions[0].0, MatchStatus::Exact);
+    assert_eq!(edges, 1);
+}
+
+#[test]
+fn a_function_local_import_hides_the_constant_from_requests_in_its_body() {
+    // Seventh review, Y-06, through `resolve_url` (eighth review, Z-07).
+    let project = Project::new(&[
+        (
+            "svc/client.py",
+            "import requests\n\nBASE = \"/api/orders/\"\n\n\ndef uses_import():\n    from svc.cfg import BASE\n    return requests.get(BASE)\n\n\ndef uses_constant():\n    return requests.get(BASE)\n",
+        ),
+        (
+            "api/views.py",
+            "from fastapi import APIRouter\n\nrouter = APIRouter()\n\n\n@router.get(\"/api/orders/\")\ndef orders():\n    return []\n",
+        ),
+    ]);
+    let (decisions, _, _) = project.run();
+    let derived: Vec<&str> = decisions.iter().map(|d| d.2.as_str()).collect();
+    assert_eq!(decisions.len(), 2, "{decisions:?}");
+    assert_ne!(
+        derived[0], "/api/orders/",
+        "the local import was read as the constant"
+    );
+    assert_eq!(derived[1], "/api/orders/");
+}

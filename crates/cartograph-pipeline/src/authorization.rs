@@ -66,9 +66,12 @@
 //! supplied and this crate never interprets it, so choosing a derivation later
 //! changes the granter and not this boundary.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use crate::error::CliError;
+use crate::incremental::{CacheStats, IncrementalState};
 use crate::pipeline::{self, Analysis, Options};
 
 /// A repository identity, as supplied by the session grant.
@@ -348,6 +351,121 @@ impl AuthorizedTree {
 /// Whatever the pipeline could not do; see [`crate::pipeline::run`].
 pub fn analyze(tree: &AuthorizedTree, options: Options) -> Result<Analysis, CliError> {
     pipeline::run(&tree.path, options)
+}
+
+/// What a session remembers between analyses of the trees it was granted
+/// (T-008).
+///
+/// A session-scoped client answers many questions about one repository.
+/// [`analyze`] starts from nothing every time, so each question paid for a
+/// full analysis. This holds one [`IncrementalState`] per authorized tree for
+/// as long as the session lives, and [`SessionCache::analyze`] runs the same
+/// pipeline through it.
+///
+/// # It cannot answer from a stale tree
+///
+/// Nothing here decides whether a file changed. Every analysis still lists the
+/// tree and reads every file. Two things are reused, each under its own
+/// check: a file's parsed facts, only when its bytes hash to what they hashed
+/// to before; and a file's model accesses, only when that file, every file
+/// its resolution read, the set of models, the set of paths and the set of
+/// import aliases are all unchanged. A file that is gone is dropped. Routes,
+/// matches, models, tables and edges are rebuilt on every call. That is
+/// [`pipeline::run_with_cache`]'s contract — *an incremental result equals a
+/// clean one* — and this type adds no second notion of freshness on top of it.
+///
+/// # What it holds, and for whom
+///
+/// - **Only authorized trees.** The key is an [`AuthorizedTree`]'s path, so a
+///   tree that was refused never gets an entry, and the number of entries is
+///   bounded by the grant.
+/// - **In memory only**, and gone with the session. Nothing is written to
+///   disk.
+/// - **One analysis per tree at a time.** Two requests for the same tree run
+///   one after the other, the second on the first's warm cache. Requests for
+///   different trees do not wait for each other.
+/// - **Nothing from a failure.** If an analysis fails or panics, that tree's
+///   state is discarded and its next analysis starts cold.
+#[derive(Debug, Default)]
+pub struct SessionCache {
+    trees: Mutex<HashMap<PathBuf, Arc<Mutex<IncrementalState>>>>,
+}
+
+impl SessionCache {
+    /// A cache that remembers nothing yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// [`analyze`], reusing what earlier analyses of the same tree parsed.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the pipeline could not do; see [`crate::pipeline::run`].
+    pub fn analyze(&self, tree: &AuthorizedTree, options: Options) -> Result<Analysis, CliError> {
+        let slot = {
+            let mut trees = self
+                .trees
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Arc::clone(trees.entry(tree.path.clone()).or_default())
+        };
+        // A poisoned lock means an analysis panicked part-way through this
+        // state. Whatever it holds is not trusted: start cold.
+        let mut state = slot.lock().unwrap_or_else(|poisoned| {
+            let mut state = poisoned.into_inner();
+            *state = IncrementalState::new();
+            // The reset state is sound again, so the tree need not start
+            // cold forever (review R-18).
+            slot.clear_poison();
+            state
+        });
+        let result = pipeline::run_with_cache(&tree.path, options, &mut state);
+        if result.is_err() {
+            *state = IncrementalState::new();
+        }
+        result
+    }
+
+    /// Analyses both trees of a two-tree query through the cache.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the pipeline could not do, for whichever tree failed first.
+    pub fn analyze_pair(
+        &self,
+        pair: &(AuthorizedTree, AuthorizedTree),
+        options: Options,
+    ) -> Result<(Analysis, Analysis), CliError> {
+        let before = self.analyze(&pair.0, options)?;
+        let after = self.analyze(&pair.1, options)?;
+        Ok((before, after))
+    }
+
+    /// What the most recent analysis of `tree` reused and parsed, if it has
+    /// been analysed through this cache. For diagnostics and tests.
+    #[must_use]
+    pub fn last_run(&self, tree: &AuthorizedTree) -> Option<CacheStats> {
+        let slot = {
+            let trees = self
+                .trees
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            Arc::clone(trees.get(&tree.path)?)
+        };
+        let state = slot.lock().ok()?;
+        Some(state.facts.stats())
+    }
+
+    /// How many trees have been analysed through this cache.
+    #[must_use]
+    pub fn tree_count(&self) -> usize {
+        self.trees
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
 }
 
 /// Analyses both trees of a two-tree query.
