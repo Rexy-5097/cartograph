@@ -1,0 +1,218 @@
+/*
+ * The explorer's report page and plain-language pieces (M18 experiment).
+ *
+ * The report is set like the site's documentation pages — black ink on
+ * manilla paper, Geist headings, Geist Mono captions, hairline rules,
+ * numbered sections — rather than a grid of dashboard cards. Loaded after
+ * browser.css, whose tokens it uses.
+ */
+
+.bx-report {
+  --paper: var(--cg-manilla);
+  --ink: var(--cg-black);
+  --ink-2: rgba(34, 34, 34, 0.76);
+  --ink-3: rgba(34, 34, 34, 0.62);
+  --rule: rgba(34, 34, 34, 0.16);
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100%;
+  padding: clamp(32px, 5vw, 72px) clamp(20px, 6vw, 88px) 96px;
+  box-sizing: border-box;
+}
+.bx-report ::selection { background: var(--cg-pink); color: var(--cg-black); }
+.bx-report code { font-family: var(--cg-font-mono); font-size: 0.92em; color: var(--cg-pink-deep); overflow-wrap: anywhere; }
+
+.bx-eyebrow, .bx-eyebrow-dark {
+  font: 500 11px var(--cg-font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 14px;
+}
+.bx-eyebrow { color: var(--cg-pink-deep); }
+.bx-eyebrow-dark { color: var(--accent); margin-bottom: 8px; }
+
+.bx-report-hero { max-width: 980px; padding-bottom: clamp(36px, 5vw, 64px); border-bottom: 1px solid var(--rule); }
+.bx-report-hero h1 {
+  font: 500 clamp(2.4rem, 1.4rem + 3.6vw, 4.6rem)/0.98 var(--cg-font);
+  letter-spacing: -0.035em; margin: 0 0 26px; text-transform: none;
+}
+.bx-report-repo { color: var(--cg-pink-deep); }
+.bx-report-lede { font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.3rem); line-height: 1.55; color: var(--ink-2); max-width: 760px; margin: 0 0 30px; }
+.bx-report-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.bx-report .bx-button { color: var(--ink); border-color: rgba(34, 34, 34, 0.38); padding: 11px 16px; }
+.bx-report .bx-button:hover:not(:disabled) { color: var(--cg-pink-deep); border-color: var(--cg-pink-deep); }
+.bx-report .bx-primary { background: var(--ink); color: var(--cg-light-pink); border-color: var(--ink); }
+.bx-report .bx-primary:hover:not(:disabled) { background: var(--cg-grey); color: var(--cg-light-pink); border-color: var(--cg-grey); }
+.bx-report .bx-button:focus-visible { outline-color: var(--cg-pink-deep); }
+
+.bx-report-section {
+  padding: clamp(36px, 5vw, 60px) 0; border-bottom: 1px solid var(--rule); max-width: 1180px;
+}
+.bx-report-section > h2 {
+  display: flex; align-items: baseline; gap: 18px;
+  font: 500 clamp(1.4rem, 1.1rem + 1vw, 2rem)/1.1 var(--cg-font); letter-spacing: -0.015em;
+  text-transform: uppercase; margin: 0 0 28px; color: var(--ink);
+}
+.bx-section-no { font: 500 12px var(--cg-font-mono); letter-spacing: 0.06em; color: var(--cg-pink-deep); }
+.bx-report-note { color: var(--ink-3); font-size: 13.5px; line-height: 1.6; max-width: 760px; margin: 16px 0 0; }
+.bx-report-note-first { margin: -12px 0 20px; }
+
+/* The system diagram: four parts in reading order, joined by proven links. */
+.bx-diagram { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.bx-diagram-step { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; }
+.bx-diagram-step:last-child { grid-template-columns: minmax(0, 1fr); }
+.bx-part {
+  display: grid; align-content: start; gap: 4px; padding: 20px 18px 18px;
+  background: var(--ink); color: var(--cg-light-pink); border-radius: 14px; min-height: 190px;
+}
+.bx-part-empty { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px rgba(34, 34, 34, 0.3); }
+.bx-part-name { font: 500 11px var(--cg-font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--cg-pink); }
+.bx-part-empty .bx-part-name { color: var(--ink-3); }
+.bx-part-count { font: 500 clamp(2rem, 1.4rem + 1.8vw, 3rem)/1 var(--cg-font); letter-spacing: -0.03em; margin-top: 18px; font-variant-numeric: tabular-nums; }
+.bx-part-unit { font-size: 13px; opacity: 0.78; }
+.bx-part-hint { font-size: 12.5px; line-height: 1.45; opacity: 0.66; margin-top: 14px; }
+.bx-part-within { font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.72; margin-top: 8px; }
+.bx-connector { display: grid; place-items: center; width: clamp(64px, 6.5vw, 104px); position: relative; }
+.bx-connector-line { position: absolute; left: 6px; right: 8px; top: 50%; border-top: 2px solid var(--ink); }
+.bx-connector-line::after {
+  content: ""; position: absolute; right: -1px; top: -6px; width: 9px; height: 9px;
+  border-top: 2px solid var(--ink); border-right: 2px solid var(--ink); transform: rotate(45deg);
+}
+.bx-connector-label {
+  position: relative; padding: 2px 4px; margin-top: -42px; line-height: 1.3;
+  font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.04em; text-transform: uppercase; text-align: center; color: var(--ink);
+}
+.bx-connector-none .bx-connector-line { border-top-style: dashed; border-top-color: rgba(34, 34, 34, 0.42); }
+.bx-connector-none .bx-connector-line::after { display: none; }
+/* Links that run backwards (from the later part to the earlier) point back. */
+.bx-connector-back .bx-connector-line::after,
+.bx-connector-both .bx-connector-line::before {
+  content: ""; position: absolute; left: -1px; right: auto; top: -6px; width: 9px; height: 9px;
+  border: 0; border-bottom: 2px solid var(--ink); border-left: 2px solid var(--ink); transform: rotate(45deg);
+}
+.bx-connector-none .bx-connector-label { color: var(--cg-pink-deep); }
+
+/* Findings: numbered statements, not cards. */
+.bx-findings { list-style: none; counter-reset: finding; margin: 0; padding: 0; max-width: 900px; }
+.bx-findings li {
+  counter-increment: finding; display: grid; grid-template-columns: 44px minmax(0, 1fr);
+  padding: 18px 0; border-top: 1px solid var(--rule); font-size: 16px; line-height: 1.6; color: var(--ink-2);
+}
+.bx-findings li::before { content: counter(finding, decimal-leading-zero); font: 500 12px/2 var(--cg-font-mono); color: var(--cg-pink-deep); }
+.bx-findings li:first-child { border-top: 0; padding-top: 0; }
+.bx-findings strong { color: var(--ink); font-weight: 600; }
+.bx-findings p { margin: 0; }
+
+/* Questions: a question, its answer, one action. */
+.bx-questions { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.bx-questions li { padding: 4px 28px 8px 0; margin-bottom: 20px; display: grid; align-content: start; gap: 10px; }
+.bx-questions li + li { padding-left: 28px; border-left: 1px solid var(--rule); }
+.bx-question { font: 500 19px/1.3 var(--cg-font); letter-spacing: -0.01em; margin: 0; color: var(--ink); }
+.bx-answer { margin: 0 0 6px; color: var(--ink-2); line-height: 1.55; }
+.bx-questions .bx-button { justify-self: start; }
+
+/* Most depended-on code. */
+.bx-hubs { list-style: none; margin: 0; padding: 0; max-width: 900px; }
+.bx-hub {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1fr) 56px; gap: 18px; align-items: center;
+  width: 100%; padding: 14px 0; border: 0; border-top: 1px solid var(--rule); background: none; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.bx-hubs li:first-child .bx-hub { border-top: 0; }
+.bx-hub:hover .bx-hub-name code, .bx-hub:focus-visible .bx-hub-name code { text-decoration: underline; text-underline-offset: 3px; }
+.bx-hub:focus-visible { outline: 2px solid var(--cg-pink-deep); outline-offset: 2px; }
+.bx-hub-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.bx-hub-kind { font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.bx-hub-bar { height: 6px; background: rgba(34, 34, 34, 0.08); border-radius: 3px; overflow: hidden; }
+.bx-hub-bar i { display: block; height: 100%; background: var(--cg-pink-deep); border-radius: 3px; }
+.bx-hub-count { font: 500 15px var(--cg-font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* How to trust this: three short paragraphs side by side. */
+.bx-method { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px; max-width: 1100px; }
+.bx-method p { margin: 0; color: var(--ink-2); line-height: 1.6; }
+.bx-method strong { display: block; color: var(--ink); font-weight: 600; margin-bottom: 6px; }
+
+/* Technical details: the full counts, folded away, still on paper. */
+.bx-report-tech { margin-top: 36px; max-width: 1180px; }
+.bx-report-tech > summary {
+  cursor: pointer; font: 500 11px var(--cg-font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+  padding: 10px 0;
+}
+.bx-report-tech > summary:hover { color: var(--cg-pink-deep); }
+.bx-report-tech .bx-overview { padding: 12px 0 0; max-width: none; color: var(--ink); }
+.bx-report-tech .bx-lede, .bx-report-tech .bx-prose, .bx-report-tech .bx-figure-label, .bx-report-tech .bx-muted { color: var(--ink-2); }
+.bx-report-tech .bx-overview h2 { color: var(--cg-pink-deep); }
+.bx-report-tech .bx-figures, .bx-report-tech .bx-figure, .bx-report-tech .bx-bars li { border-color: var(--rule); }
+.bx-report-tech .bx-callout { background: rgba(205, 141, 189, 0.18); border-left-color: var(--cg-pink-deep); }
+.bx-report-tech .bx-callout strong { color: var(--cg-pink-deep); }
+.bx-report-tech .bx-bars li > :last-child { color: var(--ink-2); }
+
+/* ── Navigation groups ─────────────────────────────────────────────────── */
+.bx-nav-group {
+  display: block; padding: 16px 10px 6px; font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--faint);
+}
+.bx-nav li:first-child .bx-nav-group { padding-top: 2px; }
+
+/* ── Inspector, in plain words ─────────────────────────────────────────── */
+.bx-plain { border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+.bx-plain-sentence { font-size: 15.5px; line-height: 1.55; margin: 0 0 8px; overflow-wrap: anywhere; }
+.bx-proof-heading { font: 500 11px var(--cg-font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 4px 0 -4px; }
+.bx-neighbour-name { color: var(--text); }
+
+/* ── A followed request, step by step ──────────────────────────────────── */
+.bx-route { display: grid; gap: 2px; padding: 12px 0; border-top: 1px solid var(--border); }
+.bx-paths .bx-route:first-child { border-top: 0; padding-top: 4px; }
+.bx-step { display: grid; gap: 2px; padding-left: 14px; border-left: 1px solid var(--border-strong); margin-left: 6px; }
+.bx-step-verb {
+  justify-self: start; background: none; border: 0; padding: 4px 0 0; cursor: pointer; color: var(--accent);
+  font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.bx-step-verb::after { content: " \2193"; }
+.bx-step-verb:hover { text-decoration: underline; text-underline-offset: 3px; }
+.bx-step-verb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bx-step-node { font-size: 13px; overflow-wrap: anywhere; }
+.bx-step-node code { color: var(--text); font-size: 12.5px; }
+.bx-route .bx-stop { padding-left: 21px; }
+.bx-paths:has(.bx-route) { list-style: none; padding-left: 0; }
+
+/* The report reads full width: the details panel has nothing to show there. */
+.bx-app-report { grid-template-columns: 220px minmax(0, 1fr); grid-template-areas: "top top" "nav main"; }
+.bx-app-report .bx-inspector { display: none; }
+@media (max-width: 1100px) { .bx-app-report { grid-template-columns: 190px minmax(0, 1fr); } }
+@media (max-width: 820px) {
+  .bx-app-report { grid-template-columns: 1fr; grid-template-areas: "top" "nav" "main"; grid-template-rows: auto auto minmax(60vh, 1fr); }
+}
+
+/* The diagram follows its own width, not the window's. */
+.bx-report-section { container-type: inline-size; }
+@container (max-width: 900px) {
+  .bx-diagram { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 20px; }
+  .bx-diagram-step:nth-child(2) .bx-connector { display: none; }
+  .bx-diagram-step:nth-child(2) { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 520px) {
+  .bx-diagram { grid-template-columns: minmax(0, 1fr); }
+  .bx-diagram-step { grid-template-columns: minmax(0, 1fr); }
+  .bx-diagram-step .bx-connector,
+  .bx-diagram-step:nth-child(2) .bx-connector { display: grid; width: auto; height: 58px; }
+  .bx-connector-line { left: 50%; right: auto; top: 6px; bottom: 6px; border-top: 0; border-left: 2px solid var(--ink); }
+  .bx-connector-line::after { right: auto; left: -6px; top: auto; bottom: -1px; transform: rotate(135deg); }
+  .bx-connector-back .bx-connector-line::after,
+  .bx-connector-both .bx-connector-line::before {
+    left: -6px; top: -1px; bottom: auto; border: 0;
+    border-top: 2px solid var(--ink); border-left: 2px solid var(--ink); transform: rotate(45deg);
+  }
+  .bx-connector-none .bx-connector-line { border-left-style: dashed; border-left-color: rgba(34, 34, 34, 0.42); }
+  .bx-connector-label { margin: 0 0 0 calc(50% + 14px); justify-self: start; text-align: left; }
+}
+@media (max-width: 820px) {
+  .bx-questions li + li { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); padding-top: 18px; }
+  .bx-hub { grid-template-columns: minmax(0, 1fr) 48px; }
+  .bx-hub-kind, .bx-hub-bar { display: none; }
+}
+
+/* Gaps: the candidate endpoints are detail, folded under a plain count. */
+.bx-candidates-toggle { flex-basis: 100%; margin: 0 0 4px 18px; }
+.bx-candidates-toggle > summary {
+  cursor: pointer; color: var(--muted); font: 500 10.5px var(--cg-font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.bx-candidates-toggle > summary:hover { color: var(--accent); }
+.bx-candidates-toggle .bx-candidates { padding: 6px 0 0 14px; }

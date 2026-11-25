@@ -51,6 +51,8 @@ desktop/src-tauri/target/
 # tauri-build regenerates the permission schemas on every build.
 desktop/src-tauri/gen/
 dist/
+# M18 browser experiment: the browser build of desktop/ (vite.browser.config.ts).
+dist-browser/
 *.tsbuildinfo
 
 # ─── macOS ─────────────────────────────────────────────────────────────────
