@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use cartograph_graph::layout::{self, LayoutParams};
 
 use crate::evidence::{AnalysisId, AnalysisSession};
+use crate::report::{self, AnalysisReport};
 use crate::scene::{self, Scene};
 use cartograph_pipeline::pipeline::{self, Options};
 
@@ -114,7 +115,25 @@ pub fn analyze_as(
     repository: &ValidatedRepository,
     id: AnalysisId,
 ) -> Result<(AnalysisPayload, AnalysisSession), DesktopError> {
+    analyze_report_as(repository, id).map(|(payload, _, session)| (payload, session))
+}
+
+/// As [`analyze_as`], also returning the pipeline's counts, match decisions
+/// and diagnostics (**experimental**, M18 browser explorer; proposed
+/// ADR-0024).
+///
+/// One code path: [`analyze_as`] is this function with the report dropped,
+/// so the desktop's payload cannot drift from the browser's.
+///
+/// # Errors
+///
+/// As [`analyze`].
+pub fn analyze_report_as(
+    repository: &ValidatedRepository,
+    id: AnalysisId,
+) -> Result<(AnalysisPayload, AnalysisReport, AnalysisSession), DesktopError> {
     let analysis = pipeline::run(repository.path(), Options { quiet: true })?;
+    let report = report::compose(id, &analysis);
 
     let layout = layout::layout(&analysis.graph, &LayoutParams::default());
     let scene = scene::compose(&analysis.graph, &layout);
@@ -131,5 +150,5 @@ pub fn analyze_as(
         },
         scene,
     };
-    Ok((payload, AnalysisSession::new(id, analysis.graph)))
+    Ok((payload, report, AnalysisSession::new(id, analysis.graph)))
 }

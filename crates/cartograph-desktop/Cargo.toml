@@ -15,6 +15,10 @@ cartograph-pipeline.workspace = true
 # `layout` — the drawing contract the window consumes (ADR-0015).
 cartograph-core.workspace = true
 cartograph-graph.workspace = true
+# M18 experiment (proposed ADR-0024): the browser report shapes the pipeline's
+# match decisions, whose types live here. A workspace crate the pipeline already
+# depends on, so nothing is added to the lockfile.
+cartograph-resolver.workspace = true
 serde.workspace = true
 # M16 Slice 4: the per-repository opt-in table is a small JSON document.
 # Promoted from dev-dependencies, so no package is added to the lockfile. The

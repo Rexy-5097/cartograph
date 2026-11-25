@@ -52,9 +52,12 @@ pub mod error;
 pub mod evidence;
 pub mod keychain;
 pub mod optin;
+pub mod report;
 pub mod repository;
 pub mod scene;
 pub mod session;
+pub mod source;
+pub mod trace;
 
 use serde::{Deserialize, Serialize};
 
