@@ -56,7 +56,46 @@ interface Props {
    * that would rebuild ten thousand nodes.
    */
   blast?: BlastResult | null;
+  /**
+   * Optional view controls (the M18 browser experiment). The desktop passes
+   * none, and nothing below runs without them, so its rendering is unchanged.
+   *
+   * Applied as Sigma reducers over the graph already loaded: hiding, fading
+   * and recolouring never rebuild it, and never add or remove a node or edge.
+   */
+  view?: GraphViewOptions;
+  /** Hands out the renderer, for camera controls. */
+  onSigma?: (sigma: Sigma | null) => void;
 }
+
+/** What a view may do to the drawing without changing the graph. */
+export interface GraphViewOptions {
+  /** Node kinds not drawn. */
+  hiddenNodeKinds?: ReadonlySet<string>;
+  /** Edge kinds not drawn. */
+  hiddenEdgeKinds?: ReadonlySet<string>;
+  /** Clusters not drawn. */
+  hiddenClusters?: ReadonlySet<number>;
+  /**
+   * Graphology keys to emphasise (`"12"` for a node, `"e7"` for an edge);
+   * everything else is faded. `null` for no emphasis.
+   */
+  highlight?: { nodes: ReadonlySet<string>; edges: ReadonlySet<string> } | null;
+  /** The selected node's key, drawn highlighted with its label. */
+  selectedNode?: string | null;
+  /** The selected edge's key, drawn thicker. */
+  selectedEdge?: string | null;
+  /** A node colour from its kind, replacing the cluster colour, or none. */
+  colorForKind?: ((kind: string) => string) | null;
+  /**
+   * Per-node presentation from its key: hide it, or recolour it. Applied
+   * before emphasis, so a faded node stays faded whatever its colour.
+   */
+  nodeStyle?: ((key: string) => { hidden?: boolean; color?: string | undefined }) | null;
+}
+
+const FADED_NODE = "#2b3038";
+const FADED_EDGE = "#23272e";
 
 // Re-exported so the benchmark and anything else that imported it from here
 // keeps working; the values live in their own module so a Node test can read
@@ -70,6 +109,8 @@ export default function GraphView({
   onClearSelection,
   onSelectNode,
   blast = null,
+  view,
+  onSigma,
 }: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const sigma = useRef<Sigma | null>(null);
@@ -143,6 +184,84 @@ export default function GraphView({
     }
     sigma.current?.refresh();
   }, [built, blast]);
+
+  // The optional view (M18 browser experiment). Skipped entirely when absent,
+  // so the desktop's drawing is byte-for-byte what it was.
+  useEffect(() => {
+    const instance = sigma.current;
+    if (view === undefined || instance === null) {
+      return;
+    }
+    const {
+      hiddenNodeKinds,
+      hiddenEdgeKinds,
+      hiddenClusters,
+      highlight = null,
+      selectedNode = null,
+      selectedEdge = null,
+      colorForKind = null,
+      nodeStyle = null,
+    } = view;
+    instance.setSetting("nodeReducer", (key, data) => {
+      const kind = String(data.kind ?? "");
+      if (
+        hiddenNodeKinds?.has(kind) === true ||
+        hiddenClusters?.has(Number(data.cluster)) === true
+      ) {
+        return { ...data, hidden: true };
+      }
+      const out = { ...data };
+      if (colorForKind !== null) {
+        out.color = colorForKind(kind);
+      }
+      if (nodeStyle !== null) {
+        const style = nodeStyle(key);
+        if (style.hidden === true) {
+          return { ...data, hidden: true };
+        }
+        if (style.color !== undefined) {
+          out.color = style.color;
+        }
+      }
+      if (highlight !== null && !highlight.nodes.has(key)) {
+        out.color = FADED_NODE;
+        out.label = "";
+        out.zIndex = 0;
+      } else if (highlight !== null) {
+        out.forceLabel = true;
+        out.zIndex = 1;
+      }
+      if (key === selectedNode) {
+        out.highlighted = true;
+        out.forceLabel = true;
+        out.zIndex = 2;
+      }
+      return out;
+    });
+    instance.setSetting("edgeReducer", (key, data) => {
+      if (hiddenEdgeKinds?.has(String(data.kind ?? "")) === true) {
+        return { ...data, hidden: true };
+      }
+      const out = { ...data };
+      if (highlight !== null && !highlight.edges.has(key)) {
+        out.color = FADED_EDGE;
+        out.zIndex = 0;
+      } else if (highlight !== null) {
+        out.size = Math.max(Number(data.size ?? 1), 1.8);
+        out.zIndex = 1;
+      }
+      if (key === selectedEdge) {
+        out.size = Math.max(Number(data.size ?? 1), 3);
+        out.zIndex = 2;
+      }
+      return out;
+    });
+    instance.refresh();
+  }, [built, view]);
+
+  useEffect(() => {
+    onSigma?.(sigma.current);
+  }, [built, onSigma]);
 
   // Tear down only when the component actually goes away.
   useEffect(

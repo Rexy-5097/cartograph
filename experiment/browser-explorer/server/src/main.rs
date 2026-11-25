@@ -123,7 +123,10 @@ impl Args {
             repository: PathBuf::from("."),
             open: false,
             port: 0,
-            assets: PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../desktop/dist-browser")),
+            assets: PathBuf::from(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../../desktop/dist-browser"
+            )),
         };
         while let Some(arg) = raw.next() {
             match arg.as_str() {
@@ -487,8 +490,14 @@ fn to_json(value: &impl serde::Serialize) -> String {
 
 /// Serves a file from the built interface, and only from there.
 fn static_file(assets: &Path, path: &str) -> Response {
+    // The browser build's entry is `browser.html` (the desktop's `index.html`
+    // is a different build); `/` serves whichever the folder holds.
     let relative = if path == "/" {
-        "index.html"
+        if assets.join("index.html").is_file() {
+            "index.html"
+        } else {
+            "browser.html"
+        }
     } else {
         path.trim_start_matches('/')
     };

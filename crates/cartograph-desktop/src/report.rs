@@ -15,6 +15,8 @@ use serde::Serialize;
 use cartograph_pipeline::pipeline::{Analysis, FileDiagnostic, Languages, Totals};
 use cartograph_resolver::{MatchResult, MatchStatus};
 
+use cartograph_core::NodeId;
+
 use crate::evidence::AnalysisId;
 
 /// One request-matching decision, as `cartograph match --json` states it.
@@ -61,6 +63,20 @@ pub struct RouteCandidate {
     pub reasons: Vec<String>,
 }
 
+/// Where one node is declared, as `cartograph --json` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeLocation {
+    /// The node.
+    pub id: NodeId,
+    /// Its file, repository-relative, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// Its line, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+}
+
 /// Everything an overview or an "unresolved" view needs, for one analysis.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +93,10 @@ pub struct AnalysisReport {
     pub orm_ambiguous: Vec<String>,
     /// Parse problems, in file order.
     pub diagnostics: Vec<FileDiagnostic>,
+    /// Where each node is declared: the same file and line `cartograph
+    /// --json` lists per node. The scene (ADR-0015) is not widened; a window
+    /// that wants locations reads them here.
+    pub nodes: Vec<NodeLocation>,
     /// Wall-clock milliseconds the pipeline took.
     pub elapsed_ms: u128,
 }
@@ -91,6 +111,15 @@ pub fn compose(analysis: AnalysisId, from: &Analysis) -> AnalysisReport {
         decisions: from.results.iter().map(decision).collect(),
         orm_ambiguous: from.orm.ambiguous.clone(),
         diagnostics: from.diagnostics.clone(),
+        nodes: from
+            .graph
+            .nodes()
+            .map(|n| NodeLocation {
+                id: n.id(),
+                file: n.location().map(|l| l.file().to_owned()),
+                line: n.location().map(cartograph_core::SourceLocation::line),
+            })
+            .collect(),
         elapsed_ms: from.elapsed.as_millis(),
     }
 }

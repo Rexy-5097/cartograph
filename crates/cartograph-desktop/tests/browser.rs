@@ -81,6 +81,14 @@ fn the_report_is_the_pipelines_own_counts_and_decisions() {
     );
     assert_eq!(report.decisions.len(), direct.results.len());
     assert_eq!(report.totals.nodes, payload.summary.nodes);
+    assert_eq!(report.nodes.len(), direct.graph.node_count());
+    for located in &report.nodes {
+        let node = direct.graph.node(located.id).expect("a real node");
+        assert_eq!(
+            located.file.as_deref(),
+            node.location().map(cartograph_core::SourceLocation::file)
+        );
+    }
     // The unmatched request is reported as a refusal, not dropped.
     assert!(
         report
