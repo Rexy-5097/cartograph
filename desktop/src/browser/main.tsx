@@ -6,6 +6,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
+
 import BrowserApp from "./BrowserApp";
 import "../styles.css";
 import "./browser.css";

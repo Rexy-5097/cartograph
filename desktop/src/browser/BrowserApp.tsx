@@ -657,7 +657,7 @@ export default function BrowserApp() {
     <div className="bx-app">
       <header className="bx-top">
         <div className="bx-brand">
-          <span className="bx-logo" aria-hidden="true">◈</span>
+          <CartographMark />
           <span className="bx-name">Cartograph</span>
           <span className="bx-sub">Architecture Explorer</span>
           <span className="bx-experimental" title="Proposed ADR-0024; not accepted">
@@ -1099,7 +1099,10 @@ export default function BrowserApp() {
             <div className="bx-inspector-actions">
               <button type="button" className="bx-button"
                 onClick={() => void showSource(evidence.location.file, evidence.location.line)}>
-                Show source at {evidence.location.file}:{evidence.location.line}
+                Show source at{" "}
+                <code className="bx-path">
+                  {evidence.location.file}:{evidence.location.line}
+                </code>
               </button>
             </div>
           </>
@@ -1304,4 +1307,23 @@ function BlastPanel({
 /** A relationship's colour, taken from the renderer so the legend cannot drift. */
 function EdgeSwatch({ kind }: { kind: string }) {
   return <i className="bx-edge-swatch" style={{ background: edgeColor(kind) }} aria-hidden="true" />;
+}
+
+/**
+ * Cartograph's mark, drawn as the site draws it (docs/.vitepress/theme/
+ * CartographMark.vue), without its motion: four corners framing two
+ * artefacts and the edge between them.
+ */
+function CartographMark() {
+  return (
+    <svg className="bx-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path d="M4 14V4h10" />
+      <path d="M34 4h10v10" />
+      <path d="M44 34v10H34" />
+      <path d="M14 44H4V34" />
+      <rect x="10.5" y="24.5" width="8" height="8" />
+      <circle cx="35" cy="14.5" r="4.4" />
+      <path d="M18.5 28.5 23.5 33.5 32.7 18.3" />
+    </svg>
+  );
 }

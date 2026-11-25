@@ -30,18 +30,19 @@ export const LAYER_LABEL: Record<Layer, string> = {
 };
 
 /**
- * Node colours by layer. Chosen apart from the renderer's edge colours
+ * Node colours by layer, drawn from the site's palette (pink, paper, khaki)
+ * where it allows, and kept apart from the renderer's edge colours
  * (`graph.ts`: HTTP orange, ORM green, queries teal, calls grey), so a node
  * is never mistaken for a relationship.
  */
 export const LAYER_COLOR: Record<Layer, string> = {
-  frontend: "#6ab0ff",
-  api: "#ffd166",
-  backend: "#b39ddb",
-  model: "#f48fb1",
-  database: "#ff8a65",
-  external: "#cfd8dc",
-  other: "#6b7280",
+  frontend: "#cd8dbd",
+  api: "#f4f0e6",
+  backend: "#b7b39c",
+  model: "#e9c6e1",
+  database: "#f2dc7d",
+  external: "#9a9a9a",
+  other: "#6b6b6b",
 };
 
 export const EDGE_LABEL: Record<EdgeKind, string> = {

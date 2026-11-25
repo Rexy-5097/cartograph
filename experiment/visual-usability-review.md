@@ -20,6 +20,22 @@ All screenshots show the real Flagsmith analysis served by `cartograph-serve`. T
 
 **Screenshot 05 predates a fix.** In it, the affected nodes still carry layer colours. The independent review found that the layer colour replaced the blast colours; screenshot 12 is after the fix.
 
+## Site theme (after the experiment run)
+
+The explorer now uses the main site's design (cartograph.co.in, `docs/.vitepress/theme`).
+
+- **Palette:** the near-black `#222` field, `#1a1a1a` panels, pale-pink type, and pink as the single accent.
+- **Type:** Geist for headings, Geist Mono for labels, counts, controls and code. Both come from the same `@fontsource-variable` packages and versions as the site. They are bundled, not fetched, so the CSP is unchanged.
+- **Components:** the site's outlined mono controls, the bracket mark with the letter-spaced wordmark, and its evidence block (a pink rule, a mono caption, the evidence in mono).
+- **Layer colours:** taken from the same palette where possible, and still kept apart from the renderer's edge colours.
+- **Case:** headings that show data (a symbol, a file path, the repository name) keep the original case; only fixed wording is set in capitals.
+- **Unchanged:** behaviour, data and layout.
+- **Checked in the browser:**
+  - both fonts loaded, with no console errors;
+  - the inspector has no horizontal overflow;
+  - no horizontal page scroll at 375 px.
+- **Screenshots** in the external folder: 14 (overview), 15 (trace), 16 (unresolved and evidence), 17 (phone).
+
 ## Can a new user answer the five questions?
 
 1. **Which parts are connected?** Partly.
