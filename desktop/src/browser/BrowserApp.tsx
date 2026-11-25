@@ -43,7 +43,6 @@ import {
 import {
   EDGE_LABEL,
   LAYER_COLOR,
-  LAYER_LABEL,
   type Layer,
   STATUS_MEANING,
   TRACE_PATH_LIMIT,
@@ -62,6 +61,8 @@ import {
   tracePaths,
 } from "./model";
 import SourcePreview from "./SourcePreview";
+import Report from "./Report";
+import { PLAIN_LAYER, PLAIN_STATUS, plainEdge, plainKind, relationSentence } from "./plain";
 
 type View =
   | "overview"
@@ -131,7 +132,9 @@ export default function BrowserApp() {
   const [hiddenLayers, setHiddenLayers] = useState<Set<Layer>>(new Set());
   const [colourBy, setColourBy] = useState<"layer" | "cluster">("layer");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [hideTests, setHideTests] = useState(false);
+  // A first-time reader sees the product's own code; tests are one click away
+  // and the legend says how many are hidden.
+  const [hideTests, setHideTests] = useState(true);
   const [focus, setFocus] = useState<{ nodes: Set<string>; edges: Set<string> } | null>(null);
 
   const sigma = useRef<Sigma | null>(null);
@@ -377,6 +380,9 @@ export default function BrowserApp() {
       // Nodes in the trace or blast on screen stay visible whatever the
       // filters say: hiding part of a result would misstate it.
       const kept = new Set<string>();
+      if (selection.kind === "node") {
+        kept.add(String(selection.id));
+      }
       if (view === "blast" && blast !== null) {
         kept.add(String(blast.target));
         for (const key of impactedNodeKeys(blast)) {
@@ -401,7 +407,7 @@ export default function BrowserApp() {
       };
     }
     return out;
-  }, [graphView, hiddenLayers, colourBy, layerOfNode, hideTests, where, view, blast, traceHighlight]);
+  }, [graphView, hiddenLayers, colourBy, layerOfNode, hideTests, where, view, blast, traceHighlight, selection]);
 
   const testNodeCount = useMemo(() => {
     let n = 0;
@@ -625,22 +631,23 @@ export default function BrowserApp() {
   const frontend = frontendRequests(decisions);
 
   const layerCount = (layer: Layer) => layerCounts.find(([l]) => l === layer)?.[1] ?? 0;
-  const navItems: { id: View; label: string; count?: number; empty?: boolean }[] = [
-    { id: "overview", label: "Architecture overview" },
-    { id: "map", label: "Full map", count: scene?.nodes.length },
-    { id: "frontend", label: "Frontend", count: layerCount("frontend") },
-    { id: "api", label: "API and routes", count: layerCount("api") },
-    { id: "backend", label: "Backend", count: layerCount("backend") + layerCount("model") },
-    { id: "database", label: "Database", count: layerCount("database") },
+  const navItems: { id: View; label: string; group: string; count?: number; empty?: boolean }[] = [
+    { id: "overview", label: "Report", group: "Start here" },
+    { id: "map", label: "Whole system", group: "Explore", count: scene?.nodes.length },
+    { id: "frontend", label: "Screens and UI", group: "Explore", count: layerCount("frontend") },
+    { id: "api", label: "API endpoints", group: "Explore", count: layerCount("api") },
+    { id: "backend", label: "Server code", group: "Explore", count: layerCount("backend") + layerCount("model") },
+    { id: "database", label: "Database", group: "Explore", count: layerCount("database") },
     {
       id: "dependencies",
-      label: "Dependencies",
+      label: "Direct calls",
+      group: "Explore",
       count: scene?.edges.filter((e) => e.kind === "import" || e.kind === "call").length ?? 0,
     },
-    { id: "trace", label: "Trace" },
-    { id: "blast", label: "Blast radius" },
-    { id: "unresolved", label: "Unresolved", count: refusals.length + routeNodes.length },
-    { id: "diagnostics", label: "Diagnostics", count: report?.diagnostics.length ?? 0 },
+    { id: "trace", label: "Follow a request", group: "Ask" },
+    { id: "blast", label: "Impact of a change", group: "Ask" },
+    { id: "unresolved", label: "Gaps in the map", group: "Check", count: refusals.length + routeNodes.length },
+    { id: "diagnostics", label: "Unreadable code", group: "Check", count: report?.diagnostics.length ?? 0 },
   ];
   for (const item of navItems) {
     item.empty =
@@ -654,14 +661,14 @@ export default function BrowserApp() {
   const showCanvas = view !== "overview" && view !== "unresolved" && view !== "diagnostics";
 
   return (
-    <div className="bx-app">
+    <div className={view === "overview" && selection.kind === "none" && source === null ? "bx-app bx-app-report" : "bx-app"}>
       <header className="bx-top">
         <div className="bx-brand">
           <CartographMark />
           <span className="bx-name">Cartograph</span>
-          <span className="bx-sub">Architecture Explorer</span>
-          <span className="bx-experimental" title="Proposed ADR-0024; not accepted">
-            experimental
+          <span className="bx-sub">Architecture report</span>
+          <span className="bx-experimental" title="Experimental build: proposed ADR-0024, not accepted">
+            Preview
           </span>
         </div>
         <div className="bx-repo" title="Repository being explored">
@@ -669,14 +676,14 @@ export default function BrowserApp() {
         </div>
         <div className={`bx-status bx-status-${phase}`} role="status" aria-live="polite">
           {!reachable
-            ? "Server unreachable"
+            ? "Disconnected"
             : phase === "running"
-            ? "Analysing…"
+            ? "Scanning…"
             : phase === "failed"
-              ? "Last analysis failed"
+              ? "Last scan failed"
               : analysisId === null
-                ? "Waiting for analysis"
-                : `Analysis #${analysisId} ready`}
+                ? "Waiting for the first scan"
+                : <span title={`Analysis #${analysisId}`}>Up to date</span>}
         </div>
         <button
           type="button"
@@ -684,16 +691,16 @@ export default function BrowserApp() {
           onClick={() => void refresh()}
           disabled={phase === "running"}
         >
-          Refresh analysis
+          Re-scan
         </button>
         <div className="bx-search">
           <label htmlFor="bx-search-input" className="bx-visually-hidden">
-            Search symbols
+            Find a function, class or table
           </label>
           <input
             id="bx-search-input"
             type="search"
-            placeholder="Search symbols…"
+            placeholder="Find a function, class or table…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoComplete="off"
@@ -716,7 +723,7 @@ export default function BrowserApp() {
                     }}
                   >
                     <span>{m.label}</span>
-                    <span className="bx-kind">{m.kind}</span>
+                    <span className="bx-kind">{plainKind(m.kind).replace(/^An? /, "")}</span>
                     <span className="bx-muted">{where.get(m.id)?.file ?? ""}</span>
                   </button>
                 </li>
@@ -737,14 +744,14 @@ export default function BrowserApp() {
         {settingsOpen && (
           <div className="bx-settings" role="dialog" aria-label="Display settings">
             <fieldset>
-              <legend>Colour nodes by</legend>
+              <legend>Colour the map by</legend>
               <label>
                 <input type="radio" name="colour" checked={colourBy === "layer"}
-                  onChange={() => setColourBy("layer")} /> Layer (file language)
+                  onChange={() => setColourBy("layer")} /> Part of the system
               </label>
               <label>
                 <input type="radio" name="colour" checked={colourBy === "cluster"}
-                  onChange={() => setColourBy("cluster")} /> Cluster (Rust layout)
+                  onChange={() => setColourBy("cluster")} /> Folder
               </label>
             </fieldset>
           </div>
@@ -753,8 +760,11 @@ export default function BrowserApp() {
 
       <nav className="bx-nav" aria-label="Views">
         <ul>
-          {navItems.map((item) => (
+          {navItems.map((item, i) => (
             <li key={item.id}>
+              {(i === 0 || navItems[i - 1]?.group !== item.group) && (
+                <span className="bx-nav-group">{item.group}</span>
+              )}
               <button
                 type="button"
                 className={view === item.id ? "bx-nav-item bx-nav-current" : "bx-nav-item"}
@@ -775,11 +785,8 @@ export default function BrowserApp() {
           ))}
         </ul>
         <p className="bx-nav-note">
-          Badges are counts from the Rust analysis: the map nodes in a group (the view also
-          shows their direct neighbours), relationships, refusals or diagnostics. Frontend, API,
-          Backend and Database group nodes by file type and kind — a presentation choice, not an
-          analysis result.
-          “none” means Cartograph detected nothing of that kind — not that the codebase has none.
+          Numbers count what each view shows. Code is grouped by file type. “None” means nothing
+          was found, not that the code has none.
         </p>
       </nav>
 
@@ -804,8 +811,24 @@ export default function BrowserApp() {
         )}
 
         {payload !== null && report !== null && view === "overview" && (
-          <section className="bx-overview" aria-labelledby="bx-overview-title">
-            <h1 id="bx-overview-title">{payload.repository}</h1>
+          <Report
+            repository={payload.repository}
+            report={report}
+            scene={payload.scene}
+            layerOfNode={layerOfNode}
+            isTest={(id) => isTestPath(where.get(id)?.file)}
+            onOpenMap={() => setView("map")}
+            onOpenGaps={() => setView("unresolved")}
+            onImpact={(id) => {
+              void selectNode(id);
+              void runBlast(id);
+            }}
+            onFollow={(id) => {
+              void selectNode(id);
+              void runTrace(id);
+            }}
+            technical={
+          <section className="bx-overview" aria-label="Technical details">
             <p className="bx-lede">
               Analysis #{payload.analysis}, {report.elapsedMs} ms. Every figure below is a count
               from Cartograph’s Rust analysis of this repository; nothing is estimated.
@@ -865,10 +888,9 @@ export default function BrowserApp() {
               <li>Confidence values are uncalibrated priors chosen by evidence class — not probabilities.</li>
               <li>Node colours show the file language (TypeScript → frontend, Python → backend) or kind (route, table); they are a reading aid, not an analysis result.</li>
             </ul>
-            <button type="button" className="bx-button bx-primary" onClick={() => setView("map")}>
-              Open the architecture map
-            </button>
           </section>
+            }
+          />
         )}
 
         {payload !== null && scene !== null && showCanvas && (
@@ -885,14 +907,14 @@ export default function BrowserApp() {
             <aside className="bx-legend" aria-label="Legend and filters">
               <label className="bx-legend-toggle">
                 <input type="checkbox" checked={hideTests} onChange={() => setHideTests((h) => !h)} />
-                Hide test code <span className="bx-muted">{testNodeCount} nodes, by file path</span>
+                Hide automated tests <span className="bx-muted">{testNodeCount} pieces, by file name</span>
               </label>
               {focus !== null && (
                 <button type="button" className="bx-button bx-small" onClick={() => setFocus(null)}>
-                  Clear neighbourhood focus
+                  Show everything again
                 </button>
               )}
-              <h2>Layers</h2>
+              <h2>Parts of the system</h2>
               <ul>
                 {layerCounts.map(([layer, n]) => (
                   <li key={layer}>
@@ -910,12 +932,12 @@ export default function BrowserApp() {
                         }
                       />
                       <i className="bx-dot" style={{ background: LAYER_COLOR[layer] }} />
-                      {LAYER_LABEL[layer]} <span className="bx-muted">{n}</span>
+                      {PLAIN_LAYER[layer]} <span className="bx-muted">{n}</span>
                     </label>
                   </li>
                 ))}
               </ul>
-              <h2>Relationships</h2>
+              <h2>Connections</h2>
               <ul>
                 {presentEdgeKinds.map(([kind, n]) => (
                   <li key={kind}>
@@ -934,7 +956,7 @@ export default function BrowserApp() {
                         }
                       />
                       <EdgeSwatch kind={kind} />
-                      {EDGE_LABEL[kind] ?? kind} <span className="bx-muted">{n}</span>
+                      {plainEdge(kind).name} <span className="bx-muted">{n}</span>
                     </label>
                   </li>
                 ))}
@@ -943,7 +965,7 @@ export default function BrowserApp() {
             {view === "trace" && (
               <div className="bx-overlay" aria-label="Trace">
                 {trace === null ? (
-                  <p>Select a node on the map, then choose <strong>Trace from here</strong> in the inspector.</p>
+                  <p>Pick any piece of code on the map, then choose <strong>Follow from here</strong>. Cartograph shows where it leads, step by step.</p>
                 ) : (
                   <TracePanel
                     trace={trace}
@@ -958,7 +980,7 @@ export default function BrowserApp() {
             {view === "blast" && (
               <div className="bx-overlay" aria-label="Blast radius">
                 {blast === null ? (
-                  <p>Select a node on the map, then choose <strong>Blast radius</strong> in the inspector.</p>
+                  <p>Pick any piece of code on the map, then choose <strong>What depends on this?</strong> to see everything a change to it could affect.</p>
                 ) : (
                   <BlastPanel blast={blast} label={label} onEdge={(e) => void selectEdge(e)} onNode={(n) => void selectNode(n)} />
                 )}
@@ -969,17 +991,20 @@ export default function BrowserApp() {
 
         {payload !== null && report !== null && view === "unresolved" && (
           <section className="bx-list-view" aria-labelledby="bx-unresolved-title">
-            <h1 id="bx-unresolved-title">Unresolved relationships</h1>
+            <h1 id="bx-unresolved-title">Gaps in the map</h1>
             <p className="bx-lede">
-              Cartograph draws a relationship only when the source determines it. These are the
-              places it declined to. An unresolved request is <em>not</em> proof that no
-              connection exists — only that the static evidence does not establish one.
+              Places where the code makes a connection Cartograph could not prove — for example, a
+              web request whose address is only known when the app runs. They are listed here instead
+              of being drawn as guesses. A gap is not proof that nothing is connected.
             </p>
             {groupDecisions(refusals).map((group) => (
               <details key={group.status} open={group.items.length <= 25}>
                 <summary>
-                  <span className={`bx-status-pill bx-pill-${group.status}`}>{group.status}</span>{" "}
-                  {group.items.length} request{group.items.length === 1 ? "" : "s"}
+                  {PLAIN_STATUS[group.status]}{" "}
+                  <span className="bx-muted">
+                    {group.items.length} request{group.items.length === 1 ? "" : "s"}
+                  </span>{" "}
+                  <span className={`bx-status-pill bx-pill-${group.status}`}>{group.status}</span>
                 </summary>
                 <p className="bx-muted">{STATUS_MEANING[group.status]}</p>
                 <ul className="bx-decisions">
@@ -993,15 +1018,20 @@ export default function BrowserApp() {
                         <span className="bx-muted"> reason: {d.unsupportedReason}</span>
                       )}
                       {d.candidates.length > 0 && (
-                        <ul className="bx-candidates">
-                          {d.candidates.slice(0, 5).map((c, j) => (
-                            <li key={j}>
-                              candidate <code>{c.route}</code> at {c.file}:{c.line}
-                              {c.handler !== undefined && <> → <code>{c.handler}</code></>} ·{" "}
-                              method {c.methodCompatibility}, path {c.pathCompatibility}
-                            </li>
-                          ))}
-                        </ul>
+                        <details className="bx-candidates-toggle">
+                          <summary>
+                            {d.candidates.length} possible endpoint{d.candidates.length === 1 ? "" : "s"}
+                          </summary>
+                          <ul className="bx-candidates">
+                            {d.candidates.slice(0, 5).map((c, j) => (
+                              <li key={j}>
+                                <code>{c.route}</code> at {c.file}:{c.line}
+                                {c.handler !== undefined && <> → <code>{c.handler}</code></>} ·{" "}
+                                method {c.methodCompatibility}, path {c.pathCompatibility}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       )}
                     </li>
                   ))}
@@ -1014,8 +1044,9 @@ export default function BrowserApp() {
             {routeNodes.length > 0 && (
               <details>
                 <summary>
-                  <span className="bx-status-pill bx-pill-route">route node</span> {routeNodes.length} route
-                  {routeNodes.length === 1 ? "" : "s"} drawn without a resolved handler
+                  Endpoints reached without a known handler{" "}
+                  <span className="bx-muted">{routeNodes.length}</span>{" "}
+                  <span className="bx-status-pill bx-pill-route">route node</span>
                 </summary>
                 <p className="bx-muted">
                   A request that matched a route whose handler Cartograph could not resolve to one
@@ -1052,11 +1083,11 @@ export default function BrowserApp() {
 
         {payload !== null && report !== null && view === "diagnostics" && (
           <section className="bx-list-view" aria-labelledby="bx-diag-title">
-            <h1 id="bx-diag-title">Diagnostics</h1>
+            <h1 id="bx-diag-title">Unreadable code</h1>
             <p className="bx-lede">
-              {report.totals.files_failed} file{report.totals.files_failed === 1 ? "" : "s"} failed to
-              parse; {report.totals.files_with_diagnostics} had diagnostics. Files with no supported
-              language are not counted here.
+              Parts of files Cartograph could not read, so anything inside them is missing from the
+              map. {report.totals.files_failed} file{report.totals.files_failed === 1 ? "" : "s"} could
+              not be read at all; {report.totals.files_with_diagnostics} had a region it skipped.
             </p>
             {report.diagnostics.length === 0 ? (
               <p>No parser diagnostics.</p>
@@ -1085,8 +1116,9 @@ export default function BrowserApp() {
       <aside className="bx-inspector" aria-label="Inspector" ref={inspector} tabIndex={-1}>
         {selection.kind === "none" && (
           <div className="bx-inspector-empty">
-            <h2>Inspector</h2>
-            <p>Click a relationship on the map to see the evidence Cartograph used to establish it, or a node to see where it is and what it connects to.</p>
+            <h2>Details</h2>
+            <p>Each dot on the map is a piece of code or a database table. Each line is a connection Cartograph can prove.</p>
+            <p>Click a dot to see what it is and what it connects to, or a line to see the proof.</p>
             {blast !== null && view === "blast" && <p className="bx-muted">{describeBlast(blast)}</p>}
           </div>
         )}
@@ -1095,6 +1127,16 @@ export default function BrowserApp() {
         )}
         {selection.kind === "edge" && evidence !== null && (
           <>
+            <div className="bx-plain">
+              <p className="bx-eyebrow-dark">{plainEdge(evidence.kind).name}</p>
+              <p className="bx-plain-sentence">
+                {relationSentence(evidence.kind, evidence.source.label, evidence.target.label)}
+              </p>
+              <p className="bx-muted">
+                Proven by line {evidence.location.line} of <code className="bx-path">{evidence.location.file}</code>.
+              </p>
+            </div>
+            <h3 className="bx-proof-heading">The proof</h3>
             <EvidencePanel record={evidence} onClose={clearSelection} />
             <div className="bx-inspector-actions">
               <button type="button" className="bx-button"
@@ -1110,11 +1152,11 @@ export default function BrowserApp() {
         {selection.kind === "node" && detail !== null && (
           <div className="bx-node">
             <h2>{detail.label}</h2>
-            <p>
-              <span className="bx-kind">{detail.kind}</span>{" "}
-              <span className="bx-muted">
-                {LAYER_LABEL[layerOfNode.get(detail.node) ?? "other"]}
-              </span>
+            <p className="bx-plain-sentence">
+              {plainKind(detail.kind)} in {PLAIN_LAYER[layerOfNode.get(detail.node) ?? "other"].toLowerCase()}
+              {isTestPath(detail.file) ? " (automated test)" : ""}.{" "}
+              It uses {detail.outgoing.length} other {detail.outgoing.length === 1 ? "part" : "parts"} and{" "}
+              {detail.incoming.length} {detail.incoming.length === 1 ? "part depends" : "parts depend"} on it.
             </p>
             {detail.file !== undefined ? (
               <p>
@@ -1123,12 +1165,12 @@ export default function BrowserApp() {
                 </button>
               </p>
             ) : (
-              <p className="bx-muted">This artefact has no source location in the graph.</p>
+              <p className="bx-muted">Tables have no line of code of their own.</p>
             )}
             <div className="bx-inspector-actions">
-              <button type="button" className="bx-button bx-primary" onClick={() => void runTrace(detail.node)}>Trace from here</button>
-              <button type="button" className="bx-button" onClick={() => void runBlast(detail.node)}>Blast radius</button>
-              <button type="button" className="bx-button" onClick={() => focusNode(detail.node)}>Centre on map</button>
+              <button type="button" className="bx-button bx-primary" onClick={() => void runTrace(detail.node)}>Follow from here</button>
+              <button type="button" className="bx-button" onClick={() => void runBlast(detail.node)}>What depends on this?</button>
+              <button type="button" className="bx-button" onClick={() => focusNode(detail.node)}>Show on map</button>
               <button
                 type="button"
                 className="bx-button"
@@ -1139,11 +1181,11 @@ export default function BrowserApp() {
                   }
                 }}
               >
-                Focus neighbourhood
+                Only its neighbours
               </button>
             </div>
-            <NeighbourList title={`Outgoing (${detail.outgoing.length})`} items={detail.outgoing} arrow="→" onEdge={(e) => void selectEdge(e)} />
-            <NeighbourList title={`Incoming (${detail.incoming.length})`} items={detail.incoming} arrow="←" onEdge={(e) => void selectEdge(e)} />
+            <NeighbourList title={`Uses (${detail.outgoing.length})`} items={detail.outgoing} direction="out" onEdge={(e) => void selectEdge(e)} />
+            <NeighbourList title={`Used by (${detail.incoming.length})`} items={detail.incoming} direction="in" onEdge={(e) => void selectEdge(e)} />
           </div>
         )}
         {source !== null && view !== "unresolved" && <SourcePreview excerpt={source} onClose={() => setSource(null)} />}
@@ -1155,19 +1197,19 @@ export default function BrowserApp() {
 function NeighbourList({
   title,
   items,
-  arrow,
+  direction,
   onEdge,
 }: {
   title: string;
   items: NodeDetail["outgoing"];
-  arrow: string;
+  direction: "in" | "out";
   onEdge: (edge: number) => void;
 }) {
   if (items.length === 0) {
     return (
       <div className="bx-neighbours">
         <h3>{title}</h3>
-        <p className="bx-muted">None established.</p>
+        <p className="bx-muted">Nothing proven.</p>
       </div>
     );
   }
@@ -1177,9 +1219,11 @@ function NeighbourList({
       <ul>
         {items.slice(0, 100).map((n) => (
           <li key={n.edge}>
-            <button type="button" className="bx-link" onClick={() => onEdge(n.edge)}>
-              <EdgeSwatch kind={n.kind} /> {EDGE_LABEL[n.kind] ?? n.kind} {arrow}{" "}
-              {n.label} <span className="bx-kind">{n.nodeKind}</span>
+            <button type="button" className="bx-link" onClick={() => onEdge(n.edge)} title="Show the proof">
+              <EdgeSwatch kind={n.kind} />{" "}
+              {direction === "out" && <span className="bx-muted">{plainEdge(n.kind).verb} </span>}
+              <span className="bx-neighbour-name">{n.label}</span>{" "}
+              {direction === "in" && <span className="bx-muted">{plainEdge(n.kind).incoming}</span>}
             </button>
           </li>
         ))}
@@ -1205,31 +1249,33 @@ function TracePanel({
   const paths = tracePaths(trace);
   return (
     <div className="bx-trace">
-      <h2>Trace from {label(trace.from)}</h2>
+      <p className="bx-eyebrow-dark">Follow a request</p>
+      <h2>Where {label(trace.from)} leads</h2>
       {trace.steps.length === 0 ? (
         <p>
-          The trace stopped immediately: {STOP_MEANING[trace.stop ?? "chain-end"]}. Cartograph
-          established no relationship leading out of this artefact.
+          Nothing leads out of this piece of code that Cartograph could prove, so there is nothing
+          to follow from here.
         </p>
       ) : (
         <>
           <p className="bx-muted">
             {paths.length >= TRACE_PATH_LIMIT
-              ? `${TRACE_PATH_LIMIT} or more paths within depth ${trace.maxDepth}; this list stops collecting at ${TRACE_PATH_LIMIT}.`
-              : `${paths.length} path${paths.length === 1 ? "" : "s"} within depth ${trace.maxDepth}.`}{" "}
-            Click a hop for its evidence.
+              ? `${TRACE_PATH_LIMIT} or more routes, up to ${trace.maxDepth} steps each; this list stops at ${TRACE_PATH_LIMIT}.`
+              : `${paths.length} ${paths.length === 1 ? "route" : "routes"} through the code, up to ${trace.maxDepth} steps each.`}{" "}
+            Click a step to see its proof.
           </p>
           <ol className="bx-paths">
             {paths.slice(0, 50).map((path, i) => (
-              <li key={i}>
-                <span className="bx-hop-node">{label(trace.from)}</span>
+              <li key={i} className="bx-route">
+                <span className="bx-step-node"><code>{label(trace.from)}</code></span>
                 {path.hops.map((hop) => (
-                  <span key={hop.edge}>
-                    <button type="button" className="bx-hop" onClick={() => onEdge(hop.edge)} title="Show evidence">
-                      →
+                  <span key={hop.edge} className="bx-step">
+                    <button type="button" className="bx-step-verb" onClick={() => onEdge(hop.edge)} title="Show the proof">
+                      {plainEdge(edgeKindOf(hop.edge)).verb}
                     </button>
-                    <span className="bx-hop-node">
-                      {label(hop.to)} <span className="bx-kind">{kindOf(hop.to)}</span>
+                    <span className="bx-step-node">
+                      <code>{label(hop.to)}</code>{" "}
+                      <span className="bx-muted">{plainKind(kindOf(hop.to)).replace(/^An? /, "").toLowerCase()}</span>
                     </span>
                   </span>
                 ))}
@@ -1240,12 +1286,16 @@ function TracePanel({
                     const viaHttp = last !== undefined && edgeKindOf(last.edge) === "http-call";
                     return (
                       <>
-                        Stopped: {STOP_MEANING[path.stop ?? "chain-end"]}.
                         {kindOf(end) === "table"
-                          ? " This path reaches a database table."
-                          : " This path does not reach a database table in the analysed graph."}
+                          ? "Ends at a database table."
+                          : path.stop === "max-depth"
+                            ? "Stops after the maximum number of steps."
+                            : path.stop === "cycle"
+                              ? "Stops where the route loops back on itself."
+                              : "Ends here: nothing further could be proven."}
                         {viaHttp && kindOf(end) === "class" &&
-                          " Interface note: the request ends at a class. If that class is a class-based view, Cartograph reaches it but does not follow into its methods (a documented limit), so what the view does would not be on this path."}
+                          " If this class is a view, what happens inside it is not followed yet."}
+                        <span className="bx-visually-hidden"> ({STOP_MEANING[path.stop ?? "chain-end"]})</span>
                       </>
                     );
                   })()}
@@ -1279,12 +1329,17 @@ function BlastPanel({
   const depth = blast.reached.reduce((m, r) => Math.max(m, r.depth), 0);
   return (
     <div className="bx-trace">
-      <h2>Blast radius of {label(blast.target)}</h2>
+      <p className="bx-eyebrow-dark">Impact of a change</p>
+      <h2>If you change {label(blast.target)}</h2>
       <p>
-        {blast.reached.length} artefact{blast.reached.length === 1 ? "" : "s"} depend on it, up to{" "}
-        {depth} hop{depth === 1 ? "" : "s"} away, through calls, HTTP calls, ORM access and table
-        queries Cartograph established. Imports are not followed. Dependencies Cartograph did not
-        resolve (see <em>Unresolved</em>) cannot appear here.
+        {blast.reached.length === 0
+          ? "No other code is proven to depend on it."
+          : depth <= 1
+            ? `${blast.reached.length} ${blast.reached.length === 1 ? "part of the code depends" : "parts of the code depend"} on it directly.`
+            : `${blast.reached.length} parts of the code depend on it, directly or through up to ${depth} steps.`}{" "}
+        <span className="bx-muted">
+          Only proven connections count; anything listed under “Gaps in the map” could add more.
+        </span>
       </p>
       <ol className="bx-paths">
         {[...blast.reached]
@@ -1292,10 +1347,14 @@ function BlastPanel({
           .slice(0, 200)
           .map((r) => (
             <li key={r.node}>
-              <button type="button" className="bx-link" onClick={() => onNode(r.node)}>{label(r.node)}</button>{" "}
-              <span className="bx-muted">depth {r.depth}, confidence {r.confidence.toFixed(2)} (uncalibrated)</span>{" "}
-              <button type="button" className="bx-hop" onClick={() => onEdge(r.via)} title="Evidence for the edge reached through">
-                evidence
+              <button type="button" className="bx-link" onClick={() => onNode(r.node)}><code>{label(r.node)}</code></button>{" "}
+              {r.depth > 1 && (
+                <span className="bx-muted" title={`Confidence ${r.confidence.toFixed(2)} (an uncalibrated prior, not a probability)`}>
+                  {r.depth} steps away
+                </span>
+              )}{" "}
+              <button type="button" className="bx-hop" onClick={() => onEdge(r.via)} title="Show the proof">
+                proof
               </button>
             </li>
           ))}

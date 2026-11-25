@@ -36,6 +36,49 @@ The explorer now uses the main site's design (cartograph.co.in, `docs/.vitepress
   - no horizontal page scroll at 375 px.
 - **Screenshots** in the external folder: 14 (overview), 15 (trace), 16 (unresolved and evidence), 17 (phone).
 
+## Plain-language report (for readers new to Cartograph)
+
+The landing page is now a report a non-technical reader can follow, set on the site's manilla paper like its documentation pages: numbered sections and hairline rules, with no dashboard cards.
+
+1. **Headline.** "How flagsmith fits together", with one sentence on what was read and mapped, and a line saying every number is counted and none of it was written by AI. That is true: counts come from the analysis, and the graph is built without an LLM (ADR-0007). It deliberately does not say "nothing is estimated": Cartograph labels its ORM links as estimated, and the proof shows "inferred" for them.
+2. **The system at a glance.** Four parts (screens and UI, API endpoints, server code, database) with their sizes and the proven links between them.
+   - Each arrow points the way the links actually run. The 4 links between server code and the endpoints run from the server side, so that arrow points back.
+   - "No proven link" is drawn dashed, and the page explains it means none was proven, not that none exists.
+   - The grouping by file type is stated beside the diagram.
+3. **What Cartograph found.** Four findings, each a sentence built from the analysis's numbers (`plain.ts`, with tests). A finding appears only when its numbers support it.
+4. **Questions you can ask it.** These run on real examples from the data:
+   - what a change to the most depended-on class would affect;
+   - where a request goes, picking one that reaches data;
+   - what could not be proven.
+5. **Most depended-on code**, ranked.
+6. **How to trust this**: read from code, gaps listed, nothing uploaded.
+7. **Technical details.** The full counts, folded away.
+
+Throughout the app, plain names replace the analysis terms:
+
+| Before | Now |
+|---|---|
+| Trace | Follow a request |
+| Blast radius | Impact of a change |
+| Unresolved | Gaps in the map |
+| Diagnostics | Unreadable code |
+| Map views | Whole system, Screens and UI, Server code, … |
+
+Other changes:
+- **Selecting a connection:** a plain sentence first ("_get_feature sends a web request to FlagAPIView. Proven by line 451 of …"), then the unchanged evidence panel under "The proof".
+- **Followed requests:** read as steps with verbs ("sends a web request to ↓").
+- **Impact:** reads "If you change FFAdminUser: 124 parts of the code depend on it directly."
+- **The map:** opens with automated tests hidden (747 pieces). The legend says so and shows them in one click, and the selected node and any trace or impact result always stay visible.
+- **Unchanged:** the data, the evidence and every count.
+
+Screenshots in the external folder:
+- 18: report hero and diagram
+- 19: findings and questions
+- 20: depended-on code and "how to trust this"
+- 21: follow a request
+- 22: the plain sentence above the proof
+- 23: the diagram at phone width
+
 ## Can a new user answer the five questions?
 
 1. **Which parts are connected?** Partly.

@@ -12,6 +12,7 @@ import "@fontsource-variable/geist-mono";
 import BrowserApp from "./BrowserApp";
 import "../styles.css";
 import "./browser.css";
+import "./report.css";
 
 const container = document.getElementById("root");
 if (!container) {
