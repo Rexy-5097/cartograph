@@ -54,7 +54,12 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let repository = match validate(&args.repository) {
+    // Canonicalised so a relative path such as `.` is shown by its folder name.
+    let path = args
+        .repository
+        .canonicalize()
+        .unwrap_or(args.repository.clone());
+    let repository = match validate(&path) {
         Ok(repository) => repository,
         Err(error) => {
             eprintln!("cartograph-serve: {}", error.message);

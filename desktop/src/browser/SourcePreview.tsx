@@ -7,7 +7,7 @@
  * meaning: it is not a parse, and nothing is inferred from it.
  */
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useEffect, useRef } from "react";
 
 import type { SourceExcerpt } from "./api";
 
@@ -62,8 +62,19 @@ interface Props {
 
 export default function SourcePreview({ excerpt, onClose }: Props) {
   const python = excerpt.file.endsWith(".py");
+  const section = useRef<HTMLElement | null>(null);
+  const marked = useRef<HTMLSpanElement | null>(null);
+  // Bring the preview, then its marked line, into view when it opens.
+  useEffect(() => {
+    section.current?.scrollIntoView({ block: "nearest" });
+    const line = marked.current;
+    const box = line?.closest("pre");
+    if (line !== null && line !== undefined && box !== null && box !== undefined) {
+      box.scrollTop = line.offsetTop - box.clientHeight / 2;
+    }
+  }, [excerpt]);
   return (
-    <section className="bx-source" aria-label={`Source of ${excerpt.file}`}>
+    <section ref={section} className="bx-source" aria-label={`Source of ${excerpt.file}`}>
       <header className="bx-source-bar">
         <code className="bx-source-file">{excerpt.file}</code>
         <span className="bx-muted">
@@ -77,12 +88,13 @@ export default function SourcePreview({ excerpt, onClose }: Props) {
       <pre className="bx-source-code" tabIndex={0}>
         {excerpt.lines.map((line, index) => {
           const number = excerpt.firstLine + index;
-          const marked = number === excerpt.highlight;
+          const isMarked = number === excerpt.highlight;
           return (
             <Fragment key={number}>
               <span
-                className={marked ? "bx-line bx-line-marked" : "bx-line"}
-                aria-current={marked ? "true" : undefined}
+                ref={isMarked ? marked : undefined}
+                className={isMarked ? "bx-line bx-line-marked" : "bx-line"}
+                aria-current={isMarked ? "true" : undefined}
               >
                 <span className="bx-line-number" aria-hidden="true">
                   {number}

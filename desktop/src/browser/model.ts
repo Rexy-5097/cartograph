@@ -29,13 +29,18 @@ export const LAYER_LABEL: Record<Layer, string> = {
   other: "Other",
 };
 
+/**
+ * Node colours by layer. Chosen apart from the renderer's edge colours
+ * (`graph.ts`: HTTP orange, ORM green, queries teal, calls grey), so a node
+ * is never mistaken for a relationship.
+ */
 export const LAYER_COLOR: Record<Layer, string> = {
-  frontend: "#4fa3ff",
-  api: "#f2b84b",
-  backend: "#7bd88f",
-  model: "#c792ea",
+  frontend: "#6ab0ff",
+  api: "#ffd166",
+  backend: "#b39ddb",
+  model: "#f48fb1",
   database: "#ff8a65",
-  external: "#9aa5b1",
+  external: "#cfd8dc",
   other: "#6b7280",
 };
 
@@ -217,10 +222,40 @@ export function overviewFigures(report: AnalysisReport): { label: string; value:
     { label: "HTTP-call edges", value: t.http_call_edges },
     { label: "ORM models", value: t.orm_models },
     { label: "Tables", value: t.orm_tables },
-    { label: "ORM-access edges", value: t.orm_edges },
+    { label: "ORM edges (access + table queries)", value: t.orm_edges },
+    { label: "Cross-language edges", value: t.cross_language_edges },
     { label: "Ambiguous requests (refused)", value: t.ambiguous },
     { label: "Unmatched requests", value: t.no_match },
     { label: "Unsupported requests (refused)", value: t.unsupported },
     { label: "Ambiguous ORM models (refused)", value: t.orm_ambiguous },
   ];
+}
+
+const TEST_PATH =
+  /(^|\/)(tests?|__tests__|e2e|testing)\/|(^|\/)test_[^/]*\.py$|_tests?\.py$|(^|\/)conftest\.py$|\.(test|spec)\.[jt]sx?$/i;
+
+/**
+ * Whether a file looks like test code, by its path alone.
+ *
+ * A presentation filter, stated as such in the interface: Cartograph does not
+ * separate test code from production code, and this is a path heuristic, not
+ * an analysis result.
+ */
+export function isTestPath(file: string | undefined): boolean {
+  return file !== undefined && TEST_PATH.test(file);
+}
+
+/** The nodes and edges one hop from a node, as Graphology keys. */
+export function neighbourhoodKeys(
+  node: number,
+  outgoing: readonly { edge: number; node: number }[],
+  incoming: readonly { edge: number; node: number }[],
+): { nodes: Set<string>; edges: Set<string> } {
+  const nodes = new Set<string>([String(node)]);
+  const edges = new Set<string>();
+  for (const n of [...outgoing, ...incoming]) {
+    nodes.add(String(n.node));
+    edges.add(`e${n.edge}`);
+  }
+  return { nodes, edges };
 }

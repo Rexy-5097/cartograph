@@ -20,7 +20,8 @@ import type Sigma from "sigma";
 
 import EvidencePanel from "../EvidencePanel";
 import GraphView, { type GraphViewOptions } from "../GraphView";
-import { describeBlast } from "../blast";
+import { describeBlast, impactedNodeKeys } from "../blast";
+import { edgeColor } from "../graph";
 import { findNodes } from "../search";
 import type {
   AnalysisPayload,
@@ -48,6 +49,8 @@ import {
   STOP_MEANING,
   edgeKinds,
   groupDecisions,
+  isTestPath,
+  neighbourhoodKeys,
   layers as layerMap,
   locations,
   nodeKinds,
@@ -125,6 +128,8 @@ export default function BrowserApp() {
   const [hiddenLayers, setHiddenLayers] = useState<Set<Layer>>(new Set());
   const [colourBy, setColourBy] = useState<"layer" | "cluster">("layer");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hideTests, setHideTests] = useState(false);
+  const [focus, setFocus] = useState<{ nodes: Set<string>; edges: Set<string> } | null>(null);
 
   const sigma = useRef<Sigma | null>(null);
   const onSigma = useCallback((instance: Sigma | null) => {
@@ -152,6 +157,7 @@ export default function BrowserApp() {
       setSource(null);
       setTrace(null);
       setBlast(null);
+      setFocus(null);
       setLoadError(null);
     } catch (error) {
       setLoadError(errorText(error));
@@ -230,6 +236,13 @@ export default function BrowserApp() {
     return out;
   }, [scene]);
   const layerCounts = useMemo(() => tally([...layerOfNode.values()]), [layerOfNode]);
+  const edgeKindById = useMemo(() => {
+    const out = new Map<number, EdgeKind>();
+    for (const edge of scene?.edges ?? []) {
+      out.set(edge.id, edge.kind);
+    }
+    return out;
+  }, [scene]);
   const presentEdgeKinds = useMemo(
     () => (scene === null ? [] : edgeKinds(scene)),
     [scene],
@@ -271,7 +284,11 @@ export default function BrowserApp() {
     const hiddenNodeKinds = new Set<string>();
     const hiddenClusters = new Set<number>();
     const highlight =
-      view === "trace" ? traceHighlight : view === "blast" ? null : viewHighlight;
+      view === "trace"
+        ? traceHighlight
+        : view === "blast"
+          ? null
+          : (focus ?? viewHighlight);
     return {
       hiddenNodeKinds,
       hiddenEdgeKinds: hiddenKinds,
@@ -281,14 +298,22 @@ export default function BrowserApp() {
       selectedEdge: selection.kind === "edge" ? `e${selection.id}` : null,
       colorForKind: null,
     };
-  }, [view, traceHighlight, viewHighlight, hiddenKinds, selection]);
+  }, [view, traceHighlight, viewHighlight, hiddenKinds, selection, focus]);
 
   const layerView = useMemo<GraphViewOptions>(() => {
     const out: GraphViewOptions = { ...graphView };
-    if (hiddenLayers.size > 0 || colourBy === "layer") {
+    if (hiddenLayers.size > 0 || colourBy === "layer" || hideTests) {
       const layerByKey = new Map<string, Layer>();
       for (const [id, layer] of layerOfNode) {
         layerByKey.set(String(id), layer);
+      }
+      const testKeys = new Set<string>();
+      if (hideTests) {
+        for (const [id, at] of where) {
+          if (isTestPath(at.file)) {
+            testKeys.add(String(id));
+          }
+        }
       }
       out.nodeStyle = (key: string) => {
         const layer = layerByKey.get(key);
@@ -296,13 +321,23 @@ export default function BrowserApp() {
           return {};
         }
         return {
-          hidden: hiddenLayers.has(layer),
+          hidden: hiddenLayers.has(layer) || testKeys.has(key),
           color: colourBy === "layer" ? LAYER_COLOR[layer] : undefined,
         };
       };
     }
     return out;
-  }, [graphView, hiddenLayers, colourBy, layerOfNode]);
+  }, [graphView, hiddenLayers, colourBy, layerOfNode, hideTests, where]);
+
+  const testNodeCount = useMemo(() => {
+    let n = 0;
+    for (const at of where.values()) {
+      if (isTestPath(at.file)) {
+        n += 1;
+      }
+    }
+    return n;
+  }, [where]);
 
   // ── Selection and lookups ─────────────────────────────────────────────
   const selectEdge = useCallback(
@@ -365,6 +400,56 @@ export default function BrowserApp() {
       void instance.getCamera().animate({ x: data.x, y: data.y, ratio: 0.15 }, { duration: 400 });
     }
   };
+
+  /** Frames the camera on a set of nodes, from their drawn positions. */
+  const fitTo = useCallback((keys: ReadonlySet<string>) => {
+    const instance = sigma.current;
+    if (instance === null || keys.size === 0) {
+      return;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const key of keys) {
+      const data = instance.getNodeDisplayData(key);
+      if (data === undefined) {
+        continue;
+      }
+      minX = Math.min(minX, data.x);
+      maxX = Math.max(maxX, data.x);
+      minY = Math.min(minY, data.y);
+      maxY = Math.max(maxY, data.y);
+    }
+    if (!Number.isFinite(minX)) {
+      return;
+    }
+    const span = Math.max(maxX - minX, maxY - minY);
+    void instance.getCamera().animate(
+      { x: (minX + maxX) / 2, y: (minY + maxY) / 2, ratio: Math.max(0.06, span * 1.6) },
+      { duration: 400 },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (view === "trace" && traceHighlight !== null) {
+      window.setTimeout(() => fitTo(traceHighlight.nodes), 80);
+    }
+  }, [view, traceHighlight, fitTo]);
+
+  useEffect(() => {
+    if (view === "blast" && blast !== null) {
+      const keys = impactedNodeKeys(blast);
+      keys.add(String(blast.target));
+      window.setTimeout(() => fitTo(keys), 80);
+    }
+  }, [view, blast, fitTo]);
+
+  useEffect(() => {
+    if (focus !== null) {
+      window.setTimeout(() => fitTo(focus.nodes), 80);
+    }
+  }, [focus, fitTo]);
 
   const showSource = async (file: string, line?: number) => {
     if (api === null || analysisId === null) {
@@ -631,6 +716,16 @@ export default function BrowserApp() {
               Analysis #{payload.analysis}, {report.elapsedMs} ms. Every figure below is a count
               from Cartograph’s Rust analysis of this repository; nothing is estimated.
             </p>
+            {report.totals.cross_language_edges === 0 && report.totals.http_observations > 0 && (
+              <div className="bx-callout" role="note">
+                <strong>No relationship crosses between languages in this analysis.</strong> Cartograph
+                observed {report.totals.http_observations.toLocaleString()} HTTP call sites, but none of
+                the frontend’s requests was connected to a backend route, so the map shows the frontend
+                and the backend as separate regions. This is a statement about what Cartograph could
+                establish, not about how the application works. See <em>Unresolved</em> for every request
+                it declined to match, and why.
+              </div>
+            )}
             <div className="bx-figures">
               {overviewFigures(report).map((f) => (
                 <div className="bx-figure" key={f.label}>
@@ -661,7 +756,7 @@ export default function BrowserApp() {
                 <ul className="bx-bars">
                   {presentEdgeKinds.map(([k, n]) => (
                     <li key={k}>
-                      <span><i className={`bx-edge-swatch bx-edge-${k}`} />{EDGE_LABEL[k] ?? k}</span>
+                      <span><EdgeSwatch kind={k} />{EDGE_LABEL[k] ?? k}</span>
                       <span>{n}</span>
                     </li>
                   ))}
@@ -693,6 +788,15 @@ export default function BrowserApp() {
               onSigma={onSigma}
             />
             <aside className="bx-legend" aria-label="Legend and filters">
+              <label className="bx-legend-toggle">
+                <input type="checkbox" checked={hideTests} onChange={() => setHideTests((h) => !h)} />
+                Hide test code <span className="bx-muted">{testNodeCount} nodes, by file path</span>
+              </label>
+              {focus !== null && (
+                <button type="button" className="bx-button bx-small" onClick={() => setFocus(null)}>
+                  Clear neighbourhood focus
+                </button>
+              )}
               <h2>Layers</h2>
               <ul>
                 {layerCounts.map(([layer, n]) => (
@@ -734,7 +838,7 @@ export default function BrowserApp() {
                           })
                         }
                       />
-                      <i className={`bx-edge-swatch bx-edge-${kind}`} />
+                      <EdgeSwatch kind={kind} />
                       {EDGE_LABEL[kind] ?? kind} <span className="bx-muted">{n}</span>
                     </label>
                   </li>
@@ -750,6 +854,7 @@ export default function BrowserApp() {
                     trace={trace}
                     label={label}
                     kindOf={(id) => nodeById.get(id)?.kind ?? ""}
+                    edgeKindOf={(id) => edgeKindById.get(id) ?? ""}
                     onEdge={(e) => void selectEdge(e)}
                   />
                 )}
@@ -926,6 +1031,18 @@ export default function BrowserApp() {
               <button type="button" className="bx-button bx-primary" onClick={() => void runTrace(detail.node)}>Trace from here</button>
               <button type="button" className="bx-button" onClick={() => void runBlast(detail.node)}>Blast radius</button>
               <button type="button" className="bx-button" onClick={() => focusNode(detail.node)}>Centre on map</button>
+              <button
+                type="button"
+                className="bx-button"
+                onClick={() => {
+                  setFocus(neighbourhoodKeys(detail.node, detail.outgoing, detail.incoming));
+                  if (view === "trace" || view === "blast") {
+                    setView("map");
+                  }
+                }}
+              >
+                Focus neighbourhood
+              </button>
             </div>
             <NeighbourList title={`Outgoing (${detail.outgoing.length})`} items={detail.outgoing} arrow="→" onEdge={(e) => void selectEdge(e)} />
             <NeighbourList title={`Incoming (${detail.incoming.length})`} items={detail.incoming} arrow="←" onEdge={(e) => void selectEdge(e)} />
@@ -963,7 +1080,7 @@ function NeighbourList({
         {items.slice(0, 100).map((n) => (
           <li key={n.edge}>
             <button type="button" className="bx-link" onClick={() => onEdge(n.edge)}>
-              <i className={`bx-edge-swatch bx-edge-${n.kind}`} /> {EDGE_LABEL[n.kind] ?? n.kind} {arrow}{" "}
+              <EdgeSwatch kind={n.kind} /> {EDGE_LABEL[n.kind] ?? n.kind} {arrow}{" "}
               {n.label} <span className="bx-kind">{n.nodeKind}</span>
             </button>
           </li>
@@ -978,11 +1095,13 @@ function TracePanel({
   trace,
   label,
   kindOf,
+  edgeKindOf,
   onEdge,
 }: {
   trace: TraceResult;
   label: (id: number) => string;
   kindOf: (id: number) => string;
+  edgeKindOf: (id: number) => string;
   onEdge: (edge: number) => void;
 }) {
   const paths = tracePaths(trace);
@@ -1015,9 +1134,21 @@ function TracePanel({
                   </span>
                 ))}
                 <div className="bx-stop">
-                  Stopped: {STOP_MEANING[path.stop ?? "chain-end"]}.
-                  {kindOf(path.hops[path.hops.length - 1]?.to ?? trace.from) !== "table" &&
-                    " This path does not reach a database table in the analysed graph."}
+                  {(() => {
+                    const last = path.hops[path.hops.length - 1];
+                    const end = last?.to ?? trace.from;
+                    const viaHttp = last !== undefined && edgeKindOf(last.edge) === "http-call";
+                    return (
+                      <>
+                        Stopped: {STOP_MEANING[path.stop ?? "chain-end"]}.
+                        {kindOf(end) === "table"
+                          ? " This path reaches a database table."
+                          : " This path does not reach a database table in the analysed graph."}
+                        {viaHttp && kindOf(end) === "class" &&
+                          " The request reached a class-based view; Cartograph reaches such a view but does not follow into its methods (a documented limit), so what the view does is not on this path."}
+                      </>
+                    );
+                  })()}
                 </div>
               </li>
             ))}
@@ -1066,4 +1197,9 @@ function BlastPanel({
       </ol>
     </div>
   );
+}
+
+/** A relationship's colour, taken from the renderer so the legend cannot drift. */
+function EdgeSwatch({ kind }: { kind: string }) {
+  return <i className="bx-edge-swatch" style={{ background: edgeColor(kind) }} aria-hidden="true" />;
 }

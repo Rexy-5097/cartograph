@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { AnalysisReport, RequestDecision, TraceResult } from "./api";
 import {
   groupDecisions,
+  isTestPath,
+  neighbourhoodKeys,
   layerOf,
   layers,
   overviewFigures,
@@ -46,6 +48,7 @@ const report = (over: Partial<AnalysisReport> = {}): AnalysisReport => ({
     http_call_edges: 1,
     client_call_edges: 0,
     orm_edges: 1,
+    cross_language_edges: 0,
   },
   languages: { typescript: 1, tsx: 0, python: 2 },
   decisions: [],
@@ -149,5 +152,32 @@ describe("overviewFigures", () => {
     expect(figures.get("Relationships")).toBe(r.totals.edges);
     expect(figures.get("Routes")).toBe(r.totals.routes);
     expect(figures.get("Unmatched requests")).toBe(r.totals.no_match);
+  });
+});
+
+describe("isTestPath", () => {
+  it("recognises common test locations by path only", () => {
+    for (const f of [
+      "api/tests/unit/test_views.py",
+      "api/users/test_models.py",
+      "api/conftest.py",
+      "frontend/e2e/setup.ts",
+      "frontend/web/Button.test.tsx",
+      "frontend/web/x.spec.ts",
+    ]) {
+      expect(isTestPath(f), f).toBe(true);
+    }
+    for (const f of ["api/users/models.py", "frontend/web/project/api.ts", "api/contest/views.py"]) {
+      expect(isTestPath(f), f).toBe(false);
+    }
+    expect(isTestPath(undefined)).toBe(false);
+  });
+});
+
+describe("neighbourhoodKeys", () => {
+  it("is the node, its neighbours and the edges between", () => {
+    const keys = neighbourhoodKeys(1, [{ edge: 5, node: 2 }], [{ edge: 6, node: 3 }]);
+    expect([...keys.nodes].sort()).toEqual(["1", "2", "3"]);
+    expect([...keys.edges].sort()).toEqual(["e5", "e6"]);
   });
 });

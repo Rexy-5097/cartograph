@@ -145,18 +145,15 @@
 .bx-legend label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .bx-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .bx-edge-swatch { display: inline-block; width: 16px; height: 3px; border-radius: 2px; background: #454b55; vertical-align: middle; margin-right: 4px; }
-.bx-edge-http-call { background: #f2b84b; }
-.bx-edge-orm-access { background: #c792ea; }
-.bx-edge-queries { background: #ff8a65; }
-.bx-edge-call { background: #4fa3ff; }
-.bx-edge-import { background: #5c6773; }
+.bx-legend-toggle { display: flex; gap: 6px; align-items: baseline; margin-bottom: 6px; cursor: pointer; }
+.bx-small { padding: 3px 8px; font-size: 12px; margin-bottom: 4px; }
 .bx-overlay {
   position: absolute; right: 12px; top: 12px; z-index: 5; width: min(520px, 60%); max-height: 70%; overflow: auto;
   background: rgb(22 27 34 / 95%); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
 }
-.bx-trace h2 { font-size: 15px; margin: 2px 0 6px; }
+.bx-trace h2 { font-size: 15px; margin: 2px 0 6px; overflow-wrap: anywhere; }
 .bx-paths { padding-left: 18px; margin: 6px 0; display: grid; gap: 8px; }
-.bx-hop-node { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; display: inline-block; margin: 2px 0; }
+.bx-hop-node { overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; display: inline-block; margin: 2px 0; }
 .bx-hop { background: none; border: 0; color: var(--warn); font: inherit; cursor: pointer; padding: 0 4px; }
 .bx-stop { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .bx-kind {
@@ -180,6 +177,7 @@
 .bx-overview h1, .bx-list-view h1 { font-size: 22px; margin: 0 0 4px; font-family: ui-monospace, "Cascadia Code", Menlo, monospace; }
 .bx-overview h2, .bx-list-view h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 22px 0 8px; }
 .bx-lede { color: var(--muted); max-width: 760px; }
+.bx-callout { border: 1px solid var(--warn); background: rgb(242 184 75 / 8%); border-radius: 8px; padding: 10px 14px; margin: 12px 0; max-width: 900px; }
 .bx-figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
 .bx-figure { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
 .bx-figure-value { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -216,7 +214,7 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
 .bx-source { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg); margin-top: 10px; }
 .bx-source-bar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .bx-source-file { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bx-source-code { margin: 0; padding: 6px 0; max-height: 50vh; overflow: auto; font: 12.5px/1.5 ui-monospace, "Cascadia Code", Menlo, monospace; }
+.bx-source-code { position: relative; margin: 0; padding: 6px 0; max-height: 50vh; overflow: auto; font: 12.5px/1.5 ui-monospace, "Cascadia Code", Menlo, monospace; }
 .bx-line { display: inline-block; min-width: 100%; }
 .bx-line-marked { background: rgb(111 149 255 / 18%); box-shadow: inset 3px 0 0 var(--accent); }
 .bx-line-number { display: inline-block; width: 44px; padding-right: 10px; text-align: right; color: #5c6773; user-select: none; }

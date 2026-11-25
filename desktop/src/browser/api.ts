@@ -88,6 +88,7 @@ export interface Totals {
   http_call_edges: number;
   client_call_edges: number;
   orm_edges: number;
+  cross_language_edges: number;
   [other: string]: number;
 }
 
